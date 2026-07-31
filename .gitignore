@@ -1,0 +1,36 @@
+# Secrets & Credentials
+.env
+*.env
+client_secret.json
+**/client_secret.json
+
+# Python & Node Caches
+__pycache__/
+**/__pycache__/
+*.pyc
+node_modules/
+**/node_modules/
+
+# Virtual Environments
+venv/
+.venv/
+**/venv/
+
+# Databases & Log Files
+*.db
+converter.db
+logs/
+**/logs/
+
+# Uploads, Outputs & Temp files
+output/
+**/output/
+outputs/
+**/outputs/
+uploads/
+**/uploads/
+temp_*/
+**/temp_*/
+
+# Extra non-project directories
+multiple agent/

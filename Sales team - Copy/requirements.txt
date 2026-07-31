@@ -1,0 +1,68 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Combined Python Requirements for All Workspace Projects:
+# - Parity_setup
+# - Renewal_process
+# - Resourcing-edge
+# - rpve
+# - file-classification-
+# - File-Convertor
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Web API & Server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.30
+pydantic>=2.0.0
+
+# PDF & Document Processing
+pdfplumber==0.11.7
+PyMuPDF>=1.23.0
+PyPDF2>=3.0.0
+pypdf>=4.0.0
+pdfminer.six
+pdf2image>=1.17.0
+python-docx>=1.1.0
+
+# OCR & Computer Vision
+rostaing-ocr>=1.2.2
+pytesseract>=0.3.10
+Pillow>=10.0.0
+python-doctr[torch]>=0.8.0
+opencv-python>=4.9.0
+numpy>=1.26.0
+
+# AI / LLM APIs
+openai>=1.0.0
+anthropic>=0.25.0
+
+# Data, Spreadsheets & Database
+pandas>=2.2.0
+openpyxl>=3.1.2
+xlrd>=2.0.1
+sqlalchemy>=2.0.0
+xmltodict
+dicttoxml
+
+# Machine Learning & Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Cloud Integrations (Google Drive & OneDrive)
+google-auth>=2.15.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.0.0
+msal>=1.20.0
+requests>=2.28.0
+
+# Fuzzy Matching & String Utilities
+rapidfuzz>=3.6.1
+jellyfish>=1.0.3
+
+# Utilities & Environment
+python-dotenv>=1.0.0
+python-dateutil>=2.8.2
+tqdm>=4.66.2
+
+# Testing
+pytest>=8.1.0
+pytest-cov>=5.0.0

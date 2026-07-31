@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Current Medical Plan Comparison Schema",
+  "type": "object",
+  "required": [
+    "groupName",
+    "policyPeriod",
+    "quoteInfo",
+    "currentPlans"
+  ],
+  "properties": {
+    "groupName": {
+      "type": "string"
+    },
+    "policyPeriod": {
+      "type": "object",
+      "required": [
+        "startDate",
+        "endDate"
+      ],
+      "properties": {
+        "startDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "quoteInfo": {
+      "type": "object",
+      "required": [
+        "quoteDate",
+        "quoteId",
+        "quotedRatesExpireOn"
+      ],
+      "properties": {
+        "quoteDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "quoteId": {
+          "type": "string"
+        },
+        "quotedRatesExpireOn": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "currentPlans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "carrier",
+          "planName",
+          "network",
+          "planType",
+          "benefits",
+          "coveredEmployeesAndRates"
+        ],
+        "properties": {
+          "carrier": {
+            "type": "string"
+          },
+          "planName": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "planType": {
+            "type": "string",
+            "const": "Current"
+          },
+          "benefits": {
+            "type": "object",
+            "required": [
+              "inNetwork",
+              "outOfNetwork"
+            ],
+            "properties": {
+              "inNetwork": {
+                "type": "object",
+                "properties": {
+                  "deductibleIndividual": {
+                    "type": "number"
+                  },
+                  "deductibleFamily": {
+                    "type": "number"
+                  },
+                  "coinsurance": {
+                    "type": "string"
+                  },
+                  "outOfPocketMaxIndividual": {
+                    "type": "number"
+                  },
+                  "outOfPocketMaxFamily": {
+                    "type": "number"
+                  },
+                  "primaryCare": {
+                    "type": "string"
+                  },
+                  "specialist": {
+                    "type": "string"
+                  },
+                  "ipHospital3DayAdmit": {
+                    "type": "string"
+                  },
+                  "surgicalOpHospital": {
+                    "type": "string"
+                  },
+                  "emergencyRoom": {
+                    "type": "string"
+                  },
+                  "urgentCare": {
+                    "type": "string"
+                  },
+                  "labServices": {
+                    "type": "string"
+                  },
+                  "xRayIndividualFacility": {
+                    "type": "string"
+                  },
+                  "complexMedicalImaging": {
+                    "type": "string"
+                  },
+                  "additionalPharmacyDeductible": {
+                    "type": "number"
+                  },
+                  "tier1Pharmacy": {
+                    "type": "string"
+                  },
+                  "tier2Pharmacy": {
+                    "type": "string"
+                  },
+                  "tier3Pharmacy": {
+                    "type": "string"
+                  },
+                  "specialtyPharmacyBenefitPerScript": {
+                    "type": "string"
+                  }
+                }
+              },
+              "outOfNetwork": {
+                "type": "object",
+                "properties": {
+                  "deductibleIndividual": {
+                    "type": "number"
+                  },
+                  "deductibleFamily": {
+                    "type": "number"
+                  },
+                  "outOfPocketMaxIndividual": {
+                    "type": "number"
+                  },
+                  "outOfPocketMaxFamily": {
+                    "type": "number"
+                  },
+                  "outOfNetworkCoinsurance": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "coveredEmployeesAndRates": {
+            "type": "object",
+            "properties": {
+              "employeeOnly": {
+                "$ref": "#/$defs/enrollmentRate"
+              },
+              "employeeSpouse": {
+                "$ref": "#/$defs/enrollmentRate"
+              },
+              "employeeChildren": {
+                "$ref": "#/$defs/enrollmentRate"
+              },
+              "family": {
+                "$ref": "#/$defs/enrollmentRate"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "enrollmentRate": {
+      "type": "object",
+      "required": [
+        "enrollment",
+        "rate"
+      ],
+      "properties": {
+        "enrollment": {
+          "type": "integer"
+        },
+        "rate": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

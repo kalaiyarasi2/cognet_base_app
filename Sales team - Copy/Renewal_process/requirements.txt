@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Invoice-to-Census Audit Pipeline – Python Dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+# Install with:
+#   pip install -r requirements.txt
+#
+# System dependencies (install separately before pip):
+#   • Tesseract OCR engine  → https://github.com/tesseract-ocr/tesseract
+#       Ubuntu/Debian : sudo apt-get install tesseract-ocr
+#       macOS         : brew install tesseract
+#       Windows       : installer at https://github.com/UB-Mannheim/tesseract/wiki
+#
+#   • Poppler (required by pdf2image)
+#       Ubuntu/Debian : sudo apt-get install poppler-utils
+#       macOS         : brew install poppler
+#       Windows       : https://github.com/oschwartz10612/poppler-windows/releases
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── PDF parsing & OCR ────────────────────────────────────────────────────────
+pdfplumber>=0.10.3          # native text + table extraction from PDFs
+pdf2image>=1.17.0           # converts PDF pages to PIL images for OCR fallback
+pytesseract>=0.3.10         # Python wrapper for Tesseract OCR
+Pillow>=10.0.0              # image processing (required by pytesseract & pdf2image)
+
+# ── Spreadsheet I/O ──────────────────────────────────────────────────────────
+pandas>=2.1.0               # census dataframe ingestion & audit log generation
+openpyxl>=3.1.2             # read/write .xlsx workbooks (census + audit log)
+xlrd>=2.0.1                 # legacy .xls support (optional, safe to include)
+
+# ── Fuzzy name matching ───────────────────────────────────────────────────────
+jellyfish>=1.0.3            # Jaro-Winkler similarity for fuzzy employee name matching
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dateutil>=2.8.2      # robust date parsing from invoice text
+tqdm>=4.66.0                # optional progress bars (import guarded in script)
+
+# ── Deep Learning OCR & Layout Preservation (Selective Vision fallback) ──────
+torch>=2.0.0
+torchvision>=0.15.0
+python-doctr[cpu]>=0.8.0
+

@@ -1,0 +1,14 @@
+__pycache_/
+database/__pycache_/
+file-classification-/__pycache_/
+file-classification-old/__pycache_/
+logs/
+outlook_Agent/__pycache_/
+output/
+outputs/
+venv/
+.env
+uploads/
+sharepoint_agent/__pycache_/
+client_secret.json
+converter.db

@@ -1,0 +1,28 @@
+# Core dependencies for the insurance document processing pipeline
+
+# PDF text extraction
+pdfplumber>=0.9.0
+PyMuPDF>=1.23.0
+
+# OCR capabilities (rostaing-ocr)
+rostaing-ocr>=0.1.0
+
+# LLM API access
+openai>=1.0.0
+
+# Excel file generation
+openpyxl>=3.1.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Optional: Enhanced PDF processing
+PyPDF2>=3.0.0
+
+# Logging and utilities (usually included in Python standard library)
+# pathlib, json, logging, datetime, typing are built-in
+
+# API and Web App UI (app.py)
+fastapi>=0.100.0
+uvicorn>=0.20.0
+python-multipart>=0.0.6

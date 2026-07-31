@@ -1,0 +1,109 @@
+{
+  "currentplans": [
+    {
+      "planName": "Aetna 2026 BAFA Performance 1000 80/50",
+      "description": "Current",
+      "coveredEmployeesAndRates": {
+        "employeeOnly": {
+          "enrollment": 4,
+          "rate": 647.41
+        },
+        "employeeSpouse": {
+          "enrollment": 2,
+          "rate": 1567.91
+        },
+        "employeeChildren": {
+          "enrollment": 0,
+          "rate": 1426.30
+        },
+        "family": {
+          "enrollment": 0,
+          "rate": 2276.10
+        }
+      },
+      "benefits": {
+        "inNetwork": {
+          "deductible(Individual/Family)": "$1,000 / $2,000",
+          "coinsurance": "20%",
+          "outOfPocketMax(Individual/Family)": "$5,000 / $10,000",
+          "primaryCare": "$25 (DW)",
+          "specialist": "$75 (DW)",
+          "emergencyRoom": "$300 / 20% (AD)",
+          "urgentCare": "$75 (DW)",
+          "xRayIndividualFacility": "20% (AD)",
+          "prescriptionDrugs": "$10 / $45 / $75"
+        }
+      }
+    },
+    {
+      "planName": "Aetna 2026 BAFA Performance 4000 70/50",
+      "description": "Current",
+      "coveredEmployeesAndRates": {
+        "employeeOnly": {
+          "enrollment": 7,
+          "rate": 525.55
+        },
+        "employeeSpouse": {
+          "enrollment": 0,
+          "rate": 1262.14
+        },
+        "employeeChildren": {
+          "enrollment": 2,
+          "rate": 1148.80
+        },
+        "family": {
+          "enrollment": 1,
+          "rate": 1828.83
+        }
+      },
+      "benefits": {
+        "inNetwork": {
+          "deductible(Individual/Family)": "$4,000 / $8,000",
+          "coinsurance": "30%",
+          "outOfPocketMax(Individual/Family)": "$7,500 / $15,000",
+          "primaryCare": "$40 (DW)",
+          "specialist": "$80 (DW)",
+          "emergencyRoom": "$300 / 30% (AD)",
+          "urgentCare": "$100 (DW)",
+          "xRayIndividualFacility": "30% (AD)",
+          "prescriptionDrugs": "$10 / $50 / $80"
+        }
+      }
+    },
+    {
+      "planName": "Aetna 2026 BAFA Performance 7500 HSA 100%",
+      "description": "Current",
+      "coveredEmployeesAndRates": {
+        "employeeOnly": {
+          "enrollment": 5,
+          "rate": 451.06
+        },
+        "employeeSpouse": {
+          "enrollment": 1,
+          "rate": 1075.21
+        },
+        "employeeChildren": {
+          "enrollment": 0,
+          "rate": 979.17
+        },
+        "family": {
+          "enrollment": 0,
+          "rate": 1555.40
+        }
+      },
+      "benefits": {
+        "inNetwork": {
+          "deductible(Individual/Family)": "$7,500 / $15,000",
+          "coinsurance": "0%",
+          "outOfPocketMax(Individual/Family)": "$7,500 / $15,000",
+          "primaryCare": "0% (AD)",
+          "specialist": "0% (AD)",
+          "emergencyRoom": "0% (AD)",
+          "urgentCare": "0% (AD)",
+          "xRayIndividualFacility": "0% (AD)",
+          "prescriptionDrugs": "0% (APD) / 0% (APD) / 0% (APD)"
+        }
+      }
+    }
+  ]
+}

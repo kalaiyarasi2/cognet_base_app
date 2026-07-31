@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Filtered Current Plan Schema",
+  "type": "object",
+  "required": ["plans"],
+  "properties": {
+    "plans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "planName",
+          "description",
+          "coveredEmployeesAndRates",
+          "benefits"
+        ],
+        "properties": {
+          "planName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "const": "Current"
+          },
+          "coveredEmployeesAndRates": {
+            "type": "object",
+            "required": [
+              "employeeOnly",
+              "employeeSpouse",
+              "employeeChildren",
+              "family"
+            ],
+            "properties": {
+              "employeeOnly": {
+                "$ref": "#/$defs/enrollmentRate"
+              },
+              "employeeSpouse": {
+                "$ref": "#/$defs/enrollmentRate"
+              },
+              "employeeChildren": {
+                "$ref": "#/$defs/enrollmentRate"
+              },
+              "family": {
+                "$ref": "#/$defs/enrollmentRate"
+              }
+            }
+          },
+          "benefits": {
+            "type": "object",
+            "required": ["inNetwork"],
+            "properties": {
+              "inNetwork": {
+                "type": "object",
+                "required": [
+                  "deductibleIndividualFamily",
+                  "coinsurance",
+                  "outOfPocketMaxIndividualFamily",
+                  "primaryCare",
+                  "specialist",
+                  "emergencyRoom",
+                  "urgentCare",
+                  "xRayIndividualFacility",
+                  "prescriptionDrugs"
+                ],
+                "properties": {
+                  "deductibleIndividualFamily": {
+                    "type": "string"
+                  },
+                  "coinsurance": {
+                    "type": "string"
+                  },
+                  "outOfPocketMaxIndividualFamily": {
+                    "type": "string"
+                  },
+                  "primaryCare": {
+                    "type": "string"
+                  },
+                  "specialist": {
+                    "type": "string"
+                  },
+                  "emergencyRoom": {
+                    "type": "string"
+                  },
+                  "urgentCare": {
+                    "type": "string"
+                  },
+                  "xRayIndividualFacility": {
+                    "type": "string"
+                  },
+                  "prescriptionDrugs": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "enrollmentRate": {
+      "type": "object",
+      "required": ["enrollment", "rate"],
+      "properties": {
+        "enrollment": {
+          "type": "integer"
+        },
+        "rate": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}
