@@ -17,6 +17,7 @@ import { Route as ResourcingEdgeRouteImport } from './routes/resourcing-edge'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RenewalProcessRouteImport } from './routes/renewal-process'
 import { Route as PipelineRouteImport } from './routes/pipeline'
+import { Route as PayrollExtractorRouteImport } from './routes/payroll-extractor'
 import { Route as ParitySetupRouteImport } from './routes/parity-setup'
 import { Route as OrganisationRouteImport } from './routes/organisation'
 import { Route as OnedriveRouteImport } from './routes/onedrive'
@@ -74,6 +75,11 @@ const RenewalProcessRoute = RenewalProcessRouteImport.update({
 const PipelineRoute = PipelineRouteImport.update({
   id: '/pipeline',
   path: '/pipeline',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PayrollExtractorRoute = PayrollExtractorRouteImport.update({
+  id: '/payroll-extractor',
+  path: '/payroll-extractor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ParitySetupRoute = ParitySetupRouteImport.update({
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
   '/parity-setup': typeof ParitySetupRoute
+  '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
   '/renewal-process': typeof RenewalProcessRoute
   '/reports': typeof ReportsRoute
@@ -213,6 +220,7 @@ export interface FileRoutesByTo {
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
   '/parity-setup': typeof ParitySetupRoute
+  '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
   '/renewal-process': typeof RenewalProcessRoute
   '/reports': typeof ReportsRoute
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
   '/parity-setup': typeof ParitySetupRoute
+  '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
   '/renewal-process': typeof RenewalProcessRoute
   '/reports': typeof ReportsRoute
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
     | '/onedrive'
     | '/organisation'
     | '/parity-setup'
+    | '/payroll-extractor'
     | '/pipeline'
     | '/renewal-process'
     | '/reports'
@@ -300,6 +310,7 @@ export interface FileRouteTypes {
     | '/onedrive'
     | '/organisation'
     | '/parity-setup'
+    | '/payroll-extractor'
     | '/pipeline'
     | '/renewal-process'
     | '/reports'
@@ -328,6 +339,7 @@ export interface FileRouteTypes {
     | '/onedrive'
     | '/organisation'
     | '/parity-setup'
+    | '/payroll-extractor'
     | '/pipeline'
     | '/renewal-process'
     | '/reports'
@@ -357,6 +369,7 @@ export interface RootRouteChildren {
   OnedriveRoute: typeof OnedriveRoute
   OrganisationRoute: typeof OrganisationRoute
   ParitySetupRoute: typeof ParitySetupRoute
+  PayrollExtractorRoute: typeof PayrollExtractorRoute
   PipelineRoute: typeof PipelineRoute
   RenewalProcessRoute: typeof RenewalProcessRoute
   ReportsRoute: typeof ReportsRoute
@@ -424,6 +437,13 @@ declare module '@tanstack/react-router' {
       path: '/pipeline'
       fullPath: '/pipeline'
       preLoaderRoute: typeof PipelineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/payroll-extractor': {
+      id: '/payroll-extractor'
+      path: '/payroll-extractor'
+      fullPath: '/payroll-extractor'
+      preLoaderRoute: typeof PayrollExtractorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/parity-setup': {
@@ -573,6 +593,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnedriveRoute: OnedriveRoute,
   OrganisationRoute: OrganisationRoute,
   ParitySetupRoute: ParitySetupRoute,
+  PayrollExtractorRoute: PayrollExtractorRoute,
   PipelineRoute: PipelineRoute,
   RenewalProcessRoute: RenewalProcessRoute,
   ReportsRoute: ReportsRoute,

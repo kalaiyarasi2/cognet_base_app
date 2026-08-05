@@ -3,7 +3,7 @@ import {
   LayoutDashboard, FileText, Tags,
   Workflow, FolderTree, Cloud, BarChart3, Activity, Terminal,
   Settings2, SlidersHorizontal, Info, Shield, ChevronLeft, ChevronRight,
-  RefreshCw, Scale, Cpu, FileCheck, HardDrive, Share2,
+  RefreshCw, Scale, Cpu, FileCheck, HardDrive, Share2, FileSpreadsheet
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -33,6 +33,7 @@ const groups: NavGroup[] = [
       { label: "Renewal Process", to: "/renewal-process", icon: RefreshCw },
       { label: "Resourcing Edge", to: "/resourcing-edge", icon: Cpu },
       { label: "RPVE", to: "/rpve", icon: FileCheck },
+      { label: "Payroll Extractor", to: "/payroll-extractor", icon: FileSpreadsheet },
       { label: "Work Flow Designer", to: "/co-pilot", icon: Workflow },
     ],
   },

@@ -25,6 +25,7 @@ import { AgentNode } from "../nodes/AgentNode";
 import { InvoiceAgentNode } from "../nodes/InvoiceAgentNode";
 import { CustomAgentNode } from "../nodes/CustomAgentNode";
 import { StartNode } from "../nodes/StartNode";
+import { PayrollAgentNode } from "../nodes/PayrollAgentNode";
 import { FieldEditorDrawer } from "../components/FieldEditorDrawer";
 import { DeletableEdge } from "../edges/DeletableEdge";
 
@@ -50,6 +51,7 @@ const nodeTypes = {
   invoiceAgentNode: InvoiceAgentNode,
   customAgentNode: CustomAgentNode,
   outputNode: OutputNode,
+  payrollAgentNode: PayrollAgentNode,
 };
 
 const edgeTypes = {
@@ -105,6 +107,7 @@ const sidebarGroups = [
       { type: "agentNode", label: "Resourcing Agent", icon: Bot, data: { label: "Resourcing Agent" } },
       { type: "agentNode", label: "Parity Agent", icon: Bot, data: { label: "Parity Agent" } },
       { type: "agentNode", label: "Renewal Agent", icon: Bot, data: { label: "Renewal Agent" } },
+      { type: "payrollAgentNode", label: "Payroll Extractor", icon: Bot, data: { label: "Payroll Extractor" } },
     ],
   },
   {

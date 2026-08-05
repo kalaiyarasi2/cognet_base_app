@@ -42,7 +42,8 @@ AGENT_MAPPINGS = {
     "RPVE Agent": "/api/rpve/api/extract",
     "Parity Agent": "/api/parity/api/extract",
     "Renewal Agent": "/api/renewal/api/process",
-    "Resourcing Agent": "/api/resourcing/api/process-pdf"
+    "Resourcing Agent": "/api/resourcing/api/process-pdf",
+    "Payroll Extractor": "/api/payroll/process-pdf"
 }
 
 @router.post("/run-workflow")
@@ -125,13 +126,13 @@ async def run_workflow(
 
             next_node = nodes_by_id[next_node_id]
 
-            if next_node.type in ["agentNode", "invoiceAgentNode", "classifierNode"]:
+            if next_node.type in ["agentNode", "invoiceAgentNode", "classifierNode", "payrollAgentNode"]:
                 label = next_node.data.get("label", "Agent")
-                if next_node.type in ["agentNode", "invoiceAgentNode"]:
+                if next_node.type in ["agentNode", "invoiceAgentNode", "payrollAgentNode"]:
                     last_agent_name = label.split("(")[0].strip().lower()
 
                 # --- START SCHEMA MERGING ---
-                if next_node.type in ["agentNode", "invoiceAgentNode"]:
+                if next_node.type in ["agentNode", "invoiceAgentNode", "payrollAgentNode"]:
                     # Detect any Customization Agents present in the workflow
                     connected_custom_nodes = [n for n in nodes_list if n.type == "customAgentNode"]
 
@@ -163,7 +164,7 @@ async def run_workflow(
                         execution_log.append(f"Error: {label} requires a file, but no file was uploaded.")
                     else:
                         try:
-                            async with httpx.AsyncClient(timeout=120.0) as client:
+                            async with httpx.AsyncClient(timeout=3600.0) as client:
                                 data_payload = {}
                                 params_payload = {}
 
@@ -206,7 +207,7 @@ async def run_workflow(
                                     execution_log.append(f"{label} processing completed successfully.")
 
                                     # --- INJECT CUSTOM SCHEMA DEMO DATA ---
-                                    if next_node.type in ["agentNode", "invoiceAgentNode"] and 'custom_schema' in locals() and custom_schema:
+                                    if next_node.type in ["agentNode", "invoiceAgentNode", "payrollAgentNode"] and 'custom_schema' in locals() and custom_schema:
                                         try:
                                             output_json_rel = final_output_data.get("output_json", "")
                                             if output_json_rel:
@@ -402,6 +403,24 @@ async def run_workflow(
                             with open(final_path, 'w', encoding='utf-8') as f:
                                 json.dump(simulated_data, f, indent=2)
                             execution_log.append(f"Saved workflow output to: {final_path}")
+                            
+                            # Also save as CSV if extracted_records exists
+                            if isinstance(simulated_data, dict) and "extracted_records" in simulated_data:
+                                records = simulated_data["extracted_records"]
+                                if records and isinstance(records, list) and len(records) > 0:
+                                    csv_path = final_path.replace(".json", ".csv")
+                                    try:
+                                        import csv
+                                        with open(csv_path, 'w', newline='', encoding='utf-8') as cf:
+                                            # Use the keys of the first dictionary as fieldnames
+                                            fieldnames = list(records[0].keys())
+                                            writer = csv.DictWriter(cf, fieldnames=fieldnames)
+                                            writer.writeheader()
+                                            writer.writerows(records)
+                                        execution_log.append(f"Saved workflow CSV output to: {csv_path}")
+                                    except Exception as ce:
+                                        execution_log.append(f"Failed to save CSV: {ce}")
+
 
                         # Also download the Excel file if present
                         if "excel" in simulated_data and isinstance(simulated_data["excel"], str) and simulated_data["excel"].startswith("http"):

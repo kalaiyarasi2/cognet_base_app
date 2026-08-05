@@ -338,9 +338,19 @@ export const api = {
     });
   },
   getResourcingHistory: (limit = 50) =>
-    request<ResourcingHistoryRecord[]>("/api/resourcing/api/history", {}, { limit }),
-  downloadResourcingJsonUrl: (pdfStem: string) =>
-    `${getBackendUrl()}/api/resourcing/download/${encodeURIComponent(pdfStem)}`,
+    request<ResourcingHistoryRecord[]>(`/api/resourcing/history?limit=${limit}`),
+  downloadResourcingJsonUrl: (stem: string) =>
+    `${getBackendUrl()}/api/resourcing/download/${encodeURIComponent(stem)}.json`,
+
+  // --- Payroll Extractor ---
+  processPayrollPdf: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<any>("/api/payroll/process-pdf", {
+      method: "POST",
+      body: fd,
+    });
+  },
 
   // --- RPVE ---
   extractRpve: (file: File) => {

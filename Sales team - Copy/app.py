@@ -160,6 +160,7 @@ renewal_app    = load_sub_app("renewal_api",    WORKSPACE_DIR / "Renewal_process
 resourcing_app = load_sub_app("resourcing_api", WORKSPACE_DIR / "Resourcing-edge" / "app.py")
 rpve_app       = load_sub_app("rpve_api",       WORKSPACE_DIR / "rpve" / "RPVE_standalone.py")
 converter_app  = load_sub_app("converter_api",  WORKSPACE_DIR / "File-Convertor" / "main.py")
+payroll_app    = load_sub_app("payroll_api",    WORKSPACE_DIR / "Payroll_extractor" / "api_server.py")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Build the unified ASGI app via PrefixDispatcher
@@ -183,6 +184,7 @@ _dispatcher = PrefixDispatcher(
         ("/api/rpve",       rpve_app),
         ("/api/convert",    converter_app),
         ("/api/gpu",        gpu_app),
+        ("/api/payroll",    payroll_app),
     ],
     default=classifier_app,
 )
