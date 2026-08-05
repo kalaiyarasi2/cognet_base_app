@@ -20,16 +20,6 @@ from text_quality_verifier import TextQualityVerifier
 
 load_dotenv()
 
-# Configure Tesseract path if provided in environment
-TESSERACT_PATH = os.getenv("TESSERACT_PATH")
-if TESSERACT_PATH:
-    if os.path.isdir(TESSERACT_PATH):
-        tess_exe = os.path.join(TESSERACT_PATH, "tesseract.exe")
-        if os.path.exists(tess_exe):
-            pytesseract.pytesseract.tesseract_cmd = tess_exe
-    elif os.path.exists(TESSERACT_PATH):
-        pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
-
 
 class OCRPDFExtractor:
     """
@@ -342,9 +332,11 @@ class OCRPDFExtractor:
         img_base64 = base64.b64encode(buffered.getvalue()).decode()
 
         prompt = (
-            "Extract ALL text from this document page.\n"
-            "PRESERVE the EXACT layout including columns, tables, and spacing.\n"
-            "Return ONLY the extracted text."
+            "Extract ALL text from this document page exactly as it appears.\n"
+            "CRITICAL INSTRUCTION: You MUST preserve the horizontal association of the data. "
+            "If the page contains tabular data or columns, you MUST format them as a Markdown table (using |). "
+            "Do NOT use spaces or tabs for alignment, as this wastes tokens and leads to truncation. "
+            "Ensure every row is complete. Return ONLY the extracted text or markdown tables without any other commentary."
         )
 
         response = self.client.chat.completions.create(

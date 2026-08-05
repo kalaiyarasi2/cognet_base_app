@@ -118,6 +118,107 @@ def check_text_quality(text: str) -> float:
     alnum = sum(c.isalnum() for c in clean)
     return alnum / len(clean)
 
+def parse_allied_direct_page(page_text: str, current_inv: str) -> tuple[list, str, float]:
+    """
+    [V7] DETERMINISTIC DIRECT PARSER FOR ALLIED / PRIMESOUTH INVOICES
+    
+    This function was added to solve two critical issues:
+    1. LLM Token Truncation: Dense pages (e.g. Page 10) caused the AI to hit the output token limit, truncating employees.
+    2. Horizontal Name/Date Crashing: Solves issues where 'LASTNAME, FIRSTNAME' horizontally crashes into the 'EFFECTIVE DATE' column without spaces.
+    
+    What this parser does:
+    - Bypasses the LLM entirely for Allied invoices.
+    - Uses a deterministic Regex to cleanly split the name, date, coverage tier, and all numeric premium columns.
+    - Dynamically detects the invoice number (9832, 9833, 9835) from the header to map premium values to the correct plans (Life, Medical, Dental, LTD, DOL ACF, etc.).
+    - Extracts the true grand total `AMOUNT_DUE` from the `** Location Totals` line at the bottom of the page.
+    - Injects the `REPORTED INVOICE TOTAL (FOR AUDIT)` directly into the line items list as an item, guaranteeing a total row is generated for EVERY invoice in a multi-invoice PDF.
+    """
+    import re
+    lines = page_text.split('\n')
+    items = []
+    # Identify invoice number for this page's header (usually first 20 lines)
+    for line in lines[:20]:
+        upper_line = line.upper()
+        if '9832' in line or '12901' in line or 'DEP LIFE' in upper_line: current_inv = '9832'; break
+        elif '9833' in line or '12902' in line or 'SPD90' in upper_line or 'LTD' in upper_line: current_inv = '9833'; break
+        elif '9835' in line or '12903' in line or 'MEDICAL' in upper_line or 'DENTAL' in upper_line or 'DOL ACF' in upper_line: current_inv = '9835'; break
+        
+    for line in lines:
+        line = line.strip()
+        # Optional space between name and DOB to catch long names
+        m = re.match(r'^([A-Z\s\-]+,\s*[A-Z\s\-]+?)\s*(\d{2}/\d{2}/\d{4})\s+(.+?)\s+((?:[\d\.\-]+\s*)+)$', line)
+        if m:
+            nums_raw = m.group(4).strip().split()
+            nums = []
+            for n in nums_raw:
+                if n.endswith('-'): nums.append(-float(n[:-1]))
+                else: nums.append(float(n))
+            
+            fname = m.group(1).split(',')[1].strip() if len(m.group(1).split(',')) > 1 else ''
+            lname = m.group(1).split(',')[0].strip()
+            tier = m.group(3).strip()
+            date = m.group(2).strip()
+
+            def add_plan(p_name, p_type, premium):
+                if premium != 0:
+                    items.append({
+                        'FIRSTNAME': fname,
+                        'LASTNAME': lname,
+                        'PLAN_NAME': p_name,
+                        'PLAN_TYPE': p_type,
+                        'COVERAGE': tier if tier not in ["3337"] else None,
+                        'CURRENT_PREMIUM': premium,
+                        'ADJUSTMENT_PREMIUM': 0.0,
+                        'INV_NUMBER': current_inv,
+                        'INV_DATE': date
+                    })
+
+            if '9835' in current_inv:
+                if len(nums) >= 6:
+                    if nums[0] != 0: add_plan('DOL ACF', 'FEES', nums[0])
+                    if nums[1] != 0: add_plan('ACF CREDIT', 'FEES', nums[1])
+                    if nums[2] != 0: add_plan('Medical', 'MEDICAL', nums[2])
+                    if nums[3] != 0: add_plan('Dental', 'DENTAL', nums[3])
+                    if nums[4] != 0: add_plan('POP Plan Fee', 'FEES', nums[4])
+                    if nums[5] != 0: add_plan('Flex Fee', 'FEES', nums[5])
+            elif '9832' in current_inv:
+                if len(nums) >= 6:
+                    if nums[1] != 0: add_plan('Life', 'LIFE', nums[1])
+                    if nums[2] != 0: add_plan('Dep Life', 'LIFE', nums[2])
+                    if nums[3] != 0: add_plan('Retiree Life', 'LIFE', nums[3])
+                    if nums[4] != 0: add_plan('Retiree Dep Life', 'LIFE', nums[4])
+                    if nums[5] != 0: add_plan('HSA Fee', 'FEES', nums[5])
+            elif '9833' in current_inv:
+                if len(nums) >= 7:
+                    if nums[0] != 0: add_plan('LTD', 'DISABILITY', nums[0])
+                    if nums[3] != 0: add_plan('SPD', 'DISABILITY', nums[3])
+                    if nums[6] != 0: add_plan('GAP', 'MEDICAL', nums[6])
+                    
+    amount_due = None
+    for line in lines:
+        if "** Location Totals" in line or "* * T O T A L S" in line or "* * I N V O I C E T O T A L" in line or "* * G R A N D T O T A L" in line:
+            tokens = line.strip().split()
+            if tokens:
+                try:
+                    amount_due = float(tokens[-1].replace(',', ''))
+                except:
+                    pass
+
+    if amount_due is not None:
+        items.append({
+            'FIRSTNAME': 'INVOICE TOTAL',
+            'LASTNAME': '',
+            'PLAN_NAME': 'REPORTED INVOICE TOTAL (FOR AUDIT)',
+            'PLAN_TYPE': 'TOTAL',
+            'COVERAGE': None,
+            'CURRENT_PREMIUM': amount_due,
+            'ADJUSTMENT_PREMIUM': 0.0,
+            'INV_NUMBER': current_inv,
+            'INV_DATE': None
+        })
+
+    return items, current_inv, amount_due
+
 
 def clean_billing_period(val: Optional[str]) -> Optional[str]:
     """
@@ -299,7 +400,7 @@ def normalize_uhc_coverage(items: list) -> list:
                 item["COVERAGE"] = UHC_COVERAGE_MAP[key]
     return items
 
-def normalize_legal_shield_data(items: list) -> list:
+def normalize_legal_shield_data(items: list, invoice_date: str = None) -> list:
     """
     Post-process Legal Shield line items:
     1. Map Plan Name based on Member ID prefix:
@@ -309,6 +410,14 @@ def normalize_legal_shield_data(items: list) -> list:
        - If a row has a date (e.g. 01/15/2026), it is an ADJUSTMENT_PREMIUM.
        - If a row has no date, it is a CURRENT_PREMIUM.
     """
+    # Normalize global invoice date (digits only, stripped of leading zeros, e.g. "05/15/2026" -> "5152026")
+    def normalize_date_digits(d_str):
+        if not d_str: return ""
+        digits = re.sub(r'\D', '', str(d_str))
+        return digits.lstrip('0')
+
+    norm_global_date = normalize_date_digits(invoice_date) if invoice_date else None
+
     for item in items:
         # 1. Plan Name Mapping
         mid = str(item.get("MEMBERID") or "").strip()
@@ -330,6 +439,12 @@ def normalize_legal_shield_data(items: list) -> list:
         # Check if it looks like a date (e.g. contains / or -)
         is_date_row = row_date and isinstance(row_date, str) and (('/' in row_date) or ('-' in row_date))
         
+        if is_date_row and norm_global_date:
+            norm_row_date = normalize_date_digits(row_date)
+            if norm_row_date == norm_global_date:
+                # This is just the global invoice date copied down; not an adjustment row
+                is_date_row = False
+
         if is_date_row:
             cur_prem = to_float(item.get("CURRENT_PREMIUM"))
             adj_prem = to_float(item.get("ADJUSTMENT_PREMIUM"))
@@ -338,6 +453,7 @@ def normalize_legal_shield_data(items: list) -> list:
                 item["CURRENT_PREMIUM"] = 0.0
                 
     return items
+
 
 def deduplicate_uhc_fees(items: list) -> list:
     """
@@ -415,11 +531,20 @@ def format_date_clean(val: Optional[str]) -> Optional[str]:
     Standardize dates to m/d/yyyy format, stripping leading zeros.
     Example: 03/06/2026 -> 3/6/2026
     Example: 4/01/2026 -> 4/1/2026
+    Example: may 2026 -> 5/1/2026
     """
-    if not val or not str(val).strip() or str(val).lower() in ["n/a", "none"]:
+    if pd.isna(val) or not str(val).strip() or str(val).lower() in ["n/a", "none", "nan"]:
         return val
         
     s = str(val).strip()
+    
+    # Fast path with pandas to_datetime
+    try:
+        dt = pd.to_datetime(s, errors='coerce')
+        if pd.notna(dt):
+            return f"{dt.month}/{dt.day}/{dt.year}"
+    except Exception:
+        pass
     
     # Month name mapping
     month_map = {
@@ -429,6 +554,21 @@ def format_date_clean(val: Optional[str]) -> Optional[str]:
         "jan": "1", "feb": "2", "mar": "3", "apr": "4", "jun": "6",
         "jul": "7", "aug": "8", "sep": "9", "oct": "10", "nov": "11", "dec": "12"
     }
+
+    # Month Name No Day: "may 2026"
+    month_only_pattern = r'^([A-Za-z]+)\.?\s+(\d{4})$'
+    match_month_only = re.search(month_only_pattern, s, re.IGNORECASE)
+    if match_month_only:
+        month_name, y = match_month_only.groups()
+        month_num = month_map.get(month_name.lower())
+        if month_num:
+            return f"{month_num}/1/{y}"
+
+    # YYYY/MM/DD
+    match_ymd = re.search(r'(\d{4})[/-](\d{1,2})[/-](\d{1,2})', s)
+    if match_ymd:
+        y, m, d = match_ymd.groups()
+        return f"{int(m)}/{int(d)}/{y}"
 
     # 1. Full Date Try: MM/DD/YYYY, MM/DD/YY, M/D/YY
     match = re.search(r'(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})', s)
@@ -461,13 +601,13 @@ def format_date_clean(val: Optional[str]) -> Optional[str]:
     match_yyyymm = re.search(r'^(\d{4})(\d{2})$', s)
     if match_yyyymm:
         y, m = match_yyyymm.groups()
-        return f"1/{int(m)}/{y}"
+        return f"{int(m)}/1/{y}"
             
     # 4. MM/YYYY
     match_mmyyyy = re.search(r'(\d{1,2})[/-](\d{4})', s)
     if match_mmyyyy:
         m, y = match_mmyyyy.groups()
-        return f"1/{int(m)}/{y}"
+        return f"{int(m)}/1/{y}"
 
     return s
 
@@ -1457,6 +1597,7 @@ Extract data from the document text provided below.
             2. Plan: Life, Current: 2.75
             3. Plan: AD&D, Current: 0.75
           - **EXTRACT ALL ROWS (100% CAPTURE & LEDGER DETAIL)**: If a member has multiple adjustments for the same plan (e.g. Gale Alana having two '-$2.75' rows or Rios Caleb having multiple ADD rows for different periods like 2/01-2/28 and 3/01-3/31), YOU MUST output EACH as a separate JSON object. Do NOT sum or consolidate them. For ALL member rows (both Current and Adjustment), ALWAYS extract the specific 'Period' (e.g. 1/01-1/31/2026 or 4/01-4/30/2026) and map it to the BILLING_PERIOD field for that line item. Even if a row has no name (floating adjustment), extract it as a distinct item.
+          - **FUSED CHARGE AND PERIOD FIX (CRITICAL)**: Sometimes the PDF text fuses the Current Premium (Charge Amount) and the Period for the first adjustment onto the SAME line, such as `$713.33 3/01-3/31/2026`. If you see this, the FIRST dollar amount (`$713.33`) is the **CURRENT_PREMIUM** (Charge Amount). You MUST extract this amount into `CURRENT_PREMIUM` as a separate JSON object. Do NOT treat the entire block as an adjustment just because it has a date. The date (`3/01-3/31/2026`) actually belongs to the subsequent adjustment row (e.g. the following `CHG $713.33`).
     - **BCBS (BlueCross BlueShield)**: 
     - **Subscriber ID** or **Member ID** -> maps to `MEMBERID`.
     - **SSN CAPTURE (100% MANDATE)**: You MUST capture an SSN for EVERY row. If it is masked (e.g., `*****2313`), extract the last 4 digits. If it is 9 digits, extract all 9. DO NOT leave the SSN field null if any digits are visible on the row. Look for SSNs near the Name/ID if no clear column header is visible.
@@ -1471,6 +1612,7 @@ Extract data from the document text provided below.
         - It MUST be at the start.
         - Strip location prefixes (SAND, MARV, BEAC, JAX, CAFE, BAKE).
         - Correct any reversal (e.g., "NFQ... BLUECARE" -> "BLUECARE NFQ...").
+        - If the plan name contains 'NFO' or 'INFO' (e.g., 'BLUECARE NFO' or 'BLUECARE INFO'), this is a character misread of 'NFQ'. You MUST correct it to 'NFQ' (e.g., 'BLUECARE NFQ').
     - **PLAN_TYPE (STRICT NULL)**: For BCBS, leave `PLAN_TYPE` as **NULL**. DO NOT infer "MEDICAL".
     - **MANDATORY DETAIL EXTRACTION**: Extract members ONLY from the subscriber detail tables (e.g., "SECTION 3" or "DETAIL OF SUBSCRIBERS").
     - **GREEDY EXTRACTION**: Capture every row in the detail table. Even if a name was seen in a summary header (e.g., Account Owner "SHARAD SAXTON"), extract it again as a member row if it appears with a Subscriber ID and Premium.
@@ -1604,6 +1746,43 @@ Extract data from the document text provided below.
         - Member IDs starting with **101** -> PLAN_NAME: "Legal Plan", PLAN_TYPE: "VOLUNTARY"
         - Member IDs starting with **700** -> PLAN_NAME: "Identity Theft Plan", PLAN_TYPE: "VOLUNTARY"
     - Preserve the row-level date in the `INV_DATE` field for that line item.
+
+- **Wellmark Blue Cross (Group Invoice)**:
+    - **DOCUMENT STRUCTURE (CRITICAL)**: This is a Wellmark Blue Cross Group Invoice. It contains TWO distinct member sections that MUST be treated differently:
+        1. **"Retroactive Adjustments"** section: ALL member dollar amounts in this section MUST be placed in `ADJUSTMENT_PREMIUM`. Set `CURRENT_PREMIUM` to null for every row in this section.
+        2. **"Summary of Current Charges"** section: ALL member dollar amounts in this section MUST be placed in `CURRENT_PREMIUM`. Set `ADJUSTMENT_PREMIUM` to null for every row in this section.
+    - **SECTION IDENTIFICATION (ABSOLUTE PRIORITY)**: The section title appears as a bold header ABOVE the table:
+        - "Retroactive Adjustments" or "RETROACTIVE ADJUSTMENTS" header => this is the ADJUSTMENT section. Every member row that follows belongs here until a NEW section header appears.
+        - "Summary of Current Charges" or "SUMMARY OF CURRENT CHARGES" header => this is the CURRENT CHARGES section. Every member row that follows belongs here until a NEW section header appears.
+    - **COLUMN STRUCTURE (WIDE FORMAT — MULTI-PLAN)**:
+      Table header: `Member | ID | Date | Health Premiums* | Dental Premiums | Vision Premiums | Fees | TOC | Total`
+        - `Member`             => Split into `LASTNAME` and `FIRSTNAME`. Names are in `LASTNAME, FIRSTNAME` format (comma-separated).
+        - `ID` (e.g. W02449109) => `MEMBERID`.
+        - `Date` (e.g. Mar-26, Jun-26) => `BILLING_PERIOD` for that row.
+        - `Health Premiums*` (non-zero) => Create a row with `PLAN_NAME`: "Health Premiums", `PLAN_TYPE`: "MEDICAL".
+        - `Dental Premiums` (non-zero) => Create a row with `PLAN_NAME`: "Dental Premiums", `PLAN_TYPE`: "DENTAL".
+        - `Vision Premiums` (non-zero) => Create a row with `PLAN_NAME`: "Vision Premiums", `PLAN_TYPE`: "VISION".
+        - `Fees`               => IGNORE completely. Do NOT extract to any field.
+        - `TOC`                => Map to `COVERAGE` using this legend:
+            - `101` => **EE**  (Single)
+            - `111` => **ES**  (Two Person)
+            - `119` => **EC**  (Subscriber+child(ren))
+            - `127` => **FAM** (Family)
+        - `Total`              => IGNORE completely (row sum — NEVER extract it).
+    - **PLAN_NAME IS COLUMN-DERIVED (CRITICAL)**: There is NO per-row plan name column in this invoice. You MUST use the column header as `PLAN_NAME`. For each member, create SEPARATE JSON objects for each non-zero premium column (Health Premiums, Dental Premiums, Vision Premiums).
+    - **PARENTHESES = NEGATIVE (CRITICAL)**: Values in parentheses like `(376.96)` or `$(2,804.84)` MUST be extracted as negative numbers (e.g., -376.96). These represent credits/charges in the retroactive section.
+    - **SKIP SUMMARY ROWS (STRICT)**: Rows labeled `"Total Adjustments"` or `"Total Charges"` MUST be skipped entirely. Do NOT extract them as member rows.
+    - **SKIP ZERO COLUMNS**: If a premium column is 0.00 for a member, do NOT create a row for it. Only create rows for columns with non-zero values.
+    - **STRICT NULLS**: This invoice does NOT contain SSN or Policy ID in the member rows. You MUST set SSN=null and POLICYID=null for EVERY row.
+    - **NO HALLUCINATION**: NEVER invent members (e.g., 'John Doe'). Only extract members exactly as they appear in the table.
+    - **EMPTY PAGES**: If the text contains NO member names and is just a summary or instruction page, you MUST return an empty LINE_ITEMS array: []. Do NOT invent or hallucinate dummy data (e.g., 'John Smith', 'Jane Doe', 'Alice Brown').
+    - **HEADER FIELDS**:
+        - `INV_NUMBER`        <= "Invoice Number" field (e.g., `261310025010`).
+        - `BILLING_PERIOD`   <= "Billing Period" field (e.g., `06/01/2026 - 06/30/2026`).
+        - `INV_DATE`         <= "Billing Date" field (e.g., `05/11/2026`).
+        - `AMOUNT_DUE`       <= "Amount Due" field (e.g., `64808.86`).
+        - `TOTAL_BILLED`     <= "Current Health Premiums*" line in Account Summary (e.g., `67613.70`).
+        - `TOTAL_ADJUSTMENTS` <= "Retroactive Health Costs*" line in Account Summary (negative, e.g., `-2804.84`).
 
 - **Delta Dental**:
     - **SECTION PRIORITY (CRITICAL)**: Look for the injected markers `### SECTION: ... ###`.
@@ -1828,7 +2007,14 @@ Extract data from the document text provided below.
    - Leave CURRENT_PREMIUM as null
    
     **CRITICAL RULES**:
-    4. **ONE ROW PER MEMBER**: Each unique member (MEMBERID + Name) MUST appear exactly once in the JSON output, UNLESS it is BCBS.
+    4. **ONE ROW PER MEMBER vs. MULTI-PLAN SPLITTING (CONTEXT-DEPENDENT)**:
+       - **Single-plan invoices** (one premium column per member): One JSON object per member.
+       - **Multi-plan / Wide-format invoices** (multiple PREMIUM columns in the header): 
+         One JSON object per member PER NON-ZERO PLAN COLUMN. This is an intentional exception 
+         to the one-row rule. See rule 2 (WIDE FORMAT / MULTI-COLUMN TABLES) below.
+       - **BCBS LEDGER MODE**: Keep every individual adjustment event as a separate object.
+       - **How to know which mode applies**: If the column header row contains more than one 
+         PREMIUM column (see rule 2 classification), use multi-plan splitting mode.
     5. **BCBS LEDGER MODE**: For BlueCross BlueShield (BCBS), keep individual adjustment events (e.g. "CHANGE", "ADD", "TRM") as SEPARATE JSON objects. DO NOT merge them into one row.
     6. **MATH INTEGRITY**: Ensure you capture the TOTAL value for each adjustment row exactly as shown. If the amount is in parentheses (e.g. ($8,928.95)), it MUST be recorded as a negative number (-8928.95).
     7. **SKIP SUMMARIES**: If a person has individual rows like "CHANGE" and "ADD" AND a "Subscriber Total" row, ONLY capture the individual "CHANGE" and "ADD" rows. Skip the "Subscriber Total" to avoid double counting.
@@ -1839,15 +2025,48 @@ Extract data from the document text provided below.
     - Members listed after a section header belong to that section
     - Section continues until you see a new section header
 
-6. **PREMIUM COLUMN LOGIC (ANTHEM/Multi-Column)**:
-   - If you see multiple amount columns (e.g. Subscriber, Dep, Total):
-     - **CURRENT_PREMIUM** MUST be the **TOTAL** amount.
-     - **DO NOT** use "Subscriber Amount" or "Dependent Amount" as ADJUSTMENT_PREMIUM.
-   - **ADJUSTMENT_PREMIUM** requires an explicit column header like "Adjustment", "Retro", "Credit", "Prorated", or "Adjustment Amount".
+6. **PREMIUM COLUMN LOGIC — TWO DISTINCT SCENARIOS**:
+
+   **SCENARIO A — ANTHEM / SUBSCRIBER+DEP SPLIT** (single plan, split by who pays):
+   - Applies ONLY when columns represent portions of the SAME plan's cost 
+     (e.g., "Subscriber Amount", "Dependent Amount", "Employer Amount", "Total").
+   - In this case: **CURRENT_PREMIUM** MUST be the **TOTAL** amount (the full plan cost).
+   - **DO NOT** use "Subscriber Amount" or "Dependent Amount" as ADJUSTMENT_PREMIUM.
+   - Recognition signal: Only ONE type of insurance is being billed, and columns represent 
+     who bears each portion of cost.
+
+   **SCENARIO B — WIDE FORMAT / MULTI-PLAN** (multiple independent plans as columns):
+   - Applies when columns each represent a DIFFERENT insurance plan 
+     (e.g., "Life Premium", "Dep Life", "Medical Premium", "Dental Premium").
+   - In this case: Use each column's value directly as `CURRENT_PREMIUM` for its plan row.
+   - NEVER extract the TOTAL column. Ignore it completely.
+   - Recognition signal: Column headers contain different plan type names.
+
+   **ADJUSTMENT_PREMIUM RULE (applies to both scenarios)**:
+   - `ADJUSTMENT_PREMIUM` requires an explicit column header: "Adjustment", "Retro", 
+     "Credit", "Prorated", "ACF CREDIT", or "Adjustment Amount".
+   - Values shown with a trailing minus sign (e.g., "11.90-") MUST be treated as 
+     negative numbers (e.g., -11.90) and mapped to `ADJUSTMENT_PREMIUM`.
    - **ALIASED MAPPING**:
      - "Actual Amount" -> map to **CURRENT_PREMIUM**
      - "Adjustment Amount" -> map to **ADJUSTMENT_PREMIUM**
    - If no explicit adjustment column exists, `ADJUSTMENT_PREMIUM` is null.
+   - **COLUMN-NAME PRECISION (CRITICAL — NO OVER-TRIGGERING)**:
+     A column is an ADJUSTMENT/CREDIT column ONLY if its full reconstructed name
+     ENDS WITH or CONTAINS one of these exact words as a standalone token:
+     "CREDIT", "ADJUSTMENT", "RETRO", "PRORATED", "RETROACTIVITY".
+     - Example: "ACF CREDIT" → ADJUSTMENT column (contains "CREDIT").
+     - Example: "DOL ACF" → PREMIUM column (does NOT contain "CREDIT" or "ADJUSTMENT"). You MUST extract this column's values into `CURRENT_PREMIUM`.
+     - **DO NOT** classify a column as an adjustment just because its name contains
+       "ACF" or any other abbreviation. Only the words above qualify.
+   - **TRAILING-MINUS = COLUMN SIGNAL**: If you observe that ALL non-zero values in
+     a column use the trailing-minus format (e.g. "11.90-", "462.39-"), this means
+     the ENTIRE column is a CREDIT/ADJUSTMENT column. You MUST:
+     1. Strip the trailing minus and negate the value (e.g. "11.90-" → -11.90).
+     2. Map the value to `ADJUSTMENT_PREMIUM`.
+     3. Leave `CURRENT_PREMIUM` null for that column.
+     This applies even if the column header is ambiguous, as long as values are
+     consistently trailing-minus.
 
 
 
@@ -1909,12 +2128,91 @@ Output: `{{"LASTNAME": "ANAND", "FIRSTNAME": "ARJUN", "MEMBERID": "2543915", "SS
       - **IGNORE NAME HEADERS**: Often invoices repeat a name at the top of a section or page (e.g., "Bill for: Sharad Saxton"). DO NOT extract these as line items if they are solo headers. ONLY extract names when they are part of the actual premium/billing table rows.
       - **CRITICAL: NEVER MISATTRIBUTE TOTALS**: A member's premium must be their own individual cost. NEVER attribute a sub-total or grand total (e.g., $3301.90) to an individual member row (e.g., SAXTON SHARAD). Sub-totals are for visual grouping only and MUST be ignored for individual line item extraction.
 
-2. **WIDE FORMAT / MULTI-COLUMN TABLES**:
-   - If coverages (Dental, Vision, LIFE, Std) are listed as COLUMNS:
-     - Generate a SEPARATE JSON object for EVERY column with a non-zero value.
-     - Column Header -> `PLAN_NAME`.
-     - Value in Column -> `CURRENT_PREMIUM`.
-     - Derived Type (e.g., "Dental" -> DENTAL) -> `PLAN_TYPE`.
+2. **WIDE FORMAT / MULTI-COLUMN TABLES (UNIVERSAL RULE)**:
+   - If a table has multiple PLAN PREMIUM columns (e.g., Life Premium, Dep Life, Medical Premium, 
+     Dental Premium, LTD Premium, STD Premium, GAP Premium, HSA Fee, etc.) listed as SEPARATE 
+     COLUMNS in the header — one per member row — apply this rule:
+     - **STEP 1 — READ THE COLUMN HEADERS**: Identify every column in the header row(s). 
+       Two-line headers are common (e.g., "Life | Dep" on row 1 and "Premium | Life" on row 2).
+       Combine adjacent header fragments to reconstruct the full column name 
+       (e.g., "Dep" + "Life" = "Dep Life").
+     - **STEP 2 — CLASSIFY EACH COLUMN** into one of three types:
+       - **PREMIUM column**: A dollar amount that is a standalone plan cost. 
+         Examples: "Life Premium", "Dep Life", "Medical Premium", "Dental Premium", 
+         "LTD Premium", "SPD Premium", "GAP Premium", "HSA Fee".
+       - **VOLUME/METADATA column**: A count, coverage amount, or rate basis. 
+         MUST be IGNORED — never extracted to any premium field.
+         Examples: "Life Volume", "LTD Volume", "SPD90 Volume", "SPD180 Volume", 
+         "GAP EE Volume", "GAP FAM Volume", any column containing "Volume" or "Count".
+       - **TOTAL/ROW-SUM column**: The sum of all premiums on that row. 
+         MUST be IGNORED — never extracted to any premium field.
+         A column qualifies as a TOTAL column ONLY if:
+           (a) its reconstructed name IS or ENDS WITH the word "Total" or "TOTAL"
+               (e.g. "TOTAL", "Row Total", "Flex Total", "Total Premium"), OR
+           (b) its cell values always equal the arithmetic sum of the other premium columns.
+         **CRITICAL DISAMBIGUATION — "Fee" ≠ "Total"**:
+           - "Flex Fee" → **PREMIUM column** (it is a standalone plan charge, NOT a row sum).
+           - "Flex Total" → TOTAL column (it IS a row sum).
+           - "POP Plan Fee" → **PREMIUM column**.
+           - "Admin Fee" → **PREMIUM column**.
+           - Any column ending in **"Fee"** is ALWAYS a PREMIUM column, regardless of
+             any other word in its name. NEVER classify a "...Fee" column as TOTAL or VOLUME.
+
+     - **STEP 3 — EXTRACT PLAN ROWS**: 
+       - **TOKEN SAVING**: To conserve tokens, NEVER repeat `LASTNAME`, `FIRSTNAME`, `COVERAGE`, etc. for multiple plans for the same member! Output a single JSON object per member and place their extracted plans inside a nested `"PLANS"` array. Omit any keys with null or empty values.
+       - Inside the `"PLANS"` array, create an object for EVERY PREMIUM column AND EVERY ADJUSTMENT column that has a **non-zero value** for that member.
+       - **CRITICAL**: You MUST NOT skip the `DOL ACF` and `ACF CREDIT` columns! If they have non-zero values (like 11.90 and 11.90-), you MUST create a JSON object for each inside `"PLANS"`.
+       - Use the column header as `PLAN_NAME`.
+       - If it is a PREMIUM column, map the cell value to `CURRENT_PREMIUM` (leave `ADJUSTMENT_PREMIUM` null).
+       - If it is an ADJUSTMENT column, map the NEGATED cell value (e.g. "11.90-" -> -11.90) to `ADJUSTMENT_PREMIUM` (leave `CURRENT_PREMIUM` null).
+       - Infer `PLAN_TYPE` from the column name:
+         - "Life", "Dep Life", "Retiree Life", "Dependent Life" → **LIFE**
+         - "Medical", "Med Premium" → **MEDICAL**
+         - "Dental", "Dental Premium" → **DENTAL**
+         - "Vision" → **VISION**
+         - "LTD" → **LTD**
+         - "STD", "SPD" → **STD**
+         - "HSA Fee" → **VOLUNTARY**
+         - "GAP" → **VOLUNTARY**
+         - Any column whose name **ends in "Fee"** or contains "Fee" as a word
+           (e.g. "Flex Fee", "POP Plan Fee", "Admin Fee", "DOL Fee", "HSA Fee")
+           → **VOLUNTARY**
+         - "Flex" (standalone or as prefix, e.g. "Flex Fee", "Flex Benefit")
+           → **VOLUNTARY**
+         - "DOL" (Department of Labor contribution columns)
+           → **VOLUNTARY**
+         - "POP" (Premium Only Plan / Section 125 fee column)
+           → **VOLUNTARY**
+       - If a PREMIUM column cell is **0.00 or 0** for a member → **skip it** (do not create a row).
+     - **COVERAGE INHERITANCE**: All split rows for the same member MUST share the same 
+       LASTNAME, FIRSTNAME, MEMBERID, SSN, and COVERAGE values.
+
+3. **TWO-LINE COLUMN HEADERS (UNIVERSAL RULE)**:
+   Many invoices use two-line column headers where a single column's name is split 
+   across two consecutive header lines. You MUST read both lines and combine fragments 
+   to reconstruct the full column name before classifying columns.
+   
+   **Method**: 
+   - Identify rows that function as column headers (before the `====` separator line 
+     or before the first data row).
+   - If two consecutive lines both appear to be headers (no member name/DOB), 
+     treat them as a single combined header. Merge fragments by position:
+     - Fragment in position N of line 1 + Fragment in position N of line 2 = Full column name.
+   
+   **Examples**:
+   - Line 1: `DOL | ACF | Medical | Dental | POP Plan | Flex`
+     Line 2: `ACF | CREDIT | Premium | Premium | Fee | Fee | Total`
+     → Columns: `[DOL ACF][ACF CREDIT][Medical Premium][Dental Premium][POP Plan Fee][Flex Fee][Total]`
+
+   - Line 1: `Life | Life | Dep | Retiree | Retiree | HSA`
+     Line 2: `Volume | Premium | Life | Life | Dep Life | Fee | TOTAL`
+     → Columns: `[Life Volume][Life Premium][Dep Life][Retiree Life][Retiree Dep Life][HSA Fee][TOTAL]`
+   
+   - Line 1: `LTD | LTD | SPD90 | SPD180 | SPD | GAP EE | GAP FAM | GAP`
+     Line 2: `Volume | Premium | Volume | Volume | Premium | Volume | Volume | Premium | TOTAL`
+     → Columns: `[LTD Volume][LTD Premium][SPD90 Volume][SPD180 Volume][SPD Premium][GAP EE Volume][GAP FAM Volume][GAP Premium][TOTAL]`
+   
+   After reconstruction, apply the VOLUME/METADATA/TOTAL/PREMIUM classification from rule 2.
 
 3. **ADJUSTMENT SECTION MAPPING (GUARDIAN)**:
    - If a table has **"New Premium"** and **"New Premium Adjustment"** columns:
@@ -1983,6 +2281,22 @@ JSON OUTPUT:"""
         
         try:
             extracted_data = json.loads(response_text)
+            
+            # [V7][FIX] Flatten nested plans if the LLM output them to save tokens
+            if "LINE_ITEMS" in extracted_data:
+                flattened_items = []
+                for item in extracted_data["LINE_ITEMS"]:
+                    if "PLANS" in item and isinstance(item["PLANS"], list):
+                        # Extract base member info
+                        base_info = {k: v for k, v in item.items() if k != "PLANS"}
+                        for plan in item["PLANS"]:
+                            new_item = base_info.copy()
+                            new_item.update(plan)
+                            flattened_items.append(new_item)
+                    else:
+                        flattened_items.append(item)
+                extracted_data["LINE_ITEMS"] = flattened_items
+                
             print(f"  [OK] Successfully extracted {sum(1 for v in extracted_data.values() if v is not None)} fields")
             return extracted_data
         except json.JSONDecodeError as e:
@@ -2003,6 +2317,21 @@ JSON OUTPUT:"""
                         fixed_json += '"}]}'
                     
                     extracted_data = json.loads(fixed_json)
+                    
+                    # [V7][FIX] Flatten nested plans if the LLM output them to save tokens
+                    if "LINE_ITEMS" in extracted_data:
+                        flattened_items = []
+                        for item in extracted_data["LINE_ITEMS"]:
+                            if "PLANS" in item and isinstance(item["PLANS"], list):
+                                base_info = {k: v for k, v in item.items() if k != "PLANS"}
+                                for plan in item["PLANS"]:
+                                    new_item = base_info.copy()
+                                    new_item.update(plan)
+                                    flattened_items.append(new_item)
+                            else:
+                                flattened_items.append(item)
+                        extracted_data["LINE_ITEMS"] = flattened_items
+                        
                     print("  [V3][RECOVERY] Successfully recovered truncated JSON.")
                     return extracted_data
             except Exception as re:
@@ -2103,6 +2432,102 @@ def extract_text_to_file(pdf_path: str, output_txt: Optional[str] = None, use_oc
         print(f"  [ERROR] Error saving text to {output_txt}: {e}")
         return None
 
+def parse_guardian_current_premiums_direct(full_raw_text: str, source_filename: str = "") -> list:
+    """
+    Deterministic direct parser for Guardian's wide 'Current Premiums' table (Pages 7-9).
+    Bypasses LLM to flawlessly parse multi-tier cells and 15 columns based on | delimiters.
+    """
+    items = []
+    lines = full_raw_text.splitlines()
+    in_table = False
+    
+    # Extract billing period from page footer (e.g., BillingPeriod:06/01/26to06/30/26)
+    billing_period = "06/01/2026"
+    bp_match = re.search(r'BillingPeriod:(\d{2}/\d{2}/\d{2,4})', full_raw_text)
+    if bp_match:
+        bp_raw = bp_match.group(1)
+        if len(bp_raw) == 8: # MM/DD/YY -> MM/DD/YYYY
+            parts = bp_raw.split('/')
+            billing_period = f"{parts[0]}/{parts[1]}/20{parts[2]}"
+        else:
+            billing_period = bp_raw
+            
+    col_mapping = {
+        2: {"name": "Dental", "type": "DENTAL", "cov_col": 3},
+        4: {"name": "ManagedDentalCare- Mdc", "type": "DENTAL", "cov_col": 5},
+        6: {"name": "ManagedDentalCare- Mdg", "type": "DENTAL", "cov_col": 7},
+        8: {"name": "Std", "type": "STD", "cov_col": None},
+        9: {"name": "Vision", "type": "VISION", "cov_col": 10},
+        11: {"name": "Voluntary Ad&D", "type": "AD&D", "cov_col": 12},
+        13: {"name": "Voluntary Term Life", "type": "LIFE", "cov_col": 14},
+    }
+    
+    def map_coverage(cov_raw: str) -> str:
+        cov = cov_raw.strip().upper()
+        if not cov: return ""
+        if "FAM" in cov or ("SP" in cov and "CH" in cov): return "FAM"
+        if "SP" in cov: return "ES"
+        if "CH" in cov: return "EC"
+        return "EE"
+
+    current_lastname = ""
+    current_firstname = ""
+    
+    for line in lines:
+        line = line.strip()
+        if line == "| Current Premiums |" or line == "| Current Premiums (cont'd.) |":
+            in_table = True
+            current_lastname = ""
+            current_firstname = ""
+        elif "Summary of Current Premiums" in line:
+            in_table = False
+        
+        # Valid member row: must start with | and not be a header/footer
+        if in_table and line.startswith("|") and not line.startswith("| Employee |") and not line.startswith("| - |") and not line.startswith("| TOTAL |") and not line.startswith("| TotalCurrentPremium"):
+            cols = [c.strip() for c in line.split("|")]
+            
+            # The row should have around 16 columns (indices 0 to 15)
+            if len(cols) >= 14:
+                fullname = cols[1]
+                if fullname and not fullname.lower() in ["premium", "ins.", "continued", ""]:
+                    if "," in fullname:
+                        current_lastname, current_firstname = [p.strip() for p in fullname.split(",", 1)]
+                    else:
+                        current_lastname, current_firstname = fullname.strip(), ""
+                
+                lastname = current_lastname
+                firstname = current_firstname
+                
+                if not lastname and not firstname:
+                    continue
+                    
+                for col_idx, plan_info in col_mapping.items():
+                    if col_idx < len(cols):
+                        val_raw = cols[col_idx]
+                        if not val_raw: continue
+                        
+                        # Find all premium amounts (strict match for floats with 2 decimal places to ignore volume like 100,000)
+                        premiums = re.findall(r'(\d+\.\d{2})', val_raw)
+                        if premiums:
+                            total_prem = sum(to_float(p) for p in premiums)
+                            if total_prem > 0:
+                                cov_raw = ""
+                                if plan_info["cov_col"] and plan_info["cov_col"] < len(cols):
+                                    cov_raw = cols[plan_info["cov_col"]]
+                                
+                                items.append({
+                                    "LASTNAME": lastname,
+                                    "FIRSTNAME": firstname,
+                                    "PLAN_NAME": plan_info["name"],
+                                    "PLAN_TYPE": plan_info["type"],
+                                    "COVERAGE": map_coverage(cov_raw),
+                                    "CURRENT_PREMIUM": round(total_prem, 2),
+                                    "ADJUSTMENT_PREMIUM": None,
+                                    "BILLING_PERIOD": billing_period,
+                                    "SOURCE_FILE": source_filename
+                                })
+    return items
+
 
 def process_verified_text_file(txt_path: str, client: OpenAI, source_filename: Optional[str] = None) -> Dict:
     """
@@ -2117,9 +2542,9 @@ def process_verified_text_file(txt_path: str, client: OpenAI, source_filename: O
     
     try:
         with open(txt_path, 'r', encoding='utf-8') as f:
-            text = f.read()
+            raw_text = f.read()
             
-        text = clean_ocr_noise(text)
+        text = clean_ocr_noise(raw_text)
         print(f"  [OK] Read {len(text)} characters from verified file")
         
     except Exception as e:
@@ -2128,13 +2553,19 @@ def process_verified_text_file(txt_path: str, client: OpenAI, source_filename: O
     
     # [V5] MOO Context Preservation: 
     # Page-by-page processing with overlap to handle member context inheritance.
+    page_markers = bool(re.search(r'\[\[PAGE_\d+\]\]', text))
     is_moo = "MUTUAL OF OMAHA" in text.upper() or "MUTUALOFOMAHA" in text.upper() or "MOO" in str(txt_path).upper()
     
     parts = []
+    raw_parts = []
     if page_markers:
         parts = re.split(r'\[\[PAGE_\d+\]\]', text)
         if parts and not parts[0].strip():
             parts.pop(0)
+            
+        raw_parts = re.split(r'\[\[PAGE_\d+\]\]', raw_text)
+        if raw_parts and not raw_parts[0].strip():
+            raw_parts.pop(0)
 
     if is_moo and len(parts) > 1:
         print(f"  [V7][MOO] Using Direct Parser (LLM-free) for member rows.")
@@ -2217,12 +2648,21 @@ def process_verified_text_file(txt_path: str, client: OpenAI, source_filename: O
         all_line_items = []
         is_uhc = "UNITEDHEALTH" in text.upper() or "UHC" in text.upper()
         is_legal_shield = "LEGAL SHIELD" in text.upper() or "LEGALSHIELD" in text.upper()
-        global_carrier = "Legal Shield" if is_legal_shield else None
+        
+        # [GUARDIAN FIX] Route Guardian Pages 7-9 to direct parser
+        is_guardian = "GUARDIAN" in source_filename.upper() if source_filename else "GUARDIAN" in str(txt_path).upper() or "FOURTH PEO" in text[:500].upper()
+        
+        global_carrier = "Legal Shield" if is_legal_shield else ("Guardian" if is_guardian else None)
+        
+        allied_inv_context = "9835"
+        is_allied = "ALLIED" in str(txt_path).upper() or "PRIMESOUTH" in str(txt_path).upper() or "PRIMESOUTH" in text[:2000].upper()
+
         
         current_section = "CURRENT"
-        for i, page_text in enumerate(parts):
+        for page_idx, page_text in enumerate(parts):
             if not page_text.strip(): continue
-            page_num = i + 1
+            page_num = page_idx + 1
+            raw_page_text = raw_parts[page_idx] if page_idx < len(raw_parts) else page_text
             is_delta = "DELTA DENTAL" in str(txt_path).upper() or "DELTA DENTAL" in text[:500].upper()
             
             # --- [Sub-Page Section Splitting] ---
@@ -2271,11 +2711,37 @@ def process_verified_text_file(txt_path: str, client: OpenAI, source_filename: O
                 print(f"  [AI] Extracting from Page {page_num} (Section: {section_type})...")
                 contextual_text = f"### CURRENT SECTION: {section_type} ###\n\n{section_text}"
                 
-                # UHC Summary Skip logic remains page-level usually, but we keep it safe here
-                if is_uhc and i > 0 and (("Summary" in page_text and "Description" in page_text) or ("Total Volume" in page_text)):
+                is_current_premium_page = "| Current Premiums |" in raw_page_text or "| Current Premiums (cont'd.) |" in raw_page_text
+                if is_guardian and is_current_premium_page:
+                    print(f"  [V7][GUARDIAN] Using Direct Parser for Page {page_num}...")
+                    guardian_items = parse_guardian_current_premiums_direct(raw_page_text, source_filename or os.path.basename(txt_path))
+                    page_data = {"LINE_ITEMS": guardian_items}
+                elif is_allied:
+                    print(f"  [V7][ALLIED] Using Direct Parser for Page {page_num}...")
+                    allied_items, allied_inv_context = parse_allied_direct_page(page_text, allied_inv_context)
+                    
+                    if page_num == 1:
+                        # Extract header using LLM ONLY for the first page
+                        page_data = extract_fields_with_llm(contextual_text, client, f"Page {page_num}", mode="standard", detected_carrier=global_carrier) or {}
+                        page_data["LINE_ITEMS"] = allied_items
+                    else:
+                        page_data = {"LINE_ITEMS": allied_items}
+                elif is_uhc and i > 0 and (("Summary" in page_text and "Description" in page_text) or ("Total Volume" in page_text)):
                      page_data = extract_fields_with_llm(contextual_text, client, f"Page {page_num} (Summary)", mode="standard", detected_carrier=global_carrier) or {}
                 else:
                      page_data = extract_fields_with_llm(contextual_text, client, f"Page {page_num}", mode="standard", detected_carrier=global_carrier) or {}
+                     
+                     if is_guardian and page_data.get("LINE_ITEMS"):
+                         # Guardian LLM results are strictly Adjustments/Summary since Current Premiums uses direct parser.
+                         for row in page_data["LINE_ITEMS"]:
+                             # Only touch rows that have an employee name
+                             if str(row.get("LASTNAME") or "").strip() or str(row.get("FIRSTNAME") or "").strip():
+                                 cp = to_float(row.get("CURRENT_PREMIUM"))
+                                 ap = to_float(row.get("ADJUSTMENT_PREMIUM"))
+                                 if cp != 0:
+                                     if ap == 0:
+                                         row["ADJUSTMENT_PREMIUM"] = cp
+                                     row["CURRENT_PREMIUM"] = None
                 
                 # --- [Section-Level Recovery] ---
                 # If we are in "Enrollee adjustment" section but AI returned zero items, 
@@ -2324,7 +2790,8 @@ def process_verified_text_file(txt_path: str, client: OpenAI, source_filename: O
 
     # [V4][LEGALSHIELD] Legal Shield Normalization
     if "LINE_ITEMS" in extracted_data and extracted_data["LINE_ITEMS"] and is_legal_shield:
-        extracted_data["LINE_ITEMS"] = normalize_legal_shield_data(extracted_data["LINE_ITEMS"])
+        inv_date = extracted_data.get("HEADER", {}).get("INV_DATE")
+        extracted_data["LINE_ITEMS"] = normalize_legal_shield_data(extracted_data["LINE_ITEMS"], invoice_date=inv_date)
 
     # Add source filename
     if source_filename:
@@ -2565,7 +3032,8 @@ def process_single_pdf(pdf_path: str, client: OpenAI) -> Dict:
 
     # [V5][AUDIT] Building a global master list for high-precision carrier documents.
     master_list = []
-    if len(text) > 50000 or "Mutual of Omaha" in text or "Legal Shield" in text or "Principal" in text:
+    is_allied_global = "ALLIED" in str(pdf_path).upper() or "PRIMESOUTH" in str(pdf_path).upper()
+    if not is_allied_global and (len(text) > 50000 or "Mutual of Omaha" in text or "Legal Shield" in text or "Principal" in text):
         master_list = _detect_member_ids_ai(text, client)
     all_line_items = []
     final_header = {field: None for field in ["INV_DATE", "INV_NUMBER", "BILLING_PERIOD", "TOTAL_BILLED", "TOTAL_ADJUSTMENTS", "AMOUNT_DUE", "GROUP_NUMBER", "PRICING_ADJUSTMENT"]}
@@ -2642,6 +3110,14 @@ def process_single_pdf(pdf_path: str, client: OpenAI) -> Dict:
     if is_principal_invoice:
         global_carrier = "Principal"
         print(f"  [V6][PRINCIPAL] Principal Life Insurance Company detected.")
+
+    # Wellmark Blue Cross Detection
+    is_wellmark_invoice = any("WELLMARK" in p.upper() for p in pages) or \
+                          any("wellmark.com" in p.lower() for p in pages) or \
+                          "WELLMARK" in str(pdf_path).upper()
+    if is_wellmark_invoice:
+        global_carrier = "Wellmark Blue Cross"
+        print(f"  [WELLMARK] Wellmark Blue Cross invoice detected. Carrier context will be passed to all chunks.")
 
     print(f"  [V3] Splitting large document into {len(pages)} pages for reliable extraction...")
     
@@ -2826,6 +3302,25 @@ def process_single_pdf(pdf_path: str, client: OpenAI) -> Dict:
         is_skip_page = (is_gis_invoice and i == 0 and (not is_already_chunk or is_first_chunk)) or \
                        (is_humana_invoice and (i == 0 or i == 1 or i == 2 or i == 4)) or \
                        is_uhc_summary
+                       
+        is_allied = "ALLIED" in str(pdf_path).upper() or "PRIMESOUTH" in str(pdf_path).upper()
+        if is_allied:
+            print(f"  [V7][ALLIED] Using Direct Parser for {chunk_id_str}...")
+            allied_items, current_inv_num, page_amount_due = parse_allied_direct_page(page_text, "9835")
+            if i == 0:
+                header_only_data = extract_fields_with_llm(page_text, client, f"{os.path.basename(pdf_path)}_{chunk_id_str}_header", mode="standard", detected_carrier=global_carrier) or {}
+                hdr = header_only_data.get("HEADER", {})
+                if page_amount_due is not None:
+                    hdr["AMOUNT_DUE"] = page_amount_due
+                    hdr["INV_NUMBER"] = current_inv_num
+                return {"index": i, "header": hdr, "items": allied_items, "refinement_info": None, "passes": 1}
+            else:
+                hdr = {}
+                if page_amount_due is not None:
+                    hdr["AMOUNT_DUE"] = page_amount_due
+                    hdr["INV_NUMBER"] = current_inv_num
+                return {"index": i, "header": hdr, "items": allied_items, "refinement_info": None, "passes": 1}
+        
         
         if is_skip_page:
             reason = "GIS" if is_gis_invoice else ("Humana" if is_humana_invoice else "UHC Summary")
@@ -3062,7 +3557,8 @@ def process_single_pdf(pdf_path: str, client: OpenAI) -> Dict:
 
     # [V4][LEGALSHIELD] Legal Shield Normalization
     if "Legal Shield" in str(global_carrier):
-        all_line_items = normalize_legal_shield_data(all_line_items)
+        inv_date = final_header.get("INV_DATE")
+        all_line_items = normalize_legal_shield_data(all_line_items, invoice_date=inv_date)
         data["LINE_ITEMS"] = all_line_items
 
     # [LEARNING] Final Audit & Auto-Training
@@ -3206,8 +3702,32 @@ def process_single_pdf_to_excel(pdf_path: str, output_excel: str):
     # Initialize OpenAI client
     client = OpenAI(api_key=OPENAI_API_KEY)
     
-    # Process the PDF
-    data = process_single_pdf(pdf_path, client)
+    # [V7][FIX] The UI runs this function when processing PDFs directly.
+    # However, MOO and Guardian require the Direct Parsers, which only live inside
+    # process_verified_text_file. So if we detect MOO or Guardian, we must route the extraction there.
+    is_guardian_or_moo = False
+    try:
+        import fitz
+        doc = fitz.open(pdf_path)
+        first_page = (doc[0].get_text() or "").lower()
+        if "guardian" in first_page or "fourth peo" in first_page or "mutual of omaha" in first_page or "moo" in first_page:
+            is_guardian_or_moo = True
+        doc.close()
+    except Exception as e:
+        print(f"  [WARN] Failed to read PDF for carrier detection: {e}")
+        pass
+        
+    if is_guardian_or_moo:
+        print("\n  [V7][ROUTER] Guardian/MOO detected. Routing to process_verified_text_file for Direct Parser support...")
+        txt_path = pdf_path.replace(".pdf", "_extracted.txt")
+        if not os.path.exists(txt_path):
+            raw_text = extract_text_from_pdf_pymupdf(pdf_path)
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(raw_text)
+        data = process_verified_text_file(txt_path, client, source_filename=os.path.basename(pdf_path))
+    else:
+        # Process the PDF
+        data = process_single_pdf(pdf_path, client)
     
     # Flatten data for Excel
     source_filename = os.path.basename(pdf_path)
@@ -3428,6 +3948,14 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                 # Check for exact matches of total keywords as standalone words
                 return any(re.search(fr'\b{kw}\b', t) for kw in keywords)
 
+            def canonicalize_plan(name):
+                if not name: return ""
+                name_str = str(name).strip().lower()
+                # Only apply aggressive space/punctuation stripping for Guardian
+                if "GUARDIAN" in source_filename.upper() or "FOURTH PEO" in source_filename.upper():
+                    return re.sub(r'[\s\-\&_,\.]+', '', name_str)
+                return name_str
+
             last_processed_member = None # For cross-page continuity
             for item in line_items:
                 # [V4][MOO] Cross-Page Continuity Repair
@@ -3443,8 +3971,8 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                     print(f"    [V5][MOO] Skipping header/noise row: {_ln_upper} {_fn_upper}")
                     continue
 
-                # [V5][MOO] Aggressive Orphan Row Repair
-                is_moo_doc = any(kw in source_filename.upper() for kw in ["MUTUAL OF OMAHA", "MOO"])
+                # [V5] Aggressive Orphan Row Repair (MOO & Guardian)
+                is_orphan_repair_eligible = any(kw in source_filename.upper() for kw in ["MUTUAL OF OMAHA", "MOO", "GUARDIAN", "FOURTH PEO"])
                 
                 # Identify if this is a "placeholder" or "weak" name record that needs contextual repair
                 _pn = str(item.get("PLAN_NAME") or "").upper()
@@ -3457,14 +3985,15 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                 is_placeholder = (_ln in ["MISSING", "UNKNOWN", "N/A", "PARTICIPANT", "PPT", "PPT/DEP", "DEPENDENT", "SPOUSE"] and \
                                  _fn in ["FROM_PREVIOUS_PAGE", "UNKNOWN", "N/A", "PARTICIPANT"]) or \
                                 (_ln == "MISSING") or (_fn == "FROM_PREVIOUS_PAGE") or \
-                                (_ln in ["PARTICIPANT", "PPT", "SPOUSE", "DEPENDENT"] and not _fn)
+                                (_ln in ["PARTICIPANT", "PPT", "SPOUSE", "DEPENDENT"] and not _fn) or \
+                                (is_weak_name and not _fn and not _ln) # Truly blank name
                 
                 # Case where LLM didn't use placeholder but just left name empty except for "Participant" keyword
-                if is_moo_doc and is_weak_name and not is_placeholder:
+                if is_orphan_repair_eligible and is_weak_name and not is_placeholder:
                     if to_float(item.get("CURRENT_PREMIUM")) != 0 or to_float(item.get("ADJUSTMENT_PREMIUM")) != 0:
                         is_placeholder = True
                 
-                if is_moo_doc and is_placeholder:
+                if is_orphan_repair_eligible and is_placeholder:
                     print(f"    [V5][MOO] Found orphan row placeholder: {_pn}")
                     
                     # 1. Skip summary/aggregate labels that are NOT member rows
@@ -3541,7 +4070,14 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                 
                 norm_date = format_date_clean(row_date).lower() if row_date else "no_date"
                 norm_period = clean_billing_period(row_period).lower() if row_period else "no_period"
-                date_key = f"{norm_date}|{norm_period}"
+                
+                # [GUARDIAN] Guardian invoices have Adjustments (period 5/1) and Current (period 6/1)
+                # for the SAME employee+plan. They MUST merge across periods, so exclude date from key.
+                is_guardian_doc = "GUARDIAN" in source_filename.upper() or "FOURTH PEO" in source_filename.upper()
+                if is_guardian_doc:
+                    date_key = "guardian_merged"
+                else:
+                    date_key = f"{norm_date}|{norm_period}"
                 
                 # [V5] LEDGER MODE: For UHC and BCBS, do NOT generate matching keys for adjustment rows.
                 # This ensures they are never merged by the key-matching logic.
@@ -3549,8 +4085,9 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                 is_uhc_carrier = "UHC" in fn_upper or "CHILL" in fn_upper
                 is_bcbs_carrier = "BCBS" in fn_upper or "BLUE" in fn_upper
                 is_adj_row = to_float(item.get("ADJUSTMENT_PREMIUM")) != 0 or any(kw in str(item.get("PLAN_NAME")).upper() for kw in ["ADJ", "RETRO", "ADD", "TRM"])
-                
-                if (is_uhc_carrier or is_bcbs_carrier) and is_adj_row:
+                is_global_fee = not fname and not lname or any(kw in str(fname).upper() or kw in str(lname).upper() for kw in ["CREDIT", "FEE", "TOTAL", "SUMMARY"])
+
+                if (is_uhc_carrier or is_bcbs_carrier) and is_adj_row and not is_global_fee:
                     print(f"    [V5][LEDGER] Skipping merge keys for adjustment: {fname} {lname}")
                     key_id_strict = None
                     key_ssn_strict = None
@@ -3561,9 +4098,10 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                     # PRIMARY KEY: Name + ID + Plan + Date Key (Strict match for multi-plan/multi-date differentiation)
                     plan_name = str(item.get("PLAN_NAME") or "").strip().lower()
                     clean_plan = plan_name if plan_name not in ["n/a", "none", ""] else None
+                    canon_plan = canonicalize_plan(clean_plan) if clean_plan else None
                     
-                    key_id_strict = f"{fname}|{lname}|{member_id}|{clean_plan}|{date_key}" if not is_weak_id and clean_plan else None
-                    key_ssn_strict = f"{fname}|{lname}|{ssn}|{clean_plan}|{date_key}" if not is_weak_ssn and clean_plan else None
+                    key_id_strict = f"{fname}|{lname}|{member_id}|{canon_plan}|{date_key}" if not is_weak_id and canon_plan else None
+                    key_ssn_strict = f"{fname}|{lname}|{ssn}|{canon_plan}|{date_key}" if not is_weak_ssn and canon_plan else None
                     
                     # SECONDARY KEY: Name + ID + Date Key (Relaxed for merging adjustments without plan name but with date)
                     key_id_loose = f"{fname}|{lname}|{member_id}|{date_key}" if not is_weak_id else None
@@ -3600,7 +4138,7 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                          ex_type = str(existing.get("PLAN_TYPE") or "").upper()
                          type_mismatch = curr_type and ex_type and curr_type != ex_type
 
-                         if not type_mismatch and (not clean_plan or not ex_clean or clean_plan == ex_clean or is_adj_or_total(clean_plan) or is_adj_or_total(ex_clean)):
+                         if not type_mismatch and (not clean_plan or not ex_clean or canonicalize_plan(clean_plan) == canonicalize_plan(ex_clean) or is_adj_or_total(clean_plan) or is_adj_or_total(ex_clean)):
                              match_index = potential_idx
                 
                 # 3. Try Name-Only Match (ULTRA-LOOSE) if one side is a "shell" record (missing identifiers)
@@ -3646,7 +4184,7 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                                 ex_type = str(ex.get("PLAN_TYPE") or "").upper()
                                 type_mismatch = curr_type and ex_type and curr_type != ex_type
 
-                                if not type_mismatch and (not clean_plan or not ex_clean or clean_plan == ex_clean or is_adj_or_total(clean_plan) or is_adj_or_total(ex_clean)):
+                                if not type_mismatch and (not clean_plan or not ex_clean or canonicalize_plan(clean_plan) == canonicalize_plan(ex_clean) or is_adj_or_total(clean_plan) or is_adj_or_total(ex_clean)):
                                     matched_by_name_idx = idx
                                     break
                     
@@ -3681,8 +4219,10 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                     is_uhc_doc = "UHC" in fn_upper or "CHILL" in fn_upper
                     is_kcl_doc = "KCL" in fn_upper or "KANSAS" in fn_upper
                     
-                    pn1 = str(item.get("PLAN_NAME") or "").upper()
-                    pn2 = str(existing.get("PLAN_NAME") or "").upper()
+                    pn1_raw = str(item.get("PLAN_NAME") or "").upper()
+                    pn2_raw = str(existing.get("PLAN_NAME") or "").upper()
+                    pn1 = canonicalize_plan(pn1_raw)
+                    pn2 = canonicalize_plan(pn2_raw)
                     
                     # Also consider periods
                     per1 = str(item.get("BILLING_PERIOD") or "").strip().lower()
@@ -3692,8 +4232,8 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                     cov2 = str(existing.get("COVERAGE") or "").strip().upper()
                     
                     detail_keywords = ["ADD", "TRM", "CHANGE", "CHG", "RETRO", "ADJUSTMENT", "ADJ"]
-                    is_adj1 = any(kw in pn1 for kw in detail_keywords)
-                    is_adj2 = any(kw in pn2 for kw in detail_keywords)
+                    is_adj1 = any(kw in pn1_raw for kw in detail_keywords)
+                    is_adj2 = any(kw in pn2_raw for kw in detail_keywords)
                     
                     # Also consider a row an adjustment if ADJUSTMENT_PREMIUM is filled 
                     # and CURRENT_PREMIUM is NOT (or vice-versa)
@@ -3705,8 +4245,9 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                     # LEDGER MODE: STRICT SEPARATION for UHC/BCBS/KCL
                     if is_bcbs_doc or is_uhc_doc or is_kcl_doc:
                         # 1. Never merge a CURRENT row with an ADJUSTMENT row
-                        if (has_cur_val1 and has_adj_val2 and not has_adj_val1) or \
-                           (has_adj_val1 and has_cur_val2 and not has_cur_val1):
+                        _is_global_fee = (not fname and not lname) or any(kw in str(fname).upper() or kw in str(lname).upper() for kw in ["CREDIT", "FEE", "TOTAL", "SUMMARY"])
+                        if not _is_global_fee and ((has_cur_val1 and has_adj_val2 and not has_adj_val1) or \
+                           (has_adj_val1 and has_cur_val2 and not has_cur_val1)):
                             print(f"      [V5][LEDGER] Separating CURRENT/ADJUSTMENT for {pn1}")
                             match_index = None
                         # 2. Never merge two DIFFERENT ADJUSTMENT rows (preserve granularity)
@@ -3776,10 +4317,21 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                                 # This prevents doubling premiums from 1-page overlapping chunks.
                                 # Use a more robust check for MOO detection here.
                                 _is_moo = "MUTUAL OF OMAHA" in source_filename.upper() or "MOO" in source_filename.upper()
-                                if _is_moo and v1 == v2:
-                                    print(f"      [V5][MOO][DUP] Skipping sum for identical overlapping row ({fname} {lname} {k}={v2})")
-                                    # Already have the value, skip summing
-                                    pass
+                                _is_guardian = "GUARDIAN" in source_filename.upper() or "FOURTH PEO" in source_filename.upper()
+                                is_global_fee = (not fname and not lname) or any(kw in str(fname).upper() or kw in str(lname).upper() for kw in ["CREDIT", "FEE", "TOTAL", "SUMMARY"])
+                                
+                                if (_is_moo or _is_guardian or is_global_fee):
+                                    comps_key = f"{k}_COMPONENTS"
+                                    if comps_key not in existing:
+                                        existing[comps_key] = [v1] if v1 != 0 else []
+                                    
+                                    if v2 in existing[comps_key]:
+                                        print(f"      [V5][DUP] Skipping sum for identical overlapping row/component ({fname} {lname} {k}={v2})")
+                                        pass
+                                    else:
+                                        print(f"      [V3][SUM] Adding {v2} to {v1} for {k} ({fname} {lname})")
+                                        existing[k] = round(v1 + v2, 2)
+                                        existing[comps_key].append(v2)
                                 else:
                                     print(f"      [V3][SUM] Adding {v2} to {v1} for {k} ({fname} {lname})")
                                     existing[k] = round(v1 + v2, 2)
@@ -3797,8 +4349,12 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                                 if k == "PLAN_NAME" and is_incoming_adj and ex_v and not any(kw in ex_v.upper() for kw in adj_keywords):
                                     # Existing name is a real plan, incoming is a label. Skip concatenation.
                                     pass
-                                elif ex_v and new_v and new_v.lower() not in ex_v.lower():
-                                    existing[k] = f"{ex_v} {new_v}"
+                                elif ex_v and new_v:
+                                    # Use canonicalize_plan to prevent redundant concatenation of same plan names
+                                    if k == "PLAN_NAME" and canonicalize_plan(new_v) in canonicalize_plan(ex_v):
+                                        pass
+                                    elif new_v.lower() not in ex_v.lower():
+                                        existing[k] = f"{ex_v} {new_v}"
                                 elif not ex_v:
                                     existing[k] = new_v
                             else:
@@ -3905,6 +4461,18 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                 merged_items = filtered_items
 
             for item in merged_items:
+                # [V6] Prevent double counting of global fees that were extracted twice under different columns
+                fname_c = str(item.get("FIRSTNAME") or "").strip().upper()
+                lname_c = str(item.get("LASTNAME") or "").strip().upper()
+                is_global_fee_c = (not fname_c and not lname_c) or any(kw in fname_c or kw in lname_c for kw in ["CREDIT", "FEE", "TOTAL", "SUMMARY"])
+                
+                if is_global_fee_c:
+                    cp_val = to_float(item.get("CURRENT_PREMIUM"))
+                    ap_val = to_float(item.get("ADJUSTMENT_PREMIUM"))
+                    if cp_val != 0 and cp_val == ap_val:
+                        print(f"    [V6] Deduplicating identical premium columns for global fee '{item.get('PLAN_NAME')}': keeping ADJUSTMENT_PREMIUM={ap_val}")
+                        item["CURRENT_PREMIUM"] = None
+
                 row = {"SOURCE_FILE": source_filename}
                 # Ensure all required fields are present (even as None/empty)
                 for field in REQUIRED_FIELDS:
@@ -3990,6 +4558,10 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                             other_parts = re.sub(r'BLUECARE', '', pn_clean, flags=re.IGNORECASE).strip()
                             pn_clean = f"BLUECARE {other_parts}"
                         
+                        # Correct character misreads: NFO/INFO -> NFQ
+                        pn_clean = re.sub(r'\bNFO\b', 'NFQ', pn_clean, flags=re.IGNORECASE)
+                        pn_clean = re.sub(r'\bINFO\b', 'NFQ', pn_clean, flags=re.IGNORECASE)
+                        
                         row["PLAN_NAME"] = pn_clean.strip()
                     else:
                         # Malibu CA: Capture category (Health/Dental/etc) in BOTH fields
@@ -4006,7 +4578,7 @@ def flatten_extracted_data(data: Dict, source_filename: str) -> List[Dict]:
                 # ------------------------------------------------------------------
                 # -------------------------------------------------------
                 # Remove internal fields that shouldn't be in Excel
-                for internal_field in ["PRICING_MODEL", "RELATIONSHIP"]:
+                for internal_field in ["PRICING_MODEL", "RELATIONSHIP", "CURRENT_PREMIUM_COMPONENTS", "ADJUSTMENT_PREMIUM_COMPONENTS"]:
                     if internal_field in row:
                         del row[internal_field]
                 
@@ -4447,7 +5019,8 @@ def batch_process_step(txt_directory: str, output_excel: str = "extracted_data.x
     print(f"[DATA] Processed {len(all_data)} TXT file(s)")
     print(f"\n[SUMMARY] Summary:")
     print(df.to_string(index=False))
-    print(f"{'='*70}\n")
+print(f"{'='*70}\n")
+
 
 
 def parse_moo_detail_direct(full_raw_text: str, inv_date: str = None, inv_number: str = None,

@@ -45,7 +45,8 @@ def map_and_segment_text(text):
     
     refined_chunks = []
     detail_buffer = []  # Buffer to merge consecutive detail pages
-    MAX_MERGE = 2       # Efficiently group pages for complex documents
+    is_wellmark = "WELLMARK" in text.upper() or "WELLMARK.COM" in text.upper()
+    MAX_MERGE = 1 if is_wellmark else 2       # Process pages individually for Wellmark to avoid truncation
     
     # GIS 23 Optimization: Check if this document has the detailed "Payroll File Number" pages
     has_payroll = any("Payroll File Number" in p for p in pages)
@@ -56,7 +57,7 @@ def map_and_segment_text(text):
         if detail_buffer:
             merged_text = "\n\n".join(detail_buffer)
             # SUB-CHUNKING: If the text is long, split into parts to avoid JSON truncation (max ~25 items per chunk)
-            chunk_size = 6000
+            chunk_size = 12000 if is_wellmark else 6000 # Prevent mid-page splits for Wellmark to keep headers intact
             if len(merged_text) > chunk_size:
                 print(f"  [Layer] Chunk is very large ({len(merged_text)} chars). Split-chunking into smaller pieces...")
                 lines = merged_text.split("\n")
@@ -150,6 +151,80 @@ def is_empty_line_items(items):
             return False
     return True
 
+
+def detect_pdf_type(pdf_path: str) -> str:
+    """
+    Identifies whether a PDF is scanned (image-based) or digital (has embedded text).
+    Uses PyMuPDF (fitz) - FREE and instant, no API call required.
+    
+    Returns:
+        'scanned'  - PDF has no embedded selectable text (image-only pages)
+        'digital'  - PDF has embedded selectable text
+    """
+    import fitz
+    try:
+        doc = fitz.open(pdf_path)
+        sample_pages = min(3, len(doc))
+        total_chars = sum(len(doc.load_page(i).get_text().strip()) for i in range(sample_pages))
+        avg_chars = total_chars / sample_pages if sample_pages > 0 else 0
+        doc.close()
+        pdf_type = 'scanned' if avg_chars < 50 else 'digital'
+        print(f"  [PDF_DETECT] Type={pdf_type.upper()} (avg {avg_chars:.0f} embedded chars/page)")
+        return pdf_type
+    except Exception as e:
+        print(f"  [PDF_DETECT] Detection failed ({e}). Defaulting to 'digital'.")
+        return 'digital'
+
+
+def apply_markdown_structure(text: str) -> str:
+    """
+    Restructures poorly-aligned digital PDF text into Markdown-style table rows.
+    Converts multi-column whitespace-separated lines into pipe-delimited rows.
+    
+    This is a FREE, pure Python operation - no API call, no cost, no added time.
+    Used as a fallback when digital text quality is < 90%.
+    """
+    lines = text.splitlines()
+    structured = []
+    for line in lines:
+        # Detect lines with 3+ tokens separated by 2+ spaces (table data pattern)
+        tokens = re.split(r'  {2,}', line)
+        if len(tokens) >= 3 and any(t.strip() for t in tokens):
+            # Wrap into pipe-delimited Markdown table row
+            structured.append('| ' + ' | '.join(t.strip() for t in tokens if t.strip()) + ' |')
+        else:
+            structured.append(line)
+    result = '\n'.join(structured)
+    print(f"  [MARKDOWN_PROC] Restructured {len(lines)} lines into Markdown format.")
+    return result
+
+def restructure_guardian_tabs(text: str) -> str:
+    """
+    Specifically for Guardian's wide 'Current Premiums' table which uses tabs for empty columns.
+    Converts consecutive tabs into explicit empty markdown columns so the LLM doesn't miscount.
+    """
+    lines = text.splitlines()
+    structured = []
+    in_current_table = False
+    
+    for line in lines:
+        if "Current Premiums" in line and "Premium Adjustments" not in line:
+            in_current_table = True
+        
+        if in_current_table and '\t' in line:
+            # Replace each tab with a pipe separator to enforce strict column structure
+            parts = line.split('\t')
+            # If line has more than 5 parts, it's likely a data row
+            if len(parts) > 5:
+                md_row = '| ' + ' | '.join(p if p.strip() else '   ' for p in parts) + ' |'
+                structured.append(md_row)
+            else:
+                structured.append(line)
+        else:
+            structured.append(line)
+            
+    return '\n'.join(structured)
+
 def process_with_structural_layer(pdf_path, output_excel=None):
     """Process PDF with structural analysis layer.
     
@@ -168,19 +243,104 @@ def process_with_structural_layer(pdf_path, output_excel=None):
     
     print(f"\n[Structural Layer] Analyzing: {pdf_path}")
     
-    # 1. Extract raw text with markers
-    print("  [Debug] Detecting carrier for optimized mode...")
-    # Quick check for KCL
+    # =========================================================================
+    # STEP 1: Detect PDF type — Scanned (image) or Digital (embedded text)
+    # This is FREE — uses PyMuPDF only, no API call.
+    # =========================================================================
     is_kcl = "KCL" in pdf_path or "Kansas City Life" in pdf_path
+    is_legalshield = "LEGALSHIELD" in pdf_path.upper() or "LEGAL SHIELD" in pdf_path.upper()
+    pdf_type = detect_pdf_type(pdf_path)
     
-    if is_kcl:
-        print("  [Layer] KCL detected. Using VERTICAL extraction mode for 3-column layout.")
-        text = v3.extract_text_from_pdf_pymupdf(pdf_path, mode="vertical")
+    extracted_text_dir = Path("c:/Users/INT002/pdf_extractor/Unified_PDF_Platform/extracted_text")
+    extracted_text_dir.mkdir(parents=True, exist_ok=True)
+    initial_text_path = extracted_text_dir / f"{Path(pdf_path).stem}_extracted.txt"
+
+    if pdf_type == 'scanned' or is_legalshield:
+        # =====================================================================
+        # PATH A: SCANNED PDF / FORCED VISION OCR
+        # The PDF is image-only or requires high-fidelity layout preservation.
+        # Route directly to GPT-4o Vision OCR with Markdown table enforcement.
+        # =====================================================================
+        print("  [PATH A] Scanned PDF or Forced LegalShield -> Running GPT-4o Vision OCR + Markdown...")
+        vis_extractor = v3.OCRPDFExtractor(pdf_path)
+        text, _ = vis_extractor.extract(engine='vision')
+        print(f"  [PATH A] Vision OCR complete. Extracted {len(text)} chars.")
     else:
-        print("  [Debug] Calling v3.extract_text_from_pdf_improved...")
-        text = v3.extract_text_from_pdf_improved(pdf_path)
+        # =====================================================================
+        # PATH B: DIGITAL PDF
+        # The PDF has embedded text — use standard extraction (fast, free).
+        # Then run a quality check. If garbled (< 90%), apply Markdown
+        # post-processor to restructure the text (still free, no API call).
+        # =====================================================================
+        if is_kcl:
+            print("  [PATH B] Digital PDF (KCL) -> Using VERTICAL extraction mode.")
+            text = v3.extract_text_from_pdf_pymupdf(pdf_path, mode="vertical")
+        else:
+            print("  [PATH B] Digital PDF -> Running standard text extraction...")
+            text = v3.extract_text_from_pdf_improved(pdf_path)
+        
+        # Quality gate
+        quality_score = v3.check_text_quality(text)
+        print(f"  [QUALITY] Text quality score: {quality_score:.2f}")
+        
+        if quality_score < 0.90:
+            print(f"  [QUALITY] Score < 90% -> Applying Markdown post-processor (no API call)...")
+            text = apply_markdown_structure(text)
+        else:
+            print(f"  [QUALITY] Score >= 90% -> Text quality OK. Using as-is.")
+            
+        # [GUARDIAN FIX] Fix tab-delimited empty columns in wide tables
+        if "Guardian" in pdf_path:
+            print(f"  [GUARDIAN] Applying tab restructuring to preserve empty columns...")
+            text = restructure_guardian_tabs(text)
     
+    # Save the final text to verification folder
+    try:
+        with open(initial_text_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        print(f"  [Debug] Saved extracted text to {initial_text_path}")
+    except Exception as e:
+        print(f"  [WARN] Could not save extracted text: {e}")
+
     print(f"  [Debug] Text extraction complete. Length: {len(text)} chars.")
+    
+    # [V7][FIX] Route Guardian and MOO directly to the Direct Parser pipeline!
+    if "Guardian" in pdf_path or "mutual of omaha" in pdf_path.lower() or "moo" in pdf_path.lower():
+        print(f"  [V7][ROUTER] Guardian/MOO detected in structural layer! Routing to process_verified_text_file for Direct Parser support...")
+        
+        source_filename = os.path.basename(pdf_path)
+        data = v3.process_verified_text_file(str(initial_text_path), client, source_filename=source_filename)
+        
+        rows = v3.flatten_extracted_data(data, source_filename)
+        if not rows:
+            print(f"  [WARNING] No rows extracted from {pdf_path}")
+            return output_excel
+            
+        
+        df = pd.DataFrame(rows)
+        
+        # Ensure only required fields are present in the final output
+        cols = v3.REQUIRED_FIELDS
+        cols = [c for c in cols if c in df.columns]
+        df = df[cols]
+        
+        json_output = str(output_excel).replace(".xlsx", ".json")
+        try:
+            import json as json_lib
+            # Filter the dicts in rows as well to match the Excel output
+            filtered_rows = [{k: row[k] for k in cols if k in row} for row in rows]
+            with open(json_output, "w", encoding="utf-8") as f:
+                json_lib.dump(filtered_rows, f, indent=4)
+        except:
+            pass
+            
+        # Write Excel
+        writer = pd.ExcelWriter(output_excel, engine='xlsxwriter')
+        df.to_excel(writer, sheet_name='Extracted Data', index=False)
+        writer.close()
+        
+        print(f"  [SUCCESS] Saved Direct Parser results to {output_excel}")
+        return output_excel
     
     # 2. Segment text using structural logic
     chunks = map_and_segment_text(text)
@@ -219,11 +379,52 @@ def process_with_structural_layer(pdf_path, output_excel=None):
             # Refined prompt hint for Guardian and GIS 23
             prompt_hint = ""
             if "Guardian" in pdf_path or "Basic Term Life" in chunk_text:
+                # Detect which section this chunk belongs to
+                is_adjustment_section = "Premium Adjustments Since Last Bill" in chunk_text or "Premium Adjustment" in chunk_text
+                is_current_premiums_section = "Current Premiums" in chunk_text and "Premium Adjustments" not in chunk_text
+                
+                section_context = ""
+                if is_adjustment_section:
+                    section_context = (
+                        "\n[SECTION: PREMIUM ADJUSTMENTS SINCE LAST BILL]"
+                        "\nThis section lists NEW employees. Column layout:"
+                        "\n  Employee | Eff. Date | Coverage | Ins. | New Volume | New Premium | Premium Adjustment"
+                        "\nMapping rules:"
+                        "\n  - 'Employee' -> LASTNAME,FIRSTNAME (format: Last,First)"
+                        "\n  - 'Eff. Date' -> BILLING_PERIOD"
+                        "\n  - 'Coverage' -> PLAN_NAME"
+                        "\n  - 'Ins.' -> COVERAGE (Emp=EE, Fam=FAM, Emp/Sp=ES, Emp/Ch=EC, Sp=ES, Ch=EC)"
+                        "\n  - 'New Premium' -> CURRENT_PREMIUM"
+                        "\n  - 'Premium Adjustment' -> ADJUSTMENT_PREMIUM"
+                        "\n  - IGNORE subtotal rows (lines that start with '$' amounts only)"
+                        "\n  - Continuation rows (indented, no employee name) belong to the employee above"
+                    )
+                elif is_current_premiums_section:
+                    section_context = (
+                        "\n[SECTION: CURRENT PREMIUMS - WIDE MULTI-COLUMN TABLE]"
+                        "\nThis is a wide table that has been pre-formatted as a Markdown table with explicit pipe '|' delimiters."
+                        "\nThe columns IN ORDER (separated by '|') are:"
+                        "\n  | Employee | Dental Premium | Dental Ins. | ManagedDentalCare-Mdc Premium | Mdc Ins. | "
+                        "ManagedDentalCare-Mdg Premium | Mdg Ins. | Std Premium/Volume | Vision Premium | Vision Ins. | "
+                        "VoluntaryAd&D Premium/Volume | Ad&D Ins. | VoluntaryTermLife Premium/Volume | Life Ins. | TotalPremium |"
+                        "\n\nCRITICAL COLUMN MAPPING RULES:"
+                        "\n  1. Rely STRICTLY on the pipe '|' delimiters to count column position. Each number's position determines its plan."
+                        "\n  2. Empty cells (e.g., '| |') = employee does NOT have that plan -> do NOT create a row."
+                        "\n  3. TotalPremium (last column, starts with $) = row sum -> NEVER extract as a plan."
+                        "\n  4. For ALL rows in this section: ADJUSTMENT_PREMIUM = null."
+                        "\n  5. Multi-tier entries (Emp+Sp+Ch on same plan) should be SUMMED into one premium."
+                        "\n  6. Volume numbers (e.g., '200,000') are NOT premiums - they appear after Premium in Ad&D/Life columns."
+                        "\n  7. Set BILLING_PERIOD to the current billing period from the page footer."
+                    )
+                
                 prompt_hint = (
-                    "\n[HINT] This document may have multiple premium columns: Basic Term Life, Dental, Std, Vision. "
-                    "Please map each member's premium correctly to the PLAN_NAME and CURRENT_PREMIUM. "
-                    "If you see 'Premium Adjustments', capture them in ADJUSTMENT_PREMIUM. "
-                    "IMPORTANT: Do NOT extract 'TOTAL' rows or summary table rows as line items."
+                    f"{section_context}"
+                    "\n\n[GUARDIAN GLOBAL RULES]"
+                    "\n1. Do NOT extract 'TOTAL', 'TotalPremiumAdjustments', 'TotalCurrentPremium', 'continued', or summary rows as line items."
+                    "\n2. Each coverage type for each employee must be a SEPARATE line item."
+                    "\n3. Plan name normalization: Use 'Voluntary Ad&D' and 'Voluntary Term Life' (with spaces) consistently."
+                    "\n4. Coverage tier mapping: Emp=EE, Fam=FAM, Emp/Sp=ES, Emp/Ch=EC"
+                    "\n5. If an employee has multiple tiers within one plan (e.g., Emp + Sp), SUM the premiums and use the broadest coverage code."
                 )
             elif "GIS 23" in pdf_path or "Restaurant Services" in pdf_path or "Payroll File Number" in chunk_text:
                 prompt_hint = (
@@ -273,14 +474,16 @@ def process_with_structural_layer(pdf_path, output_excel=None):
                     "\n[CRITICAL INSTRUCTIONS FOR BCBS EXTRACTION]"
                     "\n1. **STRICT FULL TABLE SCAN**: You MUST scan the entire page and extract EVERY member row. Do NOT skip or merge different member names."
                     "\n2. **ZERO AGGREGATION (IRONCLAD)**: Never sum premiums from different names. If 'Rbrekk' has $6.00 and 'Toczynski' has $652.74, they MUST be two separate JSON objects. Aggregating them is a DESTRUCTIVE ERROR."
-                    "\n3. **ADJUSTMENTS**: Extract adjustments as completely SEPARATE JSON objects. NEVER combine adjustments with current premiums."
+                    "\n3. **ADJUSTMENTS**: Extract adjustments as completely SEPARATE JSON objects. NEVER combine adjustments with current premiums. Check any 'Adjustments' block carefully."
                     "\n4. **MEMBER IDENTIFICATION (STRICT)**:"
                     "\n   - MEMBERID: The alphanumeric ID starting with 'H' or 'W' (usually 9-10 chars, e.g., 'H44156017')."
-                    "\n   - SSN: **PRIORITY 9-DIGITS**. Look for XXX-XX-XXXX or 9-digit number. Capture ALL NINE digits. Also capture masked SSNs like '*****1234' or 'XXX-XX-1234'. Capture EVERY DIGIT visible. Search the entire row near the Name and MemberID for the SSN digits if no clear column exists. **DO NOT LEAVE SSN NULL IF ANY DIGITS ARE VISIBLE ON THE ROW.**"
+                    "\n   - SSN: **PRIORITY 9-DIGITS**. Look for XXX-XX-XXXX or 9-digit number. Capture ALL NINE digits. Also capture masked SSNs like '*****1234' or 'XXX-XX-1234'. Capture EVERY DIGIT visible exactly as it appears. Search the entire row near the Name and MemberID for the SSN digits if no clear column exists. **DO NOT LEAVE SSN NULL IF ANY DIGITS ARE VISIBLE ON THE ROW.**"
                     "\n   - Capture BOTH fields for every row. Do NOT swap them."
                     "\n5. Set CURRENT_PREMIUM to null for adjustments, and ADJUSTMENT_PREMIUM to null for current premium rows. Amounts in parentheses (e.g. ($100.00)) are negative."
                     "\n6. **MULTI-BLOCK LAYOUT**: If labels (Name, ID, SSN) are at the top and amounts are at the bottom, carefully match them by sequence. The first Name/ID corresponds to the first amount, the second to the second, etc."
                     "\n7. Ensure FIRSTNAME and LASTNAME are captured on every single row."
+                    "\n8. **HEADER DATA**: You MUST extract INV_DATE and BILLING_PERIOD from the summary pages and document headers."
+                    "\n9. **PLAN NAME CORRECTION**: If the plan name contains 'NFO' or 'INFO' (e.g., 'BLUECARE NFO' or 'BLUECARE INFO'), this is a character misread of 'NFQ'. You MUST correct it to 'NFQ' (e.g., 'BLUECARE NFQ')."
                 )
             elif "Covered California" in pdf_path or "Covered California" in chunk_text:
                 carrier_name = "covered_california"
@@ -289,6 +492,66 @@ def process_with_structural_layer(pdf_path, output_excel=None):
                     "\n1. You MUST capture the Invoice date and Invoice # from the document header."
                     "\n2. Ensure the Billing period is captured correctly."
                     "\n3. Format all dates, including the Invoice date and Billing period, strictly as M/D/Y."
+                )
+            elif "UHC" in pdf_path.upper() or "UnitedHealthcare" in chunk_text:
+                carrier_name = "unitedhealthcare"
+                prompt_hint = (
+                    "\n[CRITICAL INSTRUCTIONS FOR UHC EXTRACTION]"
+                    "\n1. Follow the UHC multiline aggregation rules."
+                    "\n2. Map 'Charge Amount' to CURRENT_PREMIUM and 'Adjustment Detail Amount' to ADJUSTMENT_PREMIUM."
+                    "\n3. Extract all package savings credits and fees as standalone line items."
+                    "\n4. If a single row has BOTH a charge and an adjustment, output them BOTH in the SAME single JSON record (populate both CURRENT_PREMIUM and ADJUSTMENT_PREMIUM)."
+                    "\n5. **EXTRACT ALL ROWS (100% CAPTURE & LEDGER DETAIL)**: If a member has multiple adjustments for the same plan (e.g. Gale Alana having two '-$2.75' rows or Rios Caleb having multiple ADD rows for different periods like 2/01-2/28 and 3/01-3/31), YOU MUST output EACH as a separate JSON object. Do NOT sum or consolidate them."
+                )
+            elif "LEGALSHIELD" in pdf_path.upper() or "LEGAL SHIELD" in pdf_path.upper() or "LEGAL SHIELD" in chunk_text.upper() or "LEGALSHIELD" in chunk_text.upper():
+                carrier_name = "legal_shield"
+                prompt_hint = (
+                    "\n[CRITICAL INSTRUCTIONS FOR LEGAL SHIELD]"
+                    "\n1. **ADJUSTMENT LOGIC (CRITICAL)**: If a member row contains a date (e.g., `01/15/2026`), the amount in that row MUST be placed in `ADJUSTMENT_PREMIUM` and `CURRENT_PREMIUM` MUST be NULL."
+                    "\n2. **CURRENT PREMIUM LOGIC**: If a member row has NO date (or only the global invoice date copied down), the amount MUST be placed in `CURRENT_PREMIUM`."
+                    "\n3. **MEMBERID PREFIX PLAN MAPPING**:"
+                    "\n   - Member IDs starting with **101** -> PLAN_NAME: 'Legal Plan', PLAN_TYPE: 'VOLUNTARY'"
+                    "\n   - Member IDs starting with **700** -> PLAN_NAME: 'Identity Theft Plan', PLAN_TYPE: 'VOLUNTARY'"
+                    "\n4. Preserve any row-level date in the `INV_DATE` field for that line item."
+                )
+            elif "WELLMARK" in pdf_path.upper() or "Wellmark" in chunk_text or "wellmark.com" in chunk_text.lower():
+                carrier_name = "Wellmark Blue Cross"
+                # Determine which section this chunk contains to tell the AI where amounts go
+                is_retro_chunk = "Retroactive Adjustments" in chunk_text or "RETROACTIVE ADJUSTMENTS" in chunk_text.upper()
+                is_current_chunk = "Summary of Current Charges" in chunk_text or "SUMMARY OF CURRENT CHARGES" in chunk_text.upper()
+                # If both sections are in the same chunk, we need both labels
+                section_label = ""
+                if is_retro_chunk and is_current_chunk:
+                    section_label = "\n[CHUNK CONTAINS BOTH SECTIONS: Read section headers carefully!]"
+                elif is_retro_chunk:
+                    section_label = "\n[SECTION: RETROACTIVE ADJUSTMENTS — all amounts go to ADJUSTMENT_PREMIUM]"
+                elif is_current_chunk:
+                    section_label = "\n[SECTION: SUMMARY OF CURRENT CHARGES — all amounts go to CURRENT_PREMIUM]"
+                prompt_hint = (
+                    f"{section_label}"
+                    "\n[CRITICAL INSTRUCTIONS FOR WELLMARK BLUE CROSS GROUP INVOICE]"
+                    "\n1. **TWO SECTIONS — DIFFERENT FIELD MAPPING (ABSOLUTE PRIORITY)**:"
+                    "\n   - Rows under 'Retroactive Adjustments' header => ADJUSTMENT_PREMIUM. CURRENT_PREMIUM=null."
+                    "\n   - Rows under 'Summary of Current Charges' header => CURRENT_PREMIUM. ADJUSTMENT_PREMIUM=null."
+                    "\n   - Every member row following a section header belongs to that section until a NEW header appears."
+                    "\n2. **COLUMN STRUCTURE** (table header: Member | ID | Date | Health Premiums* | Dental Premiums | Vision Premiums | Fees | TOC | Total):"
+                    "\n   - 'Member' => LASTNAME/FIRSTNAME (format: LASTNAME, FIRSTNAME)."
+                    "\n   - 'ID' (e.g. W02449109) => MEMBERID."
+                    "\n   - 'Date' (e.g. Mar-26, Jun-26) => BILLING_PERIOD per row."
+                    "\n   - 'Health Premiums*' (non-zero) => PLAN_NAME='Health Premiums', PLAN_TYPE='MEDICAL'."
+                    "\n   - 'Dental Premiums' (non-zero) => PLAN_NAME='Dental Premiums', PLAN_TYPE='DENTAL'."
+                    "\n   - 'Vision Premiums' (non-zero) => PLAN_NAME='Vision Premiums', PLAN_TYPE='VISION'."
+                    "\n   - 'Fees' => IGNORE."
+                    "\n   - 'TOC' => COVERAGE: 101=EE, 111=ES, 119=EC, 127=FAM."
+                    "\n   - 'Total' => IGNORE (row sum — never extract it)."
+                    "\n3. **PLAN_NAME IS COLUMN-DERIVED**: There is NO per-row plan column. Use column header as PLAN_NAME."
+                    "\n4. **PARENTHESES = NEGATIVE**: (376.96) => -376.96. Apply to ALL parenthesized values."
+                    "\n5. **SKIP SUMMARY ROWS**: Skip 'Total Adjustments' and 'Total Charges' rows entirely."
+                    "\n6. **SKIP ZERO COLUMNS**: Do NOT create rows for columns that are 0.00."
+                    "\n7. **100% CAPTURE**: Extract EVERY member row from BOTH sections. Do NOT skip any."
+                    "\n8. **STRICT NULLS**: This invoice does NOT contain SSN or Policy ID in the member rows. You MUST set SSN=null and POLICYID=null for EVERY row."
+                    "\n9. **NO HALLUCINATION**: NEVER invent members (e.g., 'John Doe'). Only extract members exactly as they appear in the table."
+                    "\n10. **EMPTY PAGES**: If the text contains NO member names and is just a summary or instruction page, you MUST return an empty LINE_ITEMS array: []. Do NOT invent or hallucinate dummy data (e.g., 'John Smith', 'Jane Doe', 'Alice Brown')."
                 )
 
         
@@ -307,67 +570,10 @@ def process_with_structural_layer(pdf_path, output_excel=None):
                  print(f"    -> [Layer] Vertical fallback triggered for {chunk_type} chunk...")
                  # (Implementation of vertical fallback would go here or call v3 logic)
             
-            # [V4][FIX] OCR Fallback for Structural Layer
-            # If standard extraction failed or yielded low results, and the document is likely scanned
-            if is_empty_line_items(page_data.get("LINE_ITEMS")) or v3.check_text_quality(chunk_text) < 0.2:
-                print(f"    -> [Layer] Low quality text or no items on chunk {i+1}. Attempting optimized OCR fallback...")
-                try:
-                    # 1. Run OCR once (using fitz/tesseract)
-                    print(f"    -> [Layer] Performance: Running primary-doc OCR pass...")
-                    ocr_text, _ = v3.extract_text_from_pdf_ocr(pdf_path) # Changed to return (text, metadata)
-                    
-                    # [V4][FIX] Check if OCR text needs Vision for better layout (BCBS Multi-Block)
-                    # If this is BCBS and the text looks fragmented, we might want to try Vision
-                    
-                    # 2. Save OCR text to the raw extracted file for transparency
-                    pdf_dir = os.path.dirname(pdf_path)
-                    pdf_base = os.path.basename(pdf_path).replace(".pdf", "_raw_extracted.txt")
-                    txt_path = os.path.join(pdf_dir, pdf_base)
-
-                    try:
-                        with open(txt_path, "w", encoding="utf-8") as f:
-                            f.write(ocr_text)
-                    except Exception as e:
-                        print(f"    -> [Layer][WARN] Could not save OCR text: {e}")
-
-                    # 3. RE-SEGMENT the OCR text to process it in manageable chunks
-                    ocr_chunks = map_and_segment_text(ocr_text)
-                    
-                    # 4. Process all OCR chunks
-                    all_line_items = []
-                    for j, ocr_chunk in enumerate(ocr_chunks):
-                        print(f"    -> [Layer] Processing OCR Chunk {j+1}/{len(ocr_chunks)}...")
-                        ocr_data = v3.extract_fields_with_llm(ocr_chunk["text"] + prompt_hint, client, f"ocr_chunk_{j+1}", detected_carrier=carrier_name, request_id=os.environ.get("AI_MONITOR_REQUEST_ID"))
-                        items = ocr_data.get("LINE_ITEMS", [])
-                        
-                        # [V5][FIX] VISION FALLBACK: If names are missing, use Vision OCR (near-perfect layout)
-                        # We trigger if more than 20% of items are missing names, or if we have > 1 missing name
-                        missing_count = sum(1 for item in items if not item.get("LASTNAME"))
-                        if (missing_count > 1 or (items and missing_count/len(items) > 0.2)) and carrier_name == "bcbs":
-                            print(f"    -> [Layer][ALERT] {missing_count} names missing in OCR chunk. Triggering Vision OCR fallback for layout integrity...")
-                            # Extract just this page with Vision
-                            vis_extractor = v3.OCRPDFExtractor(pdf_path)
-                            # We'd ideally only do the specific page, but for now we do the doc if small
-                            vis_text, _ = vis_extractor.extract(engine='vision')
-                            # Save vis text
-                            with open(txt_path, "w", encoding="utf-8") as f: f.write(vis_text)
-                            # Re-process with Vision text
-                            vis_chunks = map_and_segment_text(vis_text)
-                            all_line_items = [] # Reset for Vision
-                            for k, vis_chunk in enumerate(vis_chunks):
-                                print(f"    -> [Layer] Processing Vision Chunk {k+1}/{len(vis_chunks)}...")
-                                vis_data = v3.extract_fields_with_llm(vis_chunk["text"] + prompt_hint, client, f"vis_chunk_{k+1}", detected_carrier=carrier_name, request_id=os.environ.get("AI_MONITOR_REQUEST_ID"))
-                                if vis_data.get("LINE_ITEMS"):
-                                    all_line_items.extend(vis_data["LINE_ITEMS"])
-                            break # Out of OCR chunk loop, we have Vision items
-                        
-                        if items:
-                            all_line_items.extend(items)
-                    
-                    break
-
-                except Exception as e:
-                    print(f"    -> [Layer][ERROR] OCR fallback failed: {e}")
+            # [V6] Per-chunk OCR fallback REMOVED.
+            # PDF type detection + quality gate now runs ONCE at document level
+            # before chunking (PATH A / PATH B logic). This avoids redundant API
+            # calls and repeated full-document Vision scans per chunk.
         
         
         
@@ -383,7 +589,12 @@ def process_with_structural_layer(pdf_path, output_excel=None):
             all_line_items.extend(items)
             print(f"    -> Extracted {len(items)} items")
             
-    # Final assembly and saving
+    # Apply LegalShield normalization if detected
+    if is_legalshield:
+        inv_date = final_header.get("INV_DATE")
+        all_line_items = v3.normalize_legal_shield_data(all_line_items, invoice_date=inv_date)
+        
+    # Final assembly and saving — keep both CURRENT_PREMIUM and ADJUSTMENT_PREMIUM on the same row
     data = {"HEADER": final_header, "LINE_ITEMS": all_line_items}
     rows = v3.flatten_extracted_data(data, os.path.basename(pdf_path))
     
