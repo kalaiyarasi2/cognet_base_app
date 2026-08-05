@@ -34,3 +34,4 @@ temp_*/
 
 # Extra non-project directories
 multiple agent/
+audit_logs/

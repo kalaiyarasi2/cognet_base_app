@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 from src.extractors.universal_extractor import UniversalExtractor
 from src.validation.rules_engine import RulesEngine
-from src.output.excel_writer import ExcelWriter
+# from src.output.excel_writer import ExcelWriter
 
 load_dotenv()
 

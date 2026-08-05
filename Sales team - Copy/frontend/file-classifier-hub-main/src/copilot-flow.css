@@ -1,0 +1,79 @@
+/* Co-Pilot Node delete button */
+.copilot-node-delete {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s ease;
+  z-index: 20;
+  color: #94a3b8;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.copilot-node-wrapper:hover .copilot-node-delete {
+  opacity: 1;
+}
+
+.copilot-node-delete:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #ef4444;
+  transform: scale(1.1);
+}
+
+/* Co-Pilot React Flow handle overrides */
+.copilot-flow .react-flow__handle {
+  width: 12px !important;
+  height: 12px !important;
+  background: #94a3b8 !important;
+  border: 2px solid #fff !important;
+  border-radius: 50% !important;
+  cursor: crosshair !important;
+  z-index: 10 !important;
+}
+
+.copilot-flow .react-flow__handle:hover {
+  background: #3b82f6 !important;
+  transform: scale(1.3);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+}
+
+.copilot-flow .react-flow__handle-connecting {
+  background: #3b82f6 !important;
+}
+
+.copilot-flow .react-flow__handle-valid {
+  background: #22c55e !important;
+}
+
+/* Make edges deletable on click */
+.copilot-flow .react-flow__edge {
+  cursor: pointer;
+}
+
+.copilot-flow .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #f43f5e !important;
+  stroke-width: 2.5 !important;
+}
+
+/* Selected node style */
+.copilot-flow .react-flow__node.selected {
+  outline: 2px solid #3b82f6;
+  outline-offset: 4px;
+  border-radius: 16px;
+}
+
+/* Selected edge */
+.copilot-flow .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #f43f5e !important;
+  stroke-width: 2.5 !important;
+}

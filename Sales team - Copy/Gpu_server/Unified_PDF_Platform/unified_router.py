@@ -790,57 +790,63 @@ class UnifiedRouter:
             self.bank_extractor = None
 
     async def _run_subprocess_async(self, cmd, timeout_secs, request_id=None):
-        """Asynchronous wrapper to run process with real-time logging."""
+        """Asynchronous wrapper to run process with real-time logging, using threads to avoid Windows asyncio.create_subprocess_exec NotImplementedError."""
         print(f"  [Async-Subprocess] Running: {' '.join(cmd)}", flush=True)
-        try:
-            # Prepare environment
+        
+        def _sync_run():
+            import subprocess
+            import threading
+            
             env = {"PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", **os.environ}
             if request_id:
                 env["AI_MONITOR_REQUEST_ID"] = str(request_id)
-
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env
+            
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+                encoding="utf-8",
+                bufsize=1,
+                universal_newlines=True
             )
-
+            
             full_stdout = []
             full_stderr = []
-
-            async def stream_reader(stream, log_label, collector):
-                while True:
-                    line = await stream.readline()
-                    if not line:
-                        break
-                    decoded_line = line.decode('utf-8', errors='replace').strip()
-                    print(f"    [{log_label}] {decoded_line}", flush=True)
-                    collector.append(decoded_line + "\n")
-
-            # Run readers concurrently
+            
+            def stream_reader(pipe, log_label, collector):
+                for line in iter(pipe.readline, ""):
+                    print(f"    [{log_label}] {line.strip()}", flush=True)
+                    collector.append(line)
+            
+            t1 = threading.Thread(target=stream_reader, args=(process.stdout, "OUT", full_stdout))
+            t2 = threading.Thread(target=stream_reader, args=(process.stderr, "ERR", full_stderr))
+            t1.start()
+            t2.start()
+            
             try:
-                await asyncio.wait_for(
-                    asyncio.gather(
-                        stream_reader(process.stdout, "OUT", full_stdout),
-                        stream_reader(process.stderr, "ERR", full_stderr)
-                    ),
-                    timeout=timeout_secs
-                )
-                returncode = await process.wait()
-            except asyncio.TimeoutExpired:
+                process.wait(timeout=timeout_secs)
+            except subprocess.TimeoutExpired:
                 process.terminate()
                 print(f"  [ERR] Subprocess timed out after {timeout_secs}s")
                 raise
-
+            
+            t1.join()
+            t2.join()
+            
             class ExecutionResult:
                 def __init__(self, stdout, stderr, returncode):
                     self.stdout = "".join(stdout)
                     self.stderr = "".join(stderr)
                     self.returncode = returncode
-            
-            return ExecutionResult(full_stdout, full_stderr, returncode)
+                    
+            return ExecutionResult(full_stdout, full_stderr, process.returncode)
+
+        try:
+            return await asyncio.to_thread(_sync_run)
         except Exception as e:
-            print(f"  [ERR] Async Subprocess error: {e}")
+            print(f"  [ERR] Subprocess error: {e}")
             raise
 
     def _get_bank_extractor_class(self, backend_dir):
@@ -1987,7 +1993,10 @@ Return ONLY the company name or UNKNOWN:"""
             return {"type": "INVOICE", "excel": str(output_xlsx), "json": json_for_metadata}
 
         except Exception as e:
-            return {"error": str(e)}
+            import traceback
+            err_str = traceback.format_exc()
+            print(f"[ERR] Invoice extraction failed: {err_str}")
+            return {"error": err_str}
 
     async def run_general_invoice_extractor(self, pdf_path, request_id=None):
         """Run the General Invoice (Vendor) extractor (Async)."""
@@ -2043,7 +2052,10 @@ Return ONLY the company name or UNKNOWN:"""
 
                 return {"type": "invoice_poc_extractor", "excel": str(output_xlsx), "json": str(output_json)}
             except Exception as e:
-                return {"error": str(e)}
+                import traceback
+                err_str = traceback.format_exc()
+                print(f"[ERR] General Invoice extraction failed: {err_str}")
+                return {"error": err_str}
 
         # ── MERGED INVOICE PATH (PARALLEL) ───────────────────────────────────
         try:

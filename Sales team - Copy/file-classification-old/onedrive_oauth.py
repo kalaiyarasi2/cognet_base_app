@@ -25,7 +25,6 @@ logger = get_logger("file_classifier.onedrive_oauth")
 # Scopes needed for accessing files and folders in OneDrive and user profile
 SCOPES = [
     "Files.ReadWrite",
-    "Files.ReadWrite.All",
     "User.Read"
 ]
 
@@ -329,6 +328,17 @@ def onedrive_profile(request: Request):
         response = JSONResponse(content={"authenticated": False, "email": None, "name": None, "error": str(e)})
         response.delete_cookie("onedrive_session_id")
         return response
+
+
+@router.post("/onedrive/logout")
+def onedrive_logout(request: Request):
+    """Logs out the current OneDrive user by clearing the session cookie."""
+    session_id = request.cookies.get("onedrive_session_id")
+    if session_id:
+        _od_delete_session(session_id)
+    response = JSONResponse(content={"status": "success", "message": "Logged out successfully"})
+    response.delete_cookie("onedrive_session_id")
+    return response
 
 
 # --------------------------------------------------------------------------

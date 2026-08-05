@@ -97,10 +97,18 @@ async def _perform_extraction(file: UploadFile, request: Request):
         if doc_type == "invoice_poc_extractor":
             doc_type = "VENDOR_INVOICE"
         
-        # Build base URL for downloads (respect public host if proxied)
-        # [MODIFIED] Force production domain as requested by user
-        base_url = "https://drive1.cognethro.com"
-        
+        # Or read from .env if explicitly defined for other environments
+        env_base_url = os.environ.get("APP_BASE_URL", "").strip()
+        if env_base_url:
+            # Include the /api/gpu prefix since this sub-app is mounted there
+            base_url = f"{env_base_url.rstrip('/')}/api/gpu"
+        else:
+            # request.base_url only gives scheme://host:port, we must append the mount path
+            if request:
+                host_url = str(request.base_url).rstrip('/')
+                base_url = f"{host_url}/api/gpu"
+            else:
+                base_url = "http://127.0.0.1:8000/api/gpu"
         # Build base response with clickable URLs
         response = {
             "type": doc_type,

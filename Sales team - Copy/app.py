@@ -153,7 +153,7 @@ class PrefixDispatcher:
 # 4. Load all sub-applications
 # ─────────────────────────────────────────────────────────────────────────────
 print("[INFO] Loading sub-applications...")
-classifier_app = load_sub_app("classifier_api", WORKSPACE_DIR / "file-classification-" / "api.py")
+classifier_app = load_sub_app("classifier_api", WORKSPACE_DIR / "file-classification-old" / "api.py")
 gpu_app        = load_sub_app("gpu_api",        WORKSPACE_DIR / "Gpu_server" / "Unified_PDF_Platform" / "unified_app.py")
 parity_app     = load_sub_app("parity_api",     WORKSPACE_DIR / "Parity_setup" / "backend" / "api_server.py")
 renewal_app    = load_sub_app("renewal_api",    WORKSPACE_DIR / "Renewal_process" / "api_server.py")
@@ -288,6 +288,26 @@ try:
 except Exception as _sp_err:
     print(f"[WARN] Failed to include sharepoint router: {_sp_err}")
 
+# Include Workflow Routes (Co-Pilot)
+try:
+    from workflow_routes import router as workflow_router
+    app.include_router(workflow_router)
+    print("[INFO] Workflow router included successfully.")
+except Exception as _wf_err:
+    print(f"[WARN] Failed to include workflow router: {_wf_err}")
+
+# Include OneDrive OAuth Routes
+try:
+    import sys
+    onedrive_path = WORKSPACE_DIR / "file-classification-old"
+    if str(onedrive_path) not in sys.path:
+        sys.path.insert(0, str(onedrive_path))
+    from onedrive_oauth import router as onedrive_router
+    app.include_router(onedrive_router)
+    print("[INFO] OneDrive OAuth router included successfully.")
+except Exception as _od_err:
+    print(f"[WARN] Failed to include onedrive router: {_od_err}")
+
 # Mount the full dispatcher at root — every other request goes through it.
 # We use Starlette's Mount directly so we control path stripping ourselves.
 from starlette.routing import Mount
@@ -299,4 +319,16 @@ print("[INFO] Unified Sales Team Workspace API Server initialized successfully."
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    import logging
+    
+    # Silence the chatty watchfiles logger
+    logging.getLogger("watchfiles.main").setLevel(logging.WARNING)
+    
+    # Run uvicorn with reload exclusions so it ignores DB/log file changes
+    uvicorn.run(
+        "app:app", 
+        host="0.0.0.0", 
+        port=8000, 
+        reload=True,
+        reload_excludes=["*.log", "*.db", "*.sqlite", "*.sqlite3", "database/*", "logs/*", "temp_uploads/*"]
+    )

@@ -1,16 +1,2 @@
 === Import Diagnostics Startup ===
 
-[ERROR] Failed to load module gpu_api from C:\Users\Intern\cognet full app\Sales team - Copy\Gpu_server\Unified_PDF_Platform\unified_app.py:
-Traceback (most recent call last):
-  File "C:\Users\Intern\cognet full app\Sales team - Copy\app.py", line 73, in load_sub_app
-    spec.loader.exec_module(module)
-  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
-  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-  File "C:\Users\Intern\cognet full app\Sales team - Copy\Gpu_server\Unified_PDF_Platform\unified_app.py", line 44, in <module>
-    from management_claims_dashboard_api import router as management_claims_dashboard_router
-  File "C:\Users\Intern\cognet full app\Sales team - Copy\Gpu_server\Unified_PDF_Platform\management_claims_dashboard_api.py", line 26, in <module>
-    from shared_configs import file_path_cache, _save_cache
-ImportError: cannot import name '_save_cache' from 'shared_configs' (C:\Users\Intern\cognet full app\Sales team - Copy\Gpu_server\Unified_PDF_Platform\shared_configs.py)
-
-================================================================================
-

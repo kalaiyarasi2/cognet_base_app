@@ -142,7 +142,20 @@ def init_poc_tables():
         except Exception:
             pass
 
-        # 8. Company Employee Directory (Existing Company DB)
+        # 8. Workflow Projects Table (Co-Pilot Saved Workflows)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS workflow_projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            nodes TEXT NOT NULL,
+            edges TEXT NOT NULL,
+            owner_email TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 9. Company Employee Directory (Existing Company DB)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS company_employees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -519,6 +532,80 @@ def list_company_employees():
             pass
     return []
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Workflow Projects Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def save_workflow_project(project_id: str, name: str, nodes: str, edges: str, owner_email: str) -> bool:
+    """Creates or updates a workflow project."""
+    init_poc_tables()
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            # Try to update first
+            cursor.execute(
+                "UPDATE workflow_projects SET name = ?, nodes = ?, edges = ?, updated_at = datetime('now') WHERE id = ? AND LOWER(owner_email) = LOWER(?)",
+                (name, nodes, edges, project_id, owner_email)
+            )
+            if cursor.rowcount == 0:
+                # If no rows updated, insert new
+                cursor.execute(
+                    "INSERT INTO workflow_projects (id, name, nodes, edges, owner_email) VALUES (?, ?, ?, ?, ?)",
+                    (project_id, name, nodes, edges, owner_email.strip().lower())
+                )
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"[WARN] Error saving workflow project: {e}")
+    return False
+
+def get_workflow_project(project_id: str, owner_email: str):
+    """Retrieve a specific workflow project by ID and owner."""
+    init_poc_tables()
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM workflow_projects WHERE id = ? AND LOWER(owner_email) = LOWER(?)",
+                (project_id, owner_email.strip().lower())
+            )
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+        except Exception:
+            pass
+    return None
+
+def list_workflow_projects(owner_email: str):
+    """List all workflow projects for a user, returning metadata only (no nodes/edges)."""
+    init_poc_tables()
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, name, created_at, updated_at FROM workflow_projects WHERE LOWER(owner_email) = LOWER(?) ORDER BY updated_at DESC",
+                (owner_email.strip().lower(),)
+            )
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            pass
+    return []
+
+def delete_workflow_project(project_id: str, owner_email: str) -> bool:
+    """Delete a workflow project by ID and owner."""
+    init_poc_tables()
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM workflow_projects WHERE id = ? AND LOWER(owner_email) = LOWER(?)",
+                (project_id, owner_email.strip().lower())
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            pass
+    return False
+
 # Initialize tables on import
 init_poc_tables()
-

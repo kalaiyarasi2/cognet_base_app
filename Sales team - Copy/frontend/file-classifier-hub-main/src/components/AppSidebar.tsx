@@ -33,6 +33,7 @@ const groups: NavGroup[] = [
       { label: "Renewal Process", to: "/renewal-process", icon: RefreshCw },
       { label: "Resourcing Edge", to: "/resourcing-edge", icon: Cpu },
       { label: "RPVE", to: "/rpve", icon: FileCheck },
+      { label: "Work Flow Designer", to: "/co-pilot", icon: Workflow },
     ],
   },
   {

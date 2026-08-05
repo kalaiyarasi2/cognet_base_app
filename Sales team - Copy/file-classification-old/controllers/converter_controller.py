@@ -19,7 +19,7 @@ def _respond_with_file(result: dict) -> FileResponse:
     )
 
 
-@router.post("")
+@router.post("/")
 async def convert_file(
     source_format: str = Form(...),
     target_format: str = Form(...),

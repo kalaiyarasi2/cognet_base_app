@@ -29,6 +29,7 @@ import { Route as DriveRouteImport } from './routes/drive'
 import { Route as DetectionRouteImport } from './routes/detection'
 import { Route as ConverterRouteImport } from './routes/converter'
 import { Route as ConfigurationRouteImport } from './routes/configuration'
+import { Route as CoPilotRouteImport } from './routes/co-pilot'
 import { Route as ClassificationRouteImport } from './routes/classification'
 import { Route as AccessRouteImport } from './routes/access'
 import { Route as AboutRouteImport } from './routes/about'
@@ -135,6 +136,11 @@ const ConfigurationRoute = ConfigurationRouteImport.update({
   path: '/configuration',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CoPilotRoute = CoPilotRouteImport.update({
+  id: '/co-pilot',
+  path: '/co-pilot',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClassificationRoute = ClassificationRouteImport.update({
   id: '/classification',
   path: '/classification',
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/access': typeof AccessRoute
   '/classification': typeof ClassificationRoute
+  '/co-pilot': typeof CoPilotRoute
   '/configuration': typeof ConfigurationRoute
   '/converter': typeof ConverterRoute
   '/detection': typeof DetectionRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/access': typeof AccessRoute
   '/classification': typeof ClassificationRoute
+  '/co-pilot': typeof CoPilotRoute
   '/configuration': typeof ConfigurationRoute
   '/converter': typeof ConverterRoute
   '/detection': typeof DetectionRoute
@@ -221,6 +229,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/access': typeof AccessRoute
   '/classification': typeof ClassificationRoute
+  '/co-pilot': typeof CoPilotRoute
   '/configuration': typeof ConfigurationRoute
   '/converter': typeof ConverterRoute
   '/detection': typeof DetectionRoute
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/access'
     | '/classification'
+    | '/co-pilot'
     | '/configuration'
     | '/converter'
     | '/detection'
@@ -277,6 +287,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/access'
     | '/classification'
+    | '/co-pilot'
     | '/configuration'
     | '/converter'
     | '/detection'
@@ -304,6 +315,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/access'
     | '/classification'
+    | '/co-pilot'
     | '/configuration'
     | '/converter'
     | '/detection'
@@ -332,6 +344,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   AccessRoute: typeof AccessRoute
   ClassificationRoute: typeof ClassificationRoute
+  CoPilotRoute: typeof CoPilotRoute
   ConfigurationRoute: typeof ConfigurationRoute
   ConverterRoute: typeof ConverterRoute
   DetectionRoute: typeof DetectionRoute
@@ -497,6 +510,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfigurationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/co-pilot': {
+      id: '/co-pilot'
+      path: '/co-pilot'
+      fullPath: '/co-pilot'
+      preLoaderRoute: typeof CoPilotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/classification': {
       id: '/classification'
       path: '/classification'
@@ -540,6 +560,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   AccessRoute: AccessRoute,
   ClassificationRoute: ClassificationRoute,
+  CoPilotRoute: CoPilotRoute,
   ConfigurationRoute: ConfigurationRoute,
   ConverterRoute: ConverterRoute,
   DetectionRoute: DetectionRoute,

@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, File, UploadFile, Query, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 
-from shared_configs import file_path_cache, _save_cache
+from shared_configs import file_path_cache
 
 # ── Environment ──────────────────────────────────────────────────────────────
 load_dotenv()
