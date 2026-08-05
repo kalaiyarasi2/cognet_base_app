@@ -705,7 +705,9 @@ export function CoPilotPage() {
                 borderRadius: 8, whiteSpace: "pre-wrap",
                 border: "1px solid #e2e8f0",
               }}>
-                {JSON.stringify(result.simulated_output_data, null, 2)}
+                {result.simulated_output_data.text_full
+                  ? result.simulated_output_data.text_full
+                  : JSON.stringify(result.simulated_output_data, null, 2)}
               </pre>
             )}
           </div>

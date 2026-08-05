@@ -346,13 +346,17 @@ async def run_workflow(
                             execution_log.append(f"OneDrive upload failed: {str(e)}")
 
                 elif output_type == "local" or not output_type:
+                    actual_file_meta = current_temp_files[0] if current_temp_files else None
                     if not save_path:
                         # Two-way save method: fallback to local Downloads if no path is given
                         download_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
                         os.makedirs(download_dir, exist_ok=True)
-                        # Create a dynamic filename using a timestamp to avoid overriding
-                        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                        save_path = os.path.join(download_dir, f'workflow_result_{file_meta[1]}_{ts}.json' if file_meta else f'workflow_result_{ts}.json')
+                        if actual_file_meta:
+                            base_name = os.path.splitext(actual_file_meta[1])[0]
+                            save_path = os.path.join(download_dir, f'{base_name}.json')
+                        else:
+                            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                            save_path = os.path.join(download_dir, f'workflow_result_{ts}.json')
 
                     try:
                         is_dir = os.path.isdir(save_path) or not save_path.lower().endswith('.json')
@@ -386,6 +390,8 @@ async def run_workflow(
                         has_downloaded_json = False
                         if "json" in simulated_data and isinstance(simulated_data["json"], str) and simulated_data["json"].startswith("http"):
                             specific_name = os.path.basename(json_save_path) if json_save_path else None
+                            if not specific_name and actual_file_meta:
+                                specific_name = f"{os.path.splitext(actual_file_meta[1])[0]}.json"
                             path = await download_file(simulated_data["json"], target_dir, specific_filename=specific_name)
                             execution_log.append(f"Downloaded final processed JSON to: {path}")
                             has_downloaded_json = True
@@ -399,7 +405,15 @@ async def run_workflow(
 
                         # If we didn't download a JSON (e.g. not a GPU agent), just dump the raw simulated_data
                         if not has_downloaded_json:
-                            final_path = json_save_path if json_save_path else os.path.join(target_dir, f'workflow_result_{file_meta[1]}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json' if file_meta else f'workflow_result_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json')
+                            if json_save_path:
+                                final_path = json_save_path
+                            else:
+                                if actual_file_meta:
+                                    base_name = os.path.splitext(actual_file_meta[1])[0]
+                                    final_path = os.path.join(target_dir, f'{base_name}.json')
+                                else:
+                                    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    final_path = os.path.join(target_dir, f'workflow_result_{ts}.json')
                             with open(final_path, 'w', encoding='utf-8') as f:
                                 json.dump(simulated_data, f, indent=2)
                             execution_log.append(f"Saved workflow output to: {final_path}")
@@ -421,10 +435,24 @@ async def run_workflow(
                                     except Exception as ce:
                                         execution_log.append(f"Failed to save CSV: {ce}")
 
+                            # Also save as TXT if text_full exists (e.g. from Text Extraction)
+                            if isinstance(simulated_data, dict) and "text_full" in simulated_data:
+                                text_data = simulated_data["text_full"]
+                                if text_data and isinstance(text_data, str):
+                                    txt_path = final_path.replace(".json", ".txt")
+                                    try:
+                                        with open(txt_path, 'w', encoding='utf-8') as tf:
+                                            tf.write(text_data)
+                                        execution_log.append(f"Saved workflow text output to: {txt_path}")
+                                    except Exception as te:
+                                        execution_log.append(f"Failed to save TXT: {te}")
 
                         # Also download the Excel file if present
                         if "excel" in simulated_data and isinstance(simulated_data["excel"], str) and simulated_data["excel"].startswith("http"):
-                            path = await download_file(simulated_data["excel"], target_dir)
+                            specific_name = None
+                            if not json_save_path and actual_file_meta:
+                                specific_name = f"{os.path.splitext(actual_file_meta[1])[0]}.xlsx"
+                            path = await download_file(simulated_data["excel"], target_dir, specific_filename=specific_name)
                             execution_log.append(f"Downloaded Excel output to: {path}")
 
                     except Exception as e:
