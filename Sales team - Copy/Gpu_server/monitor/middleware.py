@@ -107,14 +107,17 @@ class RequestMonitoringMiddleware(BaseHTTPMiddleware):
                 source_ip=source_ip
             )
             
-            # Save trigger source module
+            # Save trigger source module & processed_by user
             source_module = request.headers.get("X-Source-Module") or request.query_params.get("source_module")
-            if source_module:
-                with request_monitor.lock:
-                    if request_id in request_monitor.active_requests:
+            processed_by = request.headers.get("X-Processed-By") or request.query_params.get("processed_by") or "SYSTEM"
+            with request_monitor.lock:
+                if request_id in request_monitor.active_requests:
+                    if source_module:
                         request_monitor.active_requests[request_id]['source_module'] = source_module
+                    if processed_by:
+                        request_monitor.active_requests[request_id]['processed_by'] = processed_by
             
-            logger.info(f"Monitoring started for request {request_id}: {file_info['filename']} | Source Module: {source_module}")
+            logger.info(f"Monitoring started for request {request_id}: {file_info['filename']} | Source Module: {source_module} | Processed By: {processed_by}")
             
             # Add request_id to request state for use in handlers
             request.state.monitoring_request_id = request_id
@@ -147,6 +150,16 @@ class RequestMonitoringMiddleware(BaseHTTPMiddleware):
                     if body_bytes:
                         response_data = json.loads(body_bytes.decode(errors="replace"))
                         if isinstance(response_data, dict):
+                            if response_data.get('error'):
+                                error_msg = response_data.get('error')
+                                request_monitor.fail_request(
+                                    request_id=request_id,
+                                    error_details=str(error_msg),
+                                    processing_time=processing_time
+                                )
+                                logger.error(f"Request {request_id} failed with error: {error_msg}")
+                                return response
+
                             if 'excel' in response_data and response_data['excel']:
                                 output_files.append(response_data['excel'])
                             if 'json' in response_data and response_data['json']:

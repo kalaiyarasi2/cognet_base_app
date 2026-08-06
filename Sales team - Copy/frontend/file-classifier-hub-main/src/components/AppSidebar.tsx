@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, FileText, Tags,
-  Workflow, FolderTree, Cloud, BarChart3, Activity, Terminal,
+  Workflow, FolderTree, Cloud, BarChart3, Activity, Terminal, Globe,
   Settings2, SlidersHorizontal, Info, Shield, ChevronLeft, ChevronRight,
   RefreshCw, Scale, Cpu, FileCheck, HardDrive, Share2, FileSpreadsheet, Building2,
   CreditCard, ReceiptText, Mail
@@ -60,7 +60,6 @@ const groups: NavGroup[] = [
       { label: "Google Drive", to: "/drive", icon: Cloud },
       { label: "OneDrive", to: "/onedrive", icon: Cloud },
       { label: "SharePoint", to: "/sharepoint", icon: Share2 },
-      { label: "Outlook Agent", to: "/outlook", icon: Mail },
       { label: "Work Flow Designer", to: "/co-pilot", icon: Workflow },
     ],
   },
@@ -69,6 +68,7 @@ const groups: NavGroup[] = [
     items: [
       { label: "System Health", to: "/health", icon: Activity },
       { label: "Logs", to: "/logs", icon: Terminal },
+      { label: "Login Monitor", to: "/login-monitor", icon: Globe },
     ],
   },
   {
@@ -125,7 +125,7 @@ export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onTogg
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold leading-tight truncate">File Classifier</div>
+            <div className="text-[13px] font-semibold leading-tight truncate">DRIVE</div>
             <div className="text-[10px] tracking-widest text-muted-foreground">AGENT</div>
           </div>
         )}

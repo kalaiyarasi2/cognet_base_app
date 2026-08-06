@@ -85,19 +85,34 @@ def get_extractor_class(backend_dir):
             print(f"[Extractor] Backend directory not found: {backend_str}")
             return None
         
-        # Insert at position 0 to ensure our backend takes priority
-        if backend_str not in sys.path:
-            sys.path.insert(0, backend_str)
+        # Always move backend_str to position 0 to ensure local modules (config.py, etc.) take priority
+        if backend_str in sys.path:
+            sys.path.remove(backend_str)
+        sys.path.insert(0, backend_str)
         
         # Clear any previously loaded versions of these shared modules
         modules_to_clear = [
             'chunked_extractor', 'pdf_detector', 'pdf_rotation',
-            'ocr_text', 'pdf_plumber', 'config', 'utils'
+            'ocr_text', 'pdf_plumber', 'config', 'utils', 'work_compensation'
         ]
         for mod in modules_to_clear:
             if mod in sys.modules:
                 del sys.modules[mod]
             
+        # Explicitly pre-load local config.py and work_compensation.py from backend_dir
+        # to prevent Python from importing old conflicting config.py from file-classification-old
+        if (backend_dir / "config.py").exists():
+            cfg_spec = importlib.util.spec_from_file_location("config", backend_dir / "config.py")
+            cfg_mod = importlib.util.module_from_spec(cfg_spec)
+            sys.modules["config"] = cfg_mod
+            cfg_spec.loader.exec_module(cfg_mod)
+
+        if (backend_dir / "work_compensation.py").exists():
+            wc_spec = importlib.util.spec_from_file_location("work_compensation", backend_dir / "work_compensation.py")
+            wc_mod = importlib.util.module_from_spec(wc_spec)
+            sys.modules["work_compensation"] = wc_mod
+            wc_spec.loader.exec_module(wc_mod)
+
         # Use importlib.spec_from_file_location for explicit path-based import
         # to avoid sys.modules collision with the Insurance backend's chunked_extractor
         chunked_spec = importlib.util.spec_from_file_location(
@@ -221,19 +236,36 @@ def get_extractor_class(backend_dir):
             print(f"[Extractor] Backend directory not found: {backend_str}")
             return None
         
-        # Insert at position 0 to ensure our backend takes priority
-        if backend_str not in sys.path:
-            sys.path.insert(0, backend_str)
+        # Always move backend_str to position 0 to ensure local modules (config.py, etc.) take priority
+        if backend_str in sys.path:
+            sys.path.remove(backend_str)
+        sys.path.insert(0, backend_str)
         
         # Clear any previously loaded versions of these shared modules
         modules_to_clear = [
             'chunked_extractor', 'pdf_detector', 'pdf_rotation',
-            'ocr_text', 'pdf_plumber', 'config', 'utils'
+            'ocr_text', 'pdf_plumber', 'config', 'utils',
+            'work_compensation', 'insurance_extractor', 'insurance_config',
+            'auto_rotation_ocr', 'summary_for_json'
         ]
         for mod in modules_to_clear:
             if mod in sys.modules:
                 del sys.modules[mod]
-            
+
+        # Explicitly pre-load local config.py and work_compensation.py from backend_dir
+        # to prevent Python from importing old conflicting config.py from file-classification-old
+        if (backend_dir / "config.py").exists():
+            cfg_spec = importlib.util.spec_from_file_location("config", backend_dir / "config.py")
+            cfg_mod = importlib.util.module_from_spec(cfg_spec)
+            sys.modules["config"] = cfg_mod
+            cfg_spec.loader.exec_module(cfg_mod)
+
+        if (backend_dir / "work_compensation.py").exists():
+            wc_spec = importlib.util.spec_from_file_location("work_compensation", backend_dir / "work_compensation.py")
+            wc_mod = importlib.util.module_from_spec(wc_spec)
+            sys.modules["work_compensation"] = wc_mod
+            wc_spec.loader.exec_module(wc_mod)
+
         # Use importlib.spec_from_file_location for explicit path-based import
         # to avoid sys.modules collision with the Insurance backend's chunked_extractor
         chunked_spec = importlib.util.spec_from_file_location(
@@ -270,8 +302,10 @@ def backend_context(backend_dir):
     with path_lock:
         orig_path = sys.path.copy()
         try:
-            if str(backend_dir) not in sys.path:
-                sys.path.insert(0, str(backend_dir))
+            backend_str = str(backend_dir)
+            if backend_str in sys.path:
+                sys.path.remove(backend_str)
+            sys.path.insert(0, backend_str)
             yield
         finally:
             sys.path = orig_path
@@ -2154,6 +2188,18 @@ Return ONLY the company name or UNKNOWN:"""
         print("[STEP] RUNNING WORK COMPENSATION EXTRACTOR (ASYNC)")
         print("="*70)
         
+        if not self.work_comp_extractor:
+            WorkCompClass = get_extractor_class(WORK_COMP_BACKEND_DIR)
+            if WorkCompClass:
+                try:
+                    self.work_comp_extractor = WorkCompClass(
+                        api_key=OPENAI_API_KEY,
+                        output_dir=str(WORK_COMP_OUTPUT_DIR)
+                    )
+                    print("[OK] Work Compensation Extractor lazily initialized")
+                except Exception as e:
+                    print(f"[ERR] Failed lazy init for Work Comp Extractor: {e}")
+
         if self.work_comp_extractor:
             try:
                 def _run_wc():

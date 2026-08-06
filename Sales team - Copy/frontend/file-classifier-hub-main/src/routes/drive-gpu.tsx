@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, getBackendUrl } from "@/lib/api";
-import { useApp, useSettings } from "@/lib/store";
+import { useApp, useSettings, useAuth } from "@/lib/store";
 import { toast } from "sonner";
 import { FolderPickerModal } from "@/components/FolderPickerModal";
 import type { DocumentFile } from "@/types/extractor";
@@ -23,6 +23,7 @@ import ClaimSummary from "@/components/ClaimSummary";
 export const Route = createFileRoute("/drive-gpu")({ component: DriveGpuPage });
 
 function DriveGpuPage() {
+  const { user } = useAuth();
   const search = Route.useSearch() as any;
   const pipeline = search.pipeline || "";
 
@@ -95,7 +96,8 @@ function DriveGpuPage() {
         )
       );
 
-      const res = await api.gpuExtractDirect(file, pipeline);
+      const userEmail = user?.email || "SYSTEM";
+      const res = await api.gpuExtractDirect(file, pipeline, userEmail);
       
       // Fetch JSON contents
       let schema: any = null;
@@ -453,40 +455,12 @@ function DriveGpuPage() {
   }, [getAllClaims]);
 
   return (
-    <>
+    <div className="space-y-4">
       <PageHeader
         icon={HardDrive}
         title={pageTitle}
         description="Process loss runs, ACORDs, invoices, and bank statements in a local folder or via direct file upload using the high-performance GPU extraction pipeline."
       />
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-        <StatCard
-          label="Backend Status"
-          value={!input ? "Staged Upload Mode" : isConnected ? "Connected" : "Disconnected"}
-          icon={isConnected ? CheckCircle2 : XCircle}
-          hint="Integrated GPU Server"
-          accent={!input ? "muted" : isConnected ? "success" : "destructive"}
-        />
-        <StatCard
-          label="Queue Count"
-          value={queueDocs.length}
-          icon={Layers}
-          hint="Total documents in queue"
-        />
-        <StatCard
-          label="Max Pages"
-          value={maxPages}
-          icon={FileText}
-          hint="Maximum pages read per PDF"
-        />
-        <StatCard
-          label="Model"
-          value={model}
-          icon={Cpu}
-          hint="OpenAI LLM for categorization"
-        />
-      </div>
 
       {/* Top Section: Upload Area */}
       <div className="mb-4">
@@ -494,111 +468,8 @@ function DriveGpuPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* Left Side: Config & Queue list */}
+        {/* Left Side: Queue list */}
         <div className="space-y-3">
-          <Panel
-            title="Local Directory watch configuration"
-            description="Process batches from local folders on the host filesystem"
-          >
-            <div className="space-y-3">
-              <div>
-                <Label className="text-[11.5px] font-semibold">Input Directory</Label>
-                <div className="flex gap-1.5 mt-1">
-                  <Input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="E.g., C:\Users\Intern\OneDrive\uploads"
-                    className="h-8 font-mono text-[11.5px] flex-1"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 w-8 p-0 shrink-0 shadow-sm"
-                    onClick={() => selectLocalFolder("input")}
-                  >
-                    <Search className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-[11.5px] font-semibold">Output Directory</Label>
-                <div className="flex gap-1.5 mt-1">
-                  <Input
-                    value={output}
-                    onChange={(e) => setOutput(e.target.value)}
-                    placeholder="E.g., C:\Users\Intern\OneDrive\sorted"
-                    className="h-8 font-mono text-[11.5px] flex-1"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 w-8 p-0 shrink-0 shadow-sm"
-                    onClick={() => selectLocalFolder("output")}
-                  >
-                    <Search className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 pt-1">
-                <div>
-                  <Label className="text-[11.5px] font-semibold">Max Pages</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={maxPages}
-                    onChange={(e) => setMaxPages(Number(e.target.value))}
-                    className="h-8 mt-1"
-                  />
-                </div>
-                <div>
-                  <Label className="text-[11.5px] font-semibold">LLM Model</Label>
-                  <Input
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    className="h-8 mt-1"
-                  />
-                </div>
-                <div>
-                  <Label className="text-[11.5px] font-semibold">Min Score</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={10}
-                    step={0.1}
-                    value={minScore}
-                    onChange={(e) => setMinScore(Number(e.target.value))}
-                    className="h-8 mt-1"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t mt-4">
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={run}
-                  disabled={running || !input || !output || !isConnected || pdfCount === 0}
-                  className="h-8 shadow-md"
-                >
-                  {running ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                      Extracting...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-3.5 h-3.5 mr-1" />
-                      Run GPU Classifier
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </Panel>
-
           <Panel
             title={`Document Queue (${queueDocs.length})`}
             description="Expand items to view detailed processing checklist stages"
@@ -738,20 +609,12 @@ function DriveGpuPage() {
             )}
           </Panel>
 
-          {/* Merged AI Claims Analysis Report Panel */}
+      {/* Merged AI Claims Analysis Report Panel */}
           {mergedSummary && (
             <ClaimSummary summary={mergedSummary} onClose={() => setMergedSummary(null)} />
           )}
         </div>
       </div>
-
-      <FolderPickerModal
-        open={localPickerOpen}
-        onClose={() => setLocalPickerOpen(false)}
-        onSelect={handleLocalFolderSelect}
-        title={localPickerType === "input" ? "Select Input Folder" : "Select Output Folder"}
-        initialPath={localPickerType === "input" ? input : output}
-      />
-    </>
+    </div>
   );
 }

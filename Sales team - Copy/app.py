@@ -81,16 +81,16 @@ def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
         if parent_dir in sys.path:
             sys.path.remove(parent_dir)
 
-        # Evict any shared-name modules that were newly cached from this sub-app's
-        # directory — they would shadow the workspace-root packages for later sub-apps.
+        # Evict all local sub-app modules loaded from parent_dir so they don't shadow packages for subsequent sub-apps
         for mod_name in list(sys.modules):
+            if mod_name == module_name:
+                continue
             mod = sys.modules.get(mod_name)
             if mod is None:
                 continue
             mod_file = getattr(mod, "__file__", None) or ""
-            if mod_name in _SHARED_NAMES and mod_name not in _pre_snapshot:
-                if parent_dir in mod_file:
-                    del sys.modules[mod_name]
+            if mod_file and parent_dir.lower() in mod_file.lower():
+                del sys.modules[mod_name]
 
     sub_app = getattr(module, "app", FastAPI())
     print(f"[INFO] Loaded sub-app '{module_name}' from {file_path.name} ({len(sub_app.routes)} routes)")
@@ -153,7 +153,7 @@ class PrefixDispatcher:
 # 4. Load all sub-applications
 # ─────────────────────────────────────────────────────────────────────────────
 print("[INFO] Loading sub-applications...")
-classifier_app = load_sub_app("classifier_api", WORKSPACE_DIR / "file-classification-old" / "api.py")
+classifier_app = load_sub_app("classifier_api", WORKSPACE_DIR / "file-classification-" / "api.py")
 gpu_app        = load_sub_app("gpu_api",        WORKSPACE_DIR / "Gpu_server" / "Unified_PDF_Platform" / "unified_app.py")
 parity_app     = load_sub_app("parity_api",     WORKSPACE_DIR / "Parity_setup" / "backend" / "api_server.py")
 renewal_app    = load_sub_app("renewal_api",    WORKSPACE_DIR / "Renewal_process" / "api_server.py")

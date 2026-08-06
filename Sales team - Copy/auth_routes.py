@@ -5,7 +5,7 @@ import jwt
 from datetime import datetime, timedelta
 from typing import Optional, List, Union
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel
 
 # ── Robust poc_db import ──────────────────────────────────────────────────────
@@ -20,6 +20,14 @@ if "database.poc_db" not in sys.modules:
     sys.modules["database.poc_db"] = _mod
     _spec.loader.exec_module(_mod)
 poc_db = sys.modules["database.poc_db"]
+
+_SESSION_DB_PATH = _AUTH_DIR / "database" / "session_db.py"
+if "database.session_db" not in sys.modules:
+    _spec_s = importlib.util.spec_from_file_location("database.session_db", str(_SESSION_DB_PATH))
+    _mod_s = importlib.util.module_from_spec(_spec_s)
+    sys.modules["database.session_db"] = _mod_s
+    _spec_s.loader.exec_module(_mod_s)
+session_db = sys.modules["database.session_db"]
 
 router = APIRouter(prefix="/api", tags=["Authentication & Access Control"])
 
@@ -79,7 +87,7 @@ class ForgotPasswordRequest(BaseModel):
 # Authentication Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/auth/sso/callback")
-async def sso_callback(req: SSOCallbackRequest):
+async def sso_callback(req: SSOCallbackRequest, request: Request):
     """
     SSO Callback Gatekeeper:
     Verifies user identity via Microsoft OAuth 2.0 or direct email SSO.
@@ -162,6 +170,14 @@ async def sso_callback(req: SSOCallbackRequest):
     }
     token = create_access_token(user_payload)
     
+    # Record User Session & IP in user_sessions.db
+    try:
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.headers.get("X-Real-IP") or (request.client.host if request.client else "127.0.0.1")
+        user_agent = request.headers.get("User-Agent", "Browser")
+        session_db.record_session(perm["email"], perm.get("full_name", ""), perm.get("role", "USER"), client_ip, user_agent)
+    except Exception:
+        pass
+
     return {
         "status": "ok",
         "message": "SSO authentication successful.",
@@ -170,7 +186,7 @@ async def sso_callback(req: SSOCallbackRequest):
     }
 
 @router.post("/auth/login")
-async def direct_login(req: LoginRequest):
+async def direct_login(req: LoginRequest, request: Request):
     """Direct email + password login with DB permission verification."""
     clean_email = req.email.strip().lower()
     
@@ -203,11 +219,34 @@ async def direct_login(req: LoginRequest):
     }
     token = create_access_token(user_payload)
     
+    # Record User Session & IP in user_sessions.db
+    try:
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.headers.get("X-Real-IP") or (request.client.host if request.client else "127.0.0.1")
+        user_agent = request.headers.get("User-Agent", "Browser")
+        session_db.record_session(perm["email"], perm.get("full_name", ""), perm.get("role", "USER"), client_ip, user_agent)
+    except Exception:
+        pass
+
     return {
         "status": "ok",
         "token": token,
         "user": user_payload
     }
+
+class RevokeSessionRequest(BaseModel):
+    session_id: int
+
+@router.get("/auth/active-sessions")
+async def get_active_sessions():
+    """Retrieve all user login sessions with IP addresses and timestamps from user_sessions.db."""
+    sessions = session_db.get_active_sessions()
+    return {"status": "ok", "sessions": sessions}
+
+@router.post("/auth/revoke-session")
+async def revoke_session_endpoint(req: RevokeSessionRequest):
+    """Revoke a specific user login session."""
+    success = session_db.revoke_session(req.session_id)
+    return {"status": "ok" if success else "error"}
 
 @router.post("/auth/forgot-password")
 async def forgot_password(req: ForgotPasswordRequest):

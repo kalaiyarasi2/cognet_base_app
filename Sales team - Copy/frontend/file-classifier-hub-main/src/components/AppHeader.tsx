@@ -41,7 +41,7 @@ export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) 
       </button>
 
       <div className="flex items-center gap-2">
-        <span className="text-[13px] font-semibold">File Classifier Agent</span>
+        <span className="text-[13px] font-semibold">DRIVE</span>
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium tracking-wider">
           ENTERPRISE
         </span>

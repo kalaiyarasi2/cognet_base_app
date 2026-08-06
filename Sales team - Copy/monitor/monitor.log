@@ -1728,3 +1728,15 @@ NotImplementedError
 2026-08-04 14:52:13,822 - rpve.worker - INFO - Started worker thread: rpve-worker-0
 2026-08-04 14:52:13,823 - rpve.worker - INFO - Started worker thread: rpve-worker-1
 2026-08-04 14:52:13,825 - rpve.worker - INFO - Started worker thread: rpve-worker-2
+2026-08-06 13:00:18,114 - monitor_db - INFO - Database initialized successfully
+2026-08-06 13:00:18,489 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-06 15:25:23,933 - monitor_db - INFO - Database initialized successfully
+2026-08-06 15:25:24,106 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-06 15:25:27,950 - monitor_db - INFO - Database initialized successfully
+2026-08-06 15:25:28,130 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-06 15:28:39,436 - monitor_db - INFO - Database initialized successfully
+2026-08-06 15:28:39,688 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-06 15:29:15,667 - monitor_db - INFO - Database initialized successfully
+2026-08-06 15:29:15,868 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-06 15:29:34,077 - monitor_db - INFO - Database initialized successfully
+2026-08-06 15:29:34,311 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)

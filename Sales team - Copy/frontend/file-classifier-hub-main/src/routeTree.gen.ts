@@ -24,6 +24,7 @@ import { Route as OutlookRouteImport } from './routes/outlook'
 import { Route as OrganisationRouteImport } from './routes/organisation'
 import { Route as OnedriveRouteImport } from './routes/onedrive'
 import { Route as LogsRouteImport } from './routes/logs'
+import { Route as LoginMonitorRouteImport } from './routes/login-monitor'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InvoiceRouteImport } from './routes/invoice'
 import { Route as HealthRouteImport } from './routes/health'
@@ -113,6 +114,11 @@ const OnedriveRoute = OnedriveRouteImport.update({
 const LogsRoute = LogsRouteImport.update({
   id: '/logs',
   path: '/logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginMonitorRoute = LoginMonitorRouteImport.update({
+  id: '/login-monitor',
+  path: '/login-monitor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -206,6 +212,7 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/invoice': typeof InvoiceRoute
   '/login': typeof LoginRoute
+  '/login-monitor': typeof LoginMonitorRoute
   '/logs': typeof LogsRoute
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
@@ -238,6 +245,7 @@ export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/invoice': typeof InvoiceRoute
   '/login': typeof LoginRoute
+  '/login-monitor': typeof LoginMonitorRoute
   '/logs': typeof LogsRoute
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
@@ -271,6 +279,7 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/invoice': typeof InvoiceRoute
   '/login': typeof LoginRoute
+  '/login-monitor': typeof LoginMonitorRoute
   '/logs': typeof LogsRoute
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
@@ -305,6 +314,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/invoice'
     | '/login'
+    | '/login-monitor'
     | '/logs'
     | '/onedrive'
     | '/organisation'
@@ -337,6 +347,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/invoice'
     | '/login'
+    | '/login-monitor'
     | '/logs'
     | '/onedrive'
     | '/organisation'
@@ -369,6 +380,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/invoice'
     | '/login'
+    | '/login-monitor'
     | '/logs'
     | '/onedrive'
     | '/organisation'
@@ -402,6 +414,7 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   InvoiceRoute: typeof InvoiceRoute
   LoginRoute: typeof LoginRoute
+  LoginMonitorRoute: typeof LoginMonitorRoute
   LogsRoute: typeof LogsRoute
   OnedriveRoute: typeof OnedriveRoute
   OrganisationRoute: typeof OrganisationRoute
@@ -527,6 +540,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LogsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login-monitor': {
+      id: '/login-monitor'
+      path: '/login-monitor'
+      fullPath: '/login-monitor'
+      preLoaderRoute: typeof LoginMonitorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -650,6 +670,7 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   InvoiceRoute: InvoiceRoute,
   LoginRoute: LoginRoute,
+  LoginMonitorRoute: LoginMonitorRoute,
   LogsRoute: LogsRoute,
   OnedriveRoute: OnedriveRoute,
   OrganisationRoute: OrganisationRoute,

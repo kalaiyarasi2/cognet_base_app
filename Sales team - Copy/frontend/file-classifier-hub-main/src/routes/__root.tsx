@@ -44,7 +44,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "File Classifier Agent — Enterprise Dashboard" },
+      { title: "DRIVE — Enterprise Dashboard" },
       { name: "description", content: "AI-powered PDF document classifier and organiser." },
     ],
     links: [{ rel: "stylesheet", href: appCss }],

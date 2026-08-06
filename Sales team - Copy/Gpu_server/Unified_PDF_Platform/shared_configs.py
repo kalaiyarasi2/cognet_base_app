@@ -73,7 +73,7 @@ async def _perform_extraction(file: UploadFile, request: Request):
 
         if "error" in result:
             logger.warning(f"[Unified][WARN] Extraction returned error: {result['error']}")
-            return {"error": result["error"]}
+            raise HTTPException(status_code=500, detail=result["error"])
         
         # Extract filenames and full paths
         excel_path = result.get("excel")

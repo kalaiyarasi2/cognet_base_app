@@ -186,10 +186,12 @@ export const api = {
     max_pages?: number; min_score?: number; model?: string;
   }) => request<any>("/api/gpu/api/drive/classify", { method: "POST", body: JSON.stringify(body) }),
 
-  gpuExtractDirect: (file: File, pipeline?: string) => {
+  gpuExtractDirect: (file: File, pipeline?: string, processedBy?: string) => {
     const fd = new FormData();
     fd.append("file", file);
+    if (processedBy) fd.append("processed_by", processedBy);
     const headers: any = { "X-Source-Module": "DRIVE" };
+    if (processedBy) headers["X-Processed-By"] = processedBy;
     if (pipeline) headers["X-Document-Type"] = pipeline;
     return request<any>("/api/gpu/api/extract", {
       method: "POST",
@@ -211,6 +213,7 @@ export const api = {
     drive_input_folder_id: string; drive_output_folder_id: string;
     copy_mode?: boolean; dry_run?: boolean; pdf_max_pages?: number;
     min_score?: number; llm_model?: string; max_files?: number;
+    poc_engine?: string;
   }) => request<any>("/google/drive/classify", { method: "POST", body: JSON.stringify(body) }),
 
   onedriveStatus: (input_folder?: string) =>
@@ -235,6 +238,7 @@ export const api = {
     onedrive_input_folder_id: string; onedrive_output_folder_id: string;
     copy_mode?: boolean; dry_run?: boolean; pdf_max_pages?: number;
     min_score?: number; llm_model?: string; max_files?: number;
+    poc_engine?: string;
   }) => request<any>("/onedrive/drive/classify", { method: "POST", body: JSON.stringify(body) }),
 
   selectFolder: () => request<{ path: string | null }>("/select-folder"),
@@ -461,7 +465,28 @@ export const api = {
     }>(
       `/api/sharepoint/browse-folders?path=${encodeURIComponent(path)}${folder_id ? `&folder_id=${encodeURIComponent(folder_id)}` : ""}`
     ),
+
+  getActiveSessions: () =>
+    request<{ status: string; sessions: UserSessionRecord[] }>("/api/auth/active-sessions"),
+
+  revokeSession: (session_id: number) =>
+    request<{ status: string }>("/api/auth/revoke-session", {
+      method: "POST",
+      body: JSON.stringify({ session_id }),
+    }),
 };
+
+export interface UserSessionRecord {
+  id: number;
+  user_email: string;
+  user_name: string | null;
+  user_role: string | null;
+  ip_address: string;
+  user_agent: string | null;
+  login_time: string;
+  last_active: string;
+  status: "ACTIVE" | "IDLE" | "REVOKED" | "LOGGED_OUT";
+}
 
 export interface ConversionHistoryRecord {
   id: number;

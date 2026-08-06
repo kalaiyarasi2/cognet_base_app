@@ -34,7 +34,7 @@ function PipelinePage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerType, setPickerType] = useState<"input" | "output">("input");
-  const [pipelineMode, setPipelineMode] = useState<"server" | "client">("server");
+  const [pipelineMode, setPipelineMode] = useState<"server" | "client">("client");
   const [clientInputHandle, setClientInputHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [clientOutputHandle, setClientOutputHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
@@ -182,7 +182,7 @@ function PipelinePage() {
 
           successful++;
           categoriesFound[category] = (categoriesFound[category] || 0) + 1;
-          
+
           resultsList.push({
             file_name: entry.name,
             original_path: `[Local]/${entry.name}`,
@@ -283,68 +283,29 @@ function PipelinePage() {
     <>
       <PageHeader icon={Workflow} title="Pipeline" description="Run detect → extract → classify → organise across an entire folder." />
 
-      <Panel title="Pipeline Configuration" description={pipelineMode === "server" ? "Absolute paths on the backend host" : "Local folders on your client machine"} className="mb-3">
-        <div className="flex gap-2 mb-4 border-b pb-3">
-          <Button
-            size="sm"
-            variant={pipelineMode === "server" ? "default" : "outline"}
-            className="text-[11px] h-7 px-3"
-            onClick={() => setPipelineMode("server")}
-            disabled={running}
-          >
-            Host Server Mode
-          </Button>
-          <Button
-            size="sm"
-            variant={pipelineMode === "client" ? "default" : "outline"}
-            className="text-[11px] h-7 px-3"
-            onClick={() => setPipelineMode("client")}
-            disabled={running}
-          >
-            Client Browser Mode
-          </Button>
-        </div>
-
+      <Panel title="Pipeline Configuration" description="Local folders on your client machine" className="mb-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label className="text-[11.5px] flex items-center gap-1"><FolderInput className="w-3 h-3" /> Input Folder</Label>
-            {pipelineMode === "server" ? (
-              <div className="flex gap-2 items-center mt-1">
-                <Input value={input} onChange={(e) => setInput(e.target.value)} className="h-8 font-mono text-[12px] flex-1" />
-                <Button size="icon" variant="outline" className="h-8 w-8 shrink-0 shadow-sm hover:bg-accent" onClick={() => selectLocalFolder("input")}>
-                  <Search className="h-4 w-4" />
-                </Button>
+            <div className="flex gap-2 items-center mt-1">
+              <div className="h-8 flex-1 px-3 border rounded-md flex items-center text-[12px] bg-muted/40 font-mono text-muted-foreground truncate">
+                {clientInputHandle ? `📁 [Local] ${clientInputHandle.name}` : "No folder selected"}
               </div>
-            ) : (
-              <div className="flex gap-2 items-center mt-1">
-                <div className="h-8 flex-1 px-3 border rounded-md flex items-center text-[12px] bg-muted/40 font-mono text-muted-foreground truncate">
-                  {clientInputHandle ? `📁 [Local] ${clientInputHandle.name}` : "No folder selected"}
-                </div>
-                <Button size="sm" variant="outline" className="h-8 shadow-sm hover:bg-accent text-xs" onClick={() => selectClientFolder("input")} disabled={running}>
-                  Select Folder
-                </Button>
-              </div>
-            )}
+              <Button size="sm" variant="outline" className="h-8 shadow-sm hover:bg-accent text-xs" onClick={() => selectClientFolder("input")} disabled={running}>
+                Select Folder
+              </Button>
+            </div>
           </div>
           <div>
             <Label className="text-[11.5px] flex items-center gap-1"><FolderOutput className="w-3 h-3" /> Output Folder</Label>
-            {pipelineMode === "server" ? (
-              <div className="flex gap-2 items-center mt-1">
-                <Input value={output} onChange={(e) => setOutput(e.target.value)} className="h-8 font-mono text-[12px] flex-1" />
-                <Button size="icon" variant="outline" className="h-8 w-8 shrink-0 shadow-sm hover:bg-accent" onClick={() => selectLocalFolder("output")}>
-                  <Search className="h-4 w-4" />
-                </Button>
+            <div className="flex gap-2 items-center mt-1">
+              <div className="h-8 flex-1 px-3 border rounded-md flex items-center text-[12px] bg-muted/40 font-mono text-muted-foreground truncate">
+                {clientOutputHandle ? `📁 [Local] ${clientOutputHandle.name}` : "No folder selected"}
               </div>
-            ) : (
-              <div className="flex gap-2 items-center mt-1">
-                <div className="h-8 flex-1 px-3 border rounded-md flex items-center text-[12px] bg-muted/40 font-mono text-muted-foreground truncate">
-                  {clientOutputHandle ? `📁 [Local] ${clientOutputHandle.name}` : "No folder selected"}
-                </div>
-                <Button size="sm" variant="outline" className="h-8 shadow-sm hover:bg-accent text-xs" onClick={() => selectClientFolder("output")} disabled={running}>
-                  Select Folder
-                </Button>
-              </div>
-            )}
+              <Button size="sm" variant="outline" className="h-8 shadow-sm hover:bg-accent text-xs" onClick={() => selectClientFolder("output")} disabled={running}>
+                Select Folder
+              </Button>
+            </div>
           </div>
           <div>
             <Label className="text-[11.5px]">Maximum Pages</Label>
@@ -367,7 +328,7 @@ function PipelinePage() {
           <Button
             size="sm"
             onClick={handleRun}
-            disabled={running || (pipelineMode === "server" ? (!input || !output) : (!clientInputHandle || !clientOutputHandle))}
+            disabled={running || (!clientInputHandle || !clientOutputHandle)}
           >
             <Play className="w-3.5 h-3.5" /> {running ? "Running…" : "Run Pipeline"}
           </Button>
@@ -385,12 +346,11 @@ function PipelinePage() {
           </div>
           <div className="flex flex-wrap gap-2 mb-3">
             {STEPS.map((s, i) => (
-              <span key={s} className={`text-[10.5px] px-2 py-0.5 rounded font-medium tracking-wider ${
-                (running && i < stepIdx) || (result && i <= STEPS.length - 1)
+              <span key={s} className={`text-[10.5px] px-2 py-0.5 rounded font-medium tracking-wider ${(running && i < stepIdx) || (result && i <= STEPS.length - 1)
                   ? "bg-success/15 text-success"
                   : running && i === stepIdx ? "bg-primary/15 text-primary"
-                  : "bg-muted text-muted-foreground"
-              }`}>{s.toUpperCase()}</span>
+                    : "bg-muted text-muted-foreground"
+                }`}>{s.toUpperCase()}</span>
             ))}
           </div>
           {result && (

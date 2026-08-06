@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Cloud, RefreshCw, Power, Play, FileText, HardDrive,
-  CheckCircle2, XCircle, Search, Folder, ChevronRight, User, AlertCircle
+  CheckCircle2, XCircle, Search, Folder, ChevronRight, User, AlertCircle, Cpu, Info
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel, StatCard } from "@/components/Panel";
@@ -22,10 +22,25 @@ import {
 
 export const Route = createFileRoute("/onedrive")({ component: OneDrivePage });
 
+const POC_ENGINES = [
+  { id: "AUTO", label: "Auto Router (Default AI Classification)", desc: "Automatic document classification & pipeline routing", mode: "Default" },
+  { id: "CONVERTER", label: "Universal File Converter (Single File)", desc: "Process individual files (CSV, Excel, PDF) into structured JSON/XML", mode: "Single File" },
+  { id: "INSURANCE", label: "Insurance Loss Runs & ACORD", desc: "Loss history & ACORD policy extraction", mode: "Single File" },
+  { id: "WORK_COMP", label: "Workers' Compensation (ACORD 130)", desc: "Workers' Comp forms & rating schedule audit", mode: "Single File" },
+  { id: "BANK_STATEMENT", label: "Bank Statement Extractor", desc: "Financial extraction for bank statements & ledger entries", mode: "Single File" },
+  { id: "VENDOR_INVOICE", label: "Vendor Invoice Extractor", desc: "General vendor invoice extraction layer", mode: "Single File" },
+  { id: "PAYROLL", label: "Payroll Extractor", desc: "Parsing payroll registers and employee earnings", mode: "Single File" },
+  { id: "SBC", label: "SBC (Summary of Benefits & Coverage)", desc: "Parity setup & benefit coverage parsing", mode: "Single File" },
+  { id: "RE", label: "RE (Resourcing Edge)", desc: "Resourcing Edge payroll processing engine", mode: "Single File" },
+  { id: "RENEWAL", label: "Renewal Process (Census & Rate Audit)", desc: "Census roster matching & benefit renewal audit", mode: "Subfolder Batch" },
+  { id: "RPVE", label: "RPVE (Rate & Payroll Verification)", desc: "Rate & Payroll verification engine", mode: "Subfolder Batch" },
+];
+
 function OneDrivePage() {
-  const [activeMode, setActiveMode] = useState<"local" | "cloud">("local");
+  const [activeMode, setActiveMode] = useState<"local" | "cloud">("cloud");
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
+  const [selectedEngine, setSelectedEngine] = useState("AUTO");
   const [maxPages, setMaxPages] = useState(3);
   const [model, setModel] = useState("gpt-4o");
   const [minScore, setMinScore] = useState(7.0);
@@ -67,7 +82,7 @@ function OneDrivePage() {
   const setupStatus = useQuery({
     queryKey: ["onedrive-setup"],
     queryFn: api.onedriveCheckSetup,
-    enabled: activeMode === "cloud",
+    enabled: true,
     retry: false,
   });
 
@@ -75,7 +90,7 @@ function OneDrivePage() {
   const profile = useQuery({
     queryKey: ["onedrive-profile"],
     queryFn: api.onedriveProfile,
-    enabled: activeMode === "cloud",
+    enabled: true,
     retry: false,
   });
 
@@ -126,6 +141,7 @@ function OneDrivePage() {
         llm_model: model,
         copy_mode: copyMode,
         dry_run: dryRun,
+        poc_engine: selectedEngine,
       });
       setResult(r);
       addActivity({ kind: "drive", title: "OneDrive Cloud classification done", detail: JSON.stringify(r).slice(0, 80) });
@@ -204,7 +220,7 @@ function OneDrivePage() {
   const s = status.data;
 
   return (
-    <>
+    <div className="space-y-4">
       <PageHeader
         icon={Cloud}
         title="OneDrive"
@@ -223,129 +239,20 @@ function OneDrivePage() {
         }
       />
 
-      <div className="flex gap-2 mb-4 bg-muted/60 p-1 rounded-md max-w-[340px] border border-border">
-        <button
-          onClick={() => { setActiveMode("local"); setResult(null); }}
-          className={cn(
-            "flex-1 text-[12px] font-medium py-1.5 rounded-sm transition-all text-center",
-            activeMode === "local"
-              ? "bg-background text-foreground shadow-sm font-semibold"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Local Sync Folder
-        </button>
-        <button
-          onClick={() => { setActiveMode("cloud"); setResult(null); }}
-          className={cn(
-            "flex-1 text-[12px] font-medium py-1.5 rounded-sm transition-all text-center",
-            activeMode === "cloud"
-              ? "bg-background text-foreground shadow-sm font-semibold"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Cloud Account (OAuth)
-        </button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <StatCard
+          label="OneDrive Cloud Setup"
+          value={setupStatus.data?.oauth_configured ? "Configured" : "Missing Config"}
+          icon={setupStatus.data?.oauth_configured ? CheckCircle2 : XCircle}
+          accent={setupStatus.data?.oauth_configured ? "success" : "destructive"}
+        />
+        <StatCard
+          label="Account Connection"
+          value={profile.data?.authenticated ? "Connected" : "Disconnected"}
+          icon={profile.data?.authenticated ? CheckCircle2 : XCircle}
+          accent={profile.data?.authenticated ? "success" : "muted"}
+        />
       </div>
-
-      {activeMode === "local" ? (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-            <StatCard
-              label="Connection"
-              value={s?.connected ? "Connected" : status.isError ? "Error" : "Checking…"}
-              icon={s?.connected ? CheckCircle2 : XCircle}
-              accent={s?.connected ? "success" : "destructive"}
-            />
-            <StatCard label="PDFs Ready" value={s?.pdf_count ?? 0} icon={FileText} />
-            <StatCard
-              label="OneDrive Root"
-              value={s?.onedrive_root ? "Mounted" : "—"}
-              icon={HardDrive}
-              hint={s?.onedrive_root || undefined}
-              accent={s?.onedrive_root ? "success" : "muted"}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <Panel title="OneDrive Sync Folders" description="Override defaults from .env">
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-[11.5px]">Input Folder</Label>
-                  <div className="flex gap-2 items-center mt-1">
-                    <Input value={input} onChange={(e) => setInput(e.target.value)} className="h-8 font-mono text-[12px] flex-1" placeholder={s?.onedrive_input || "C:\\Users\\Intern\\OneDrive\\uploads"} />
-                    <Button size="icon" variant="outline" className="h-8 w-8 shrink-0 shadow-sm hover:bg-accent" onClick={() => selectLocalFolder("input")}>
-                      <Search className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-[11.5px]">Output Folder</Label>
-                  <div className="flex gap-2 items-center mt-1">
-                    <Input value={output} onChange={(e) => setOutput(e.target.value)} className="h-8 font-mono text-[12px] flex-1" placeholder={s?.onedrive_output || "C:\\Users\\Intern\\OneDrive\\sorted"} />
-                    <Button size="icon" variant="outline" className="h-8 w-8 shrink-0 shadow-sm hover:bg-accent" onClick={() => selectLocalFolder("output")}>
-                      <Search className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <Label className="text-[11.5px]">Max Pages</Label>
-                    <Input type="number" min={1} max={20} value={maxPages} onChange={(e) => setMaxPages(Number(e.target.value))} className="h-8 mt-1" />
-                  </div>
-                  <div>
-                    <Label className="text-[11.5px]">LLM Model</Label>
-                    <Input value={model} onChange={(e) => setModel(e.target.value)} className="h-8 mt-1" />
-                  </div>
-                  <div>
-                    <Label className="text-[11.5px]">Min Score</Label>
-                    <Input type="number" min={0} max={10} step={0.1} value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} className="h-8 mt-1" />
-                  </div>
-                </div>
-                <div className="flex gap-6">
-                  <div className="flex items-center gap-2"><Switch checked={copyMode} onCheckedChange={setCopyMode} /><Label className="text-[11.5px]">Copy Mode</Label></div>
-                  <div className="flex items-center gap-2"><Switch checked={dryRun} onCheckedChange={setDryRun} /><Label className="text-[11.5px]">Dry Run</Label></div>
-                </div>
-                <div className="flex justify-end">
-                  <Button size="sm" onClick={runLocal} disabled={running || !s?.connected}>
-                    <Play className="w-3.5 h-3.5" /> {running ? "Running…" : "Run on Local OneDrive"}
-                  </Button>
-                </div>
-              </div>
-            </Panel>
-
-            <Panel title="Files in OneDrive" description={`${s?.pdf_count ?? 0} PDFs ready`}>
-              {!s || s.pdf_files.length === 0 ? (
-                <div className="text-[12.5px] text-muted-foreground text-center py-8">No PDFs found.</div>
-              ) : (
-                <ul className="divide-y divide-border max-h-72 overflow-auto">
-                  {s.pdf_files.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2 py-2 text-[12.5px]">
-                      <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      <span className="truncate font-mono">{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Panel>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            <StatCard
-              label="OneDrive Cloud Setup"
-              value={setupStatus.data?.oauth_configured ? "Configured" : "Missing Config"}
-              icon={setupStatus.data?.oauth_configured ? CheckCircle2 : XCircle}
-              accent={setupStatus.data?.oauth_configured ? "success" : "destructive"}
-            />
-            <StatCard
-              label="Account Connection"
-              value={profile.data?.authenticated ? "Connected" : "Disconnected"}
-              icon={profile.data?.authenticated ? CheckCircle2 : XCircle}
-              accent={profile.data?.authenticated ? "success" : "muted"}
-            />
-          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {!profile.data?.authenticated ? (
@@ -418,6 +325,42 @@ function OneDrivePage() {
                       </Button>
                     </div>
                   </div>
+
+                  <div>
+                    <Label className="text-[11.5px] font-semibold flex items-center gap-1.5 mb-1 text-foreground">
+                      <Cpu className="w-3.5 h-3.5 text-primary" /> Select POC Processing Engine
+                    </Label>
+                    <select
+                      value={selectedEngine}
+                      onChange={(e) => setSelectedEngine(e.target.value)}
+                      className="w-full h-8 px-2.5 text-[11.5px] rounded-md border border-input bg-background font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
+                    >
+                      {POC_ENGINES.map((eng) => (
+                        <option key={eng.id} value={eng.id}>
+                          {eng.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    {(() => {
+                      const activeObj = POC_ENGINES.find((e) => e.id === selectedEngine);
+                      if (!activeObj) return null;
+                      const isSubfolder = activeObj.mode === "Subfolder Batch";
+                      return (
+                        <div className={`mt-2 p-2.5 rounded-md border text-[11.5px] flex items-start gap-2 ${
+                          isSubfolder
+                            ? "bg-purple-500/10 border-purple-500/30 text-purple-700 dark:text-purple-300"
+                            : "bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300"
+                        }`}>
+                          <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-semibold">{activeObj.label}</div>
+                            <div className="text-[11px] opacity-90 mt-0.5">{activeObj.desc}</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
                       <Label className="text-[11.5px]">Max Pages</Label>
@@ -445,8 +388,6 @@ function OneDrivePage() {
               </Panel>
             )}
           </div>
-        </>
-      )}
 
       {result && (
         <Panel title="Last Run Result" className="mt-3">
@@ -520,14 +461,6 @@ function OneDrivePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <FolderPickerModal
-        open={localPickerOpen}
-        onClose={() => setLocalPickerOpen(false)}
-        onSelect={handleLocalFolderSelect}
-        title={localPickerType === "input" ? "Select Input Folder" : "Select Output Folder"}
-        initialPath={localPickerType === "input" ? input : output}
-      />
-    </>
+    </div>
   );
 }

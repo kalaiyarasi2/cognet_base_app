@@ -230,7 +230,15 @@ class EnhancedInsuranceExtractor:
         MODIFIED: Always prioritizes Rostaing-OCR (GPU) for layout preservation.
         """
         # from pdf_detector import PDFDetector  # Commented out to bypass detection
-        from config import config
+        import importlib.util
+        from pathlib import Path
+        _cfg_path = Path(__file__).parent / "config.py"
+        if not _cfg_path.exists():
+            _cfg_path = Path(__file__).parent / "insurance_config.py"
+        _spec = importlib.util.spec_from_file_location("local_insurance_config", str(_cfg_path))
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        config = _mod.config
         
         try:
             # if is_scanned is None:

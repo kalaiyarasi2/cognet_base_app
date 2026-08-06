@@ -126,12 +126,14 @@ class RequestMonitor:
         filename = "Unknown"
         doc_type = "GPU_SERVER"
         source_module = None
+        processed_by = "SYSTEM"
         with self.lock:
             if request_id in self.active_requests:
                 req_data = self.active_requests[request_id]
                 filename = req_data.get("filename") or "Unknown"
                 doc_type = req_data.get("document_type") or "GPU_SERVER"
                 source_module = req_data.get("source_module")
+                processed_by = req_data.get("processed_by") or "SYSTEM"
         
         if filename == "Unknown" or doc_type == "GPU_SERVER":
             db_data = monitor_db.get_request(request_id)
@@ -184,18 +186,19 @@ class RequestMonitor:
                     action=f"GPU Document Extraction ({doc_type_upper})",
                     file_name=filename,
                     status="SUCCESS",
-                    details=f"Extracted via GPU. Output files: {', '.join(output_files) if output_files else 'None'}"
+                    details=f"Extracted via GPU. Output files: {', '.join(output_files) if output_files else 'None'}",
+                    processed_by=processed_by
                 )
             elif "PARITY" in doc_type_upper or "SBC" in doc_type_upper:
-                poc_db.log_parity_run(request_id, filename, "SUCCESS", "Extracted via GPU")
+                poc_db.log_parity_run(request_id, filename, "SUCCESS", "Extracted via GPU", processed_by=processed_by)
             elif "RENEWAL" in doc_type_upper:
-                poc_db.log_renewal_run(request_id, "N/A", filename, "SUCCESS", ", ".join(output_files) if output_files else "")
+                poc_db.log_renewal_run(request_id, "N/A", filename, "SUCCESS", ", ".join(output_files) if output_files else "", processed_by=processed_by)
             elif "CLAIMS" in doc_type_upper or "WORK" in doc_type_upper or "RESOURCING" in doc_type_upper:
-                poc_db.log_resourcing_run(filename, "SUCCESS", "Extracted via GPU", ", ".join(output_files) if output_files else "")
+                poc_db.log_resourcing_run(filename, "SUCCESS", "Extracted via GPU", ", ".join(output_files) if output_files else "", processed_by=processed_by)
             elif "INVOICE" in doc_type_upper or "RPVE" in doc_type_upper:
-                poc_db.log_rpve_run(request_id, filename, "SUCCESS", "", "")
+                poc_db.log_rpve_run(request_id, filename, "SUCCESS", "", "", processed_by=processed_by)
             else:
-                poc_db.log_universal("GPU_SERVER", "Unified GPU Extraction", filename, "SUCCESS", f"Duration: {processing_time:.2f}s")
+                poc_db.log_universal("GPU_SERVER", "Unified GPU Extraction", filename, "SUCCESS", f"Duration: {processing_time:.2f}s", processed_by=processed_by)
         except Exception as e:
             logger.warning(f"Failed to log completed request to converter.db: {e}")
         
@@ -213,12 +216,14 @@ class RequestMonitor:
         filename = "Unknown"
         doc_type = "GPU_SERVER"
         source_module = None
+        processed_by = "SYSTEM"
         with self.lock:
             if request_id in self.active_requests:
                 req_data = self.active_requests[request_id]
                 filename = req_data.get("filename") or "Unknown"
                 doc_type = req_data.get("document_type") or "GPU_SERVER"
                 source_module = req_data.get("source_module")
+                processed_by = req_data.get("processed_by") or "SYSTEM"
         
         if filename == "Unknown" or doc_type == "GPU_SERVER":
             db_data = monitor_db.get_request(request_id)
@@ -265,18 +270,19 @@ class RequestMonitor:
                     action=f"GPU Document Extraction ({doc_type_upper})",
                     file_name=filename,
                     status="FAILED",
-                    details=error_details or "GPU Extraction failed"
+                    details=error_details or "GPU Extraction failed",
+                    processed_by=processed_by
                 )
             elif "PARITY" in doc_type_upper or "SBC" in doc_type_upper:
-                poc_db.log_parity_run(request_id, filename, "FAILED", error_message=error_details)
+                poc_db.log_parity_run(request_id, filename, "FAILED", error_message=error_details, processed_by=processed_by)
             elif "RENEWAL" in doc_type_upper:
-                poc_db.log_renewal_run(request_id, "N/A", filename, "FAILED", error_message=error_details)
+                poc_db.log_renewal_run(request_id, "N/A", filename, "FAILED", error_message=error_details, processed_by=processed_by)
             elif "CLAIMS" in doc_type_upper or "WORK" in doc_type_upper or "RESOURCING" in doc_type_upper:
-                poc_db.log_resourcing_run(filename, "FAILED", error_message=error_details)
+                poc_db.log_resourcing_run(filename, "FAILED", error_message=error_details, processed_by=processed_by)
             elif "INVOICE" in doc_type_upper or "RPVE" in doc_type_upper:
-                poc_db.log_rpve_run(request_id, filename, "FAILED", error_message=error_details)
+                poc_db.log_rpve_run(request_id, filename, "FAILED", error_message=error_details, processed_by=processed_by)
             else:
-                poc_db.log_universal("GPU_SERVER", "Unified GPU Extraction", filename, "FAILED", error_details)
+                poc_db.log_universal("GPU_SERVER", "Unified GPU Extraction", filename, "FAILED", error_details, processed_by=processed_by)
         except Exception as e:
             logger.warning(f"Failed to log failed request to converter.db: {e}")
         

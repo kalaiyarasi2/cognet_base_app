@@ -32,8 +32,30 @@ OUTPUT_DIR = BASE_DIR / "output"
 INPUT_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Serve the output directory statically for downloads
-app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
+# Explicit output endpoint with URL unquoting for filenames with spaces (%20)
+@app.get("/output/{filename:path}")
+async def get_output_file(filename: str):
+    import urllib.parse
+    decoded_name = urllib.parse.unquote(filename)
+    target_path = OUTPUT_DIR / decoded_name
+    
+    if not target_path.exists():
+        target_path = OUTPUT_DIR / filename
+        
+    if not target_path.exists():
+        for f in OUTPUT_DIR.iterdir():
+            if f.name.lower() in (decoded_name.lower(), filename.lower()):
+                target_path = f
+                break
+
+    if not target_path.exists():
+        raise HTTPException(status_code=404, detail=f"File '{filename}' not found in output directory")
+        
+    return FileResponse(
+        path=target_path,
+        filename=target_path.name,
+        media_type="application/octet-stream"
+    )
 
 # In-memory database of jobs
 # job_id -> {
@@ -143,12 +165,8 @@ async def process_renewal(
         census_size = len(census_contents)
             
         # Run the backend python script as a subprocess
-        # Search for python in venv (Windows: Scripts, Linux/macOS: bin)
-        python_exe = str(BASE_DIR / "venv" / "Scripts" / "python.exe")
-        if not os.path.exists(python_exe):
-            python_exe = str(BASE_DIR / "venv" / "bin" / "python")
-            if not os.path.exists(python_exe):
-                python_exe = "python"
+        # Use sys.executable to ensure subprocess uses the active virtual environment
+        python_exe = sys.executable
         
         script_path = str(BASE_DIR / "invoice_census_audit.py")
         

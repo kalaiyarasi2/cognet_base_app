@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import {
   Users, UserPlus, ShieldCheck, UserRound, CheckCircle2, XCircle,
   Loader2, RefreshCw, Building2, Mail, Search, AlertTriangle, Trash2,
+  Globe, Activity, Clock, Laptop, LogOut
 } from "lucide-react";
 import { useAuth } from "@/lib/store";
-import { api } from "@/lib/api";
+import { api, type UserSessionRecord } from "@/lib/api";
 import { toast } from "sonner";
 
 interface PermissionRow {
@@ -34,7 +35,9 @@ export function UserManagement() {
   const { token, user: adminUser } = useAuth();
   const [permissions, setPermissions] = useState<PermissionRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [sessions, setSessions] = useState<UserSessionRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchPermissions, setSearchPermissions] = useState("");
@@ -48,6 +51,28 @@ export function UserManagement() {
 
   const tk = token ?? "";
 
+  async function fetchSessions() {
+    setSessionsLoading(true);
+    try {
+      const res = await api.getActiveSessions();
+      setSessions(res.sessions ?? []);
+    } catch (e) {
+      console.error("Failed to load active sessions:", e);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }
+
+  async function handleRevokeSession(sessionId: number) {
+    try {
+      await api.revokeSession(sessionId);
+      toast.success("User session revoked.");
+      fetchSessions();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to revoke session.");
+    }
+  }
+
   async function fetchData() {
     if (!tk) return;
     setLoading(true);
@@ -56,6 +81,7 @@ export function UserManagement() {
       const res = await api.getAdminUsers(tk);
       setPermissions(res.permissions ?? []);
       setEmployees(res.employee_directory ?? []);
+      await fetchSessions();
     } catch (e: any) {
       setError(e?.message ?? "Failed to load user data.");
     } finally {
@@ -63,7 +89,11 @@ export function UserManagement() {
     }
   }
 
-  useEffect(() => { fetchData(); }, [tk]);
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchSessions, 10000);
+    return () => clearInterval(interval);
+  }, [tk]);
 
   async function handleGrant(email: string, name: string, role: string, source = "EXISTING_DB", allowed_modules = "ALL") {
     setActionLoading(email);

@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 from insurance_extractor import EnhancedInsuranceExtractor
-from config import config
+from insurance_config import config
 
 def test_vision_extraction():
     # Ensure vision is enabled in config

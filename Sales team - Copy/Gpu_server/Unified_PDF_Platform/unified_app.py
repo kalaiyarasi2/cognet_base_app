@@ -262,7 +262,7 @@ async def download_file(filepath: str):
     
     # Try searching in the insurance outputs directory (searching by filename)
     if not file_path.exists():
-        insurance_outputs = Path("c:/Users/Administrator/pdf_extractor/work_compenstaion/backend/outputs")
+        insurance_outputs = BASE_DIR.parent / "work_compenstaion" / "backend" / "outputs"
         # Try to find a directory that matches the requestId if possible
         if "/" in original_filepath:
             req_id = original_filepath.split("/")[0]
