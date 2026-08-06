@@ -27,7 +27,7 @@ function Dashboard() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  // Guard: if user does not have 'dashboard' permission, redirect to their first allowed module
+  // Guard: if user is not ADMIN, redirect to their first allowed module
   useEffect(() => {
     if (user && user.role !== "ADMIN") {
       const rawModules = user.allowed_modules;
@@ -35,16 +35,37 @@ function Dashboard() {
       if (Array.isArray(rawModules)) {
         allowedList = rawModules;
       } else if (typeof rawModules === "string" && rawModules !== "ALL") {
-        allowedList = rawModules.split(",").map((s) => s.trim());
+        allowedList = rawModules.split(",").map((s) => s.trim().toUpperCase());
       } else if (rawModules === "ALL") {
-        return;
+        // If they have ALL but are not admin, fallback to their first likely module
+        allowedList = ["CONVERTER"];
       }
 
-      if (!allowedList.includes("dashboard")) {
-        const firstModule = allowedList[0];
-        if (firstModule) {
-          navigate({ to: `/${firstModule}` as any });
-        }
+      const getModuleUrl = (moduleCode: string) => {
+        const routeMap: Record<string, string> = {
+          "INVOICE": "/drive-gpu?pipeline=INVOICE",
+          "SBC": "/parity-setup",
+          "RPVE": "/rpve",
+          "RE": "/resourcing-edge",
+          "LOSS_RUN": "/drive-gpu?pipeline=INSURANCE",
+          "WORK_COMP": "/drive-gpu?pipeline=WORK_COMP",
+          "BANK_STATEMENT": "/drive-gpu?pipeline=BANK_STATEMENT",
+          "VENDOR_INVOICE": "/drive-gpu?pipeline=VENDOR_INVOICE",
+          "DRIVE_GPU": "/drive-gpu",
+          "RENEWAL": "/renewal-process",
+          "PIPELINE": "/pipeline",
+          "CONVERTER": "/converter",
+          "PAYROLL": "/payroll-extractor",
+          "EXTRACTION": "/extraction",
+          "CLASSIFICATION": "/classification"
+        };
+        return routeMap[moduleCode] || `/${moduleCode.toLowerCase()}`;
+      };
+
+      const validModules = allowedList.filter(m => m !== "DASHBOARD");
+      const firstModule = validModules[0];
+      if (firstModule) {
+        navigate({ to: getModuleUrl(firstModule) as any });
       }
     }
   }, [user]);

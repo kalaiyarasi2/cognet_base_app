@@ -110,6 +110,10 @@ export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) 
                 <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-wider leading-none mt-0.5 flex items-center gap-0.5">
                   <ShieldCheck className="w-2.5 h-2.5" /> Admin
                 </span>
+              ) : displayRole === "TENANT_ADMIN" ? (
+                <span className="text-[9px] font-semibold text-blue-500 uppercase tracking-wider leading-none mt-0.5 flex items-center gap-0.5">
+                  <ShieldCheck className="w-2.5 h-2.5" /> Tenant Admin
+                </span>
               ) : (
                 <span className="text-[9px] font-semibold text-blue-500 uppercase tracking-wider leading-none mt-0.5 flex items-center gap-0.5">
                   <UserRound className="w-2.5 h-2.5" /> User
@@ -128,6 +132,10 @@ export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) 
                 <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-semibold uppercase tracking-wider">
                   <ShieldCheck className="w-2.5 h-2.5" /> Admin
                 </span>
+              ) : displayRole === "TENANT_ADMIN" ? (
+                <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-semibold uppercase tracking-wider">
+                  <ShieldCheck className="w-2.5 h-2.5" /> Tenant Admin
+                </span>
               ) : (
                 <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-semibold uppercase tracking-wider">
                   <UserRound className="w-2.5 h-2.5" /> User
@@ -143,14 +151,14 @@ export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) 
             <Info className="w-3.5 h-3.5" /> About
           </DropdownMenuItem>
           {displayRole === "ADMIN" && (
-            <>
-              <DropdownMenuItem onClick={() => navigate({ to: "/tenants" })}>
-                <Building2 className="w-3.5 h-3.5" /> Tenant Management
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate({ to: "/access" })}>
-                <User className="w-3.5 h-3.5" /> User Access
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem onClick={() => navigate({ to: "/tenants" })}>
+              <Building2 className="w-3.5 h-3.5" /> Tenant Management
+            </DropdownMenuItem>
+          )}
+          {(displayRole === "ADMIN" || displayRole === "TENANT_ADMIN") && (
+            <DropdownMenuItem onClick={() => navigate({ to: "/access" })}>
+              <User className="w-3.5 h-3.5" /> User Access
+            </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem className="text-destructive" onClick={handleLogout} id="header-signout-btn">

@@ -305,31 +305,6 @@ async def download_file(filepath: str):
     return FileResponse(path=file_path, filename=filename, media_type=media_type)
 
 
-@app.get("/{path:path}", response_class=HTMLResponse)
-async def serve_frontend(request: Request, path: str = ""):
-    """Serve the React frontend for any non-API routes."""
-    # This catch-all route should be at the very bottom
-    
-    # Check if the requested path is a file in the dist folder (e.g., Logo.png)
-    file_in_dist = frontend_dist_path / path
-    if path and file_in_dist.exists() and file_in_dist.is_file():
-        # Determine media type based on extension
-        ext = file_in_dist.suffix.lower()
-        media_type = "application/octet-stream"
-        if ext == ".png": media_type = "image/png"
-        elif ext == ".jpg" or ext == ".jpeg": media_type = "image/jpeg"
-        elif ext == ".svg": media_type = "image/svg+xml"
-        elif ext == ".ico": media_type = "image/x-icon"
-        elif ext == ".txt": media_type = "text/plain"
-        
-        return FileResponse(path=file_in_dist, media_type=media_type)
-
-    index_path = frontend_dist_path / "index.html"
-    if index_path.exists():
-        with open(index_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
-            
-    return HTMLResponse(content="<h1>Frontend not built</h1><p>Please run <code>npm run build</code> in the frontend directory.</p>", status_code=404)
 
 class DriveClassifyRequest(BaseModel):
     input_folder: str
@@ -616,6 +591,32 @@ async def drive_classify(body: DriveClassifyRequest):
         "processed": len(pdf_files),
         "results": results
     }
+
+@app.get("/{path:path}", response_class=HTMLResponse)
+async def serve_frontend(request: Request, path: str = ""):
+    """Serve the React frontend for any non-API routes."""
+    # This catch-all route should be at the very bottom
+    
+    # Check if the requested path is a file in the dist folder (e.g., Logo.png)
+    file_in_dist = frontend_dist_path / path
+    if path and file_in_dist.exists() and file_in_dist.is_file():
+        # Determine media type based on extension
+        ext = file_in_dist.suffix.lower()
+        media_type = "application/octet-stream"
+        if ext == ".png": media_type = "image/png"
+        elif ext == ".jpg" or ext == ".jpeg": media_type = "image/jpeg"
+        elif ext == ".svg": media_type = "image/svg+xml"
+        elif ext == ".ico": media_type = "image/x-icon"
+        elif ext == ".txt": media_type = "text/plain"
+        
+        return FileResponse(path=file_in_dist, media_type=media_type)
+
+    index_path = frontend_dist_path / "index.html"
+    if index_path.exists():
+        with open(index_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+            
+    return HTMLResponse(content="<h1>Frontend not built</h1><p>Please run <code>npm run build</code> in the frontend directory.</p>", status_code=404)
 
 if __name__ == "__main__":
     import uvicorn

@@ -55,8 +55,10 @@ function LoginPage() {
         { 
           email: res.user.email, 
           name: res.user.name, 
-          role: res.user.role as "ADMIN" | "USER",
-          allowed_modules: res.user.allowed_modules
+          role: res.user.role as "ADMIN" | "TENANT_ADMIN" | "USER",
+          allowed_modules: res.user.allowed_modules,
+          can_manage_tenants: res.user.can_manage_tenants,
+          can_manage_users: res.user.can_manage_users,
         },
         res.token
       );

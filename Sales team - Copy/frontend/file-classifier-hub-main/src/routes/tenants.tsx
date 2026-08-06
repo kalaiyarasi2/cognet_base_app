@@ -40,9 +40,22 @@ const ALL_MODULES = [
   // Finance Category
   { code: "BANK_STATEMENT", name: "Bank Statement Extractor", desc: "Financial Bank Statement Parsing (Finance)" },
   { code: "VENDOR_INVOICE", name: "Vendor Invoice Extractor", desc: "Vendor Invoice Verification (Finance)" },
+
+  // Tools & Core Engines
+  { code: "EXTRACTION", name: "Text Extraction", desc: "Document Text Extraction Engine" },
+  { code: "CLASSIFICATION", name: "Classification", desc: "AI Document Classification Engine" },
+  { code: "CONVERTER", name: "File Converter", desc: "Multi-format Document Converter" },
+  { code: "PIPELINE", name: "File Organiser", desc: "Automated Pipeline Organiser" },
+
+  // Integration
+  { code: "DRIVE", name: "Google Drive", desc: "Google Drive Cloud Integration" },
+  { code: "ONEDRIVE", name: "OneDrive", desc: "Microsoft OneDrive Integration" },
+  { code: "SHAREPOINT", name: "SharePoint", desc: "SharePoint Automation" },
+  { code: "OUTLOOK", name: "Outlook Agent", desc: "Outlook Email Integration" },
+  { code: "CO-PILOT", name: "Work Flow Designer", desc: "Visual Work Flow Builder" },
 ];
 
-export function TenantManagementPage() {
+function TenantManagementPage() {
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -291,93 +304,144 @@ export function TenantManagementPage() {
       {/* Modal for Creating New Tenant */}
       {showModal && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-xl shadow-xl max-w-md w-full p-6 space-y-5">
-            <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="bg-card border border-border rounded-xl shadow-xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-border p-5 shrink-0">
               <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-primary" /> Create New Tenant
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-muted-foreground hover:text-foreground text-sm">
+              <button type="button" onClick={() => setShowModal(false)} className="text-muted-foreground hover:text-foreground text-sm">
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreateTenant} className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-1">Tenant Name <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  placeholder="e.g. XYZ Enterprises"
-                  value={tenantName}
-                  onChange={(e) => setTenantName(e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                  required
-                />
-              </div>
+            <form onSubmit={handleCreateTenant} className="flex flex-col overflow-hidden">
+              <div className="p-5 overflow-y-auto space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1">Tenant Name <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      placeholder="e.g. XYZ Enterprises"
+                      value={tenantName}
+                      onChange={(e) => setTenantName(e.target.value)}
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                      required
+                    />
+                  </div>
 
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-1">Tenant Code (Unique ID) <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  placeholder="e.g. CLIENT_B"
-                  value={tenantCode}
-                  onChange={(e) => setTenantCode(e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-1">
-                  Tenant Contact Email <span className="text-red-500 font-bold">*</span> (DB Connection)
-                </label>
-                <input
-                  type="email"
-                  placeholder="e.g. admin@xyzenterprises.com"
-                  value={tenantEmail}
-                  onChange={(e) => setTenantEmail(e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-2">Enable System Modules</label>
-                <div className="space-y-2">
-                  {ALL_MODULES.map((mod) => {
-                    const isChecked = selectedModules.includes(mod.code);
-                    return (
-                      <div
-                        key={mod.code}
-                        onClick={() => toggleModuleSelection(mod.code)}
-                        className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-colors ${
-                          isChecked ? "bg-primary/10 border-primary/40 text-foreground" : "bg-muted/20 border-border text-muted-foreground"
-                        }`}
-                      >
-                        <div>
-                          <div className="font-semibold font-mono">{mod.code} - {mod.name}</div>
-                          <div className="text-[10px] text-muted-foreground">{mod.desc}</div>
-                        </div>
-                        {isChecked ? <CheckSquare className="w-4 h-4 text-primary shrink-0" /> : <Square className="w-4 h-4 shrink-0" />}
-                      </div>
-                    );
-                  })}
+                  <div>
+                    <label className="text-xs font-medium text-foreground block mb-1">Tenant Code (Unique ID) <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      placeholder="e.g. CLIENT_B"
+                      value={tenantCode}
+                      onChange={(e) => setTenantCode(e.target.value)}
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                      required
+                    />
+                  </div>
                 </div>
+
+                <div>
+                  <label className="text-xs font-medium text-foreground block mb-1">
+                    Tenant Contact Email <span className="text-red-500 font-bold">*</span> (DB Connection)
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="e.g. admin@xyzenterprises.com"
+                    value={tenantEmail}
+                    onChange={(e) => setTenantEmail(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-5 border border-border bg-muted/10 p-4 rounded-xl">
+                  {/* Automation Modules */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-foreground mb-2.5 flex items-center gap-1.5 border-b border-border pb-1">
+                      <Layers className="w-3.5 h-3.5 text-blue-500" /> 1. Enable System Modules (Automation)
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {ALL_MODULES.filter(m => ["ACCORD", "LOSS_RUN", "INVOICE", "RPVE", "SBC", "RE", "BANK_STATEMENT", "VENDOR_INVOICE"].includes(m.code)).map((mod) => {
+                        const isChecked = selectedModules.includes(mod.code);
+                        return (
+                          <div
+                            key={mod.code}
+                            onClick={() => toggleModuleSelection(mod.code)}
+                            className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
+                              isChecked ? "bg-primary/10 border-primary/40 text-foreground shadow-sm" : "bg-card border-border text-muted-foreground hover:bg-muted/50"
+                            }`}
+                          >
+                            <div className="truncate pr-2">
+                              <div className="font-semibold font-mono truncate">{mod.code}</div>
+                              <div className="text-[9.5px] text-muted-foreground truncate" title={mod.name}>{mod.name}</div>
+                            </div>
+                            {isChecked ? <CheckSquare className="w-4 h-4 text-primary shrink-0" /> : <Square className="w-4 h-4 shrink-0" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Integration Modules */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-foreground mb-2.5 flex items-center gap-1.5 border-b border-border pb-1">
+                      <RefreshCw className="w-3.5 h-3.5 text-emerald-500" /> 2. Enable System Integration Modules
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {ALL_MODULES.filter(m => ["DRIVE", "ONEDRIVE", "SHAREPOINT", "OUTLOOK", "CO-PILOT"].includes(m.code)).map((mod) => {
+                        const isChecked = selectedModules.includes(mod.code);
+                        return (
+                          <div
+                            key={mod.code}
+                            onClick={() => toggleModuleSelection(mod.code)}
+                            className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
+                              isChecked ? "bg-primary/10 border-primary/40 text-foreground shadow-sm" : "bg-card border-border text-muted-foreground hover:bg-muted/50"
+                            }`}
+                          >
+                            <div className="truncate pr-2">
+                              <div className="font-semibold font-mono truncate">{mod.code}</div>
+                              <div className="text-[9.5px] text-muted-foreground truncate" title={mod.name}>{mod.name}</div>
+                            </div>
+                            {isChecked ? <CheckSquare className="w-4 h-4 text-primary shrink-0" /> : <Square className="w-4 h-4 shrink-0" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Tools Modules */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-foreground mb-2.5 flex items-center gap-1.5 border-b border-border pb-1">
+                      <Sliders className="w-3.5 h-3.5 text-amber-500" /> 3. Enable System Tools Modules
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {ALL_MODULES.filter(m => ["EXTRACTION", "CLASSIFICATION", "CONVERTER", "PIPELINE"].includes(m.code)).map((mod) => {
+                        const isChecked = selectedModules.includes(mod.code);
+                        return (
+                          <div
+                            key={mod.code}
+                            onClick={() => toggleModuleSelection(mod.code)}
+                            className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
+                              isChecked ? "bg-primary/10 border-primary/40 text-foreground shadow-sm" : "bg-card border-border text-muted-foreground hover:bg-muted/50"
+                            }`}
+                          >
+                            <div className="truncate pr-2">
+                              <div className="font-semibold font-mono truncate">{mod.code}</div>
+                              <div className="text-[9.5px] text-muted-foreground truncate" title={mod.name}>{mod.name}</div>
+                            </div>
+                            {isChecked ? <CheckSquare className="w-4 h-4 text-primary shrink-0" /> : <Square className="w-4 h-4 shrink-0" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
               </div>
 
-              <div>
-                <label className="text-xs font-medium text-foreground block mb-1">Default Confidence Threshold: {(threshold * 100).toFixed(0)}%</label>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="0.95"
-                  step="0.05"
-                  value={threshold}
-                  onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                  className="w-full accent-primary"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <div className="flex justify-end gap-2 p-5 border-t border-border shrink-0 bg-muted/10">
                 <Button type="button" variant="outline" size="sm" onClick={() => setShowModal(false)}>
                   Cancel
                 </Button>

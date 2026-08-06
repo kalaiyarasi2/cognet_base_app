@@ -378,3 +378,35 @@ async def delete_tenant_endpoint(tenant_code: str):
         raise HTTPException(status_code=404, detail=f"Tenant '{tenant_code}' not found.")
     return {"status": "ok", "message": f"Tenant '{tenant_code}' deleted successfully."}
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Tenant Module Access Endpoint (used by useTenant.ts frontend hook)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/modules")
+async def get_tenant_modules(tenant_code: str = "GLOBAL"):
+    """
+    Return enabled modules for a given tenant_code.
+    Called by the frontend useTenant() hook to enforce tenant-level module permissions.
+    Falls back to a default module list if the tenant is not found.
+    """
+    tenant = poc_db.get_tenant(tenant_code)
+    if tenant:
+        return {
+            "status": "ok",
+            "tenant_id": tenant.get("tenant_id"),
+            "tenant_code": tenant.get("tenant_code", tenant_code),
+            "tenant_name": tenant.get("tenant_name", tenant_code),
+            "active": tenant.get("active", True),
+            "enabled_modules": tenant.get("enabled_modules", ["INVOICE", "SBC"]),
+            "email": tenant.get("email", ""),
+        }
+    # Fallback: tenant not found — return a permissive default
+    return {
+        "status": "ok",
+        "tenant_id": None,
+        "tenant_code": tenant_code,
+        "tenant_name": tenant_code,
+        "active": True,
+        "enabled_modules": ["INVOICE", "SBC", "RPVE", "RE", "ACCORD", "LOSS_RUN", "BANK_STATEMENT", "VENDOR_INVOICE"],
+        "email": "",
+    }
+

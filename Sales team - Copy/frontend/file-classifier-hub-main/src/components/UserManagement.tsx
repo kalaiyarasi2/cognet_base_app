@@ -109,25 +109,32 @@ export function UserManagement() {
 
   // Module permission checkboxes
   const AVAILABLE_MODULES = [
-    { id: "dashboard", label: "Dashboard (Home)" },
-    { id: "converter", label: "File Converter" },
-    { id: "parity-setup", label: "Parity Setup (SBC)" },
-    { id: "renewal-process", label: "Renewal Process" },
-    { id: "resourcing-edge", label: "Resourcing Edge" },
-    { id: "rpve", label: "RPVE" },
-    { id: "pipeline", label: "File Organiser" },
-    { id: "drive", label: "Google Drive" },
-    { id: "onedrive", label: "OneDrive" },
-    { id: "sharepoint", label: "SharePoint Automation" },
-    { id: "drive-gpu", label: "GPU-Accelerated Drive" },
-    { id: "extraction", label: "Text Extraction" },
-    { id: "classification", label: "Classification" },
-    { id: "health", label: "System Health" },
-    { id: "logs", label: "Logs" },
-    { id: "configuration", label: "Configuration" },
+    { id: "CONVERTER", label: "File Converter" },
+    { id: "SBC", label: "Parity Setup (SBC)" },
+    { id: "RENEWAL", label: "Renewal Process" },
+    { id: "RE", label: "Resourcing Edge" },
+    { id: "RPVE", label: "RPVE" },
+    { id: "PIPELINE", label: "File Organiser" },
+    { id: "DRIVE", label: "Google Drive" },
+    { id: "ONEDRIVE", label: "OneDrive" },
+    { id: "SHAREPOINT", label: "SharePoint Automation" },
+    { id: "OUTLOOK", label: "Outlook Agent" },
+    { id: "CO-PILOT", label: "Work Flow Designer" },
+    { id: "DRIVE_GPU", label: "Master GPU Engine" },
+    { id: "WORK_COMP", label: "Accord (Work Comp)" },
+    { id: "LOSS_RUN", label: "Insurance (Loss Run)" },
+    { id: "INVOICE", label: "Invoice" },
+    { id: "PAYROLL", label: "Payroll Extractor" },
+    { id: "BANK_STATEMENT", label: "Bank Statement" },
+    { id: "VENDOR_INVOICE", label: "Vendor Invoice" },
+    { id: "EXTRACTION", label: "Text Extraction" },
+    { id: "CLASSIFICATION", label: "Classification" },
+    { id: "HEALTH", label: "System Health" },
+    { id: "LOGS", label: "Logs" },
+    { id: "CONFIGURATION", label: "Configuration" },
   ];
 
-  const [selectedModules, setSelectedModules] = useState<string[]>(["dashboard", "converter", "parity-setup"]);
+  const [selectedModules, setSelectedModules] = useState<string[]>(["CONVERTER", "SBC"]);
 
   function toggleModule(modId: string) {
     setSelectedModules((prev) =>
@@ -153,7 +160,7 @@ export function UserManagement() {
       setInviteEmail("");
       setInviteName("");
       setInviteRole("USER");
-      setSelectedModules(["converter", "parity-setup"]);
+      setSelectedModules(["CONVERTER", "SBC"]);
       await fetchData();
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to grant access.");
@@ -372,6 +379,10 @@ export function UserManagement() {
                       {p.role === "ADMIN" ? (
                         <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-semibold uppercase tracking-wider">
                           <ShieldCheck className="w-2.5 h-2.5" /> Admin
+                        </span>
+                      ) : p.role === "TENANT_ADMIN" ? (
+                        <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-semibold uppercase tracking-wider">
+                          <ShieldCheck className="w-2.5 h-2.5" /> Tenant Admin
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-semibold uppercase tracking-wider">

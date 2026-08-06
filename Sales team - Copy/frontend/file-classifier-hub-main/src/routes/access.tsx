@@ -11,15 +11,15 @@ function AccessPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Admin-only guard — redirect non-admins immediately
+  // Admin/Tenant-Admin guard — redirect unauthorized users immediately
   useEffect(() => {
-    if (user && user.role !== "ADMIN") {
+    if (user && user.role !== "ADMIN" && user.role !== "TENANT_ADMIN" && !user.can_manage_users) {
       navigate({ to: "/" });
     }
   }, [user]);
 
-  // Don't render anything for non-admins while redirecting
-  if (!user || user.role !== "ADMIN") {
+  // Don't render anything for unauthorized users while redirecting
+  if (!user || (user.role !== "ADMIN" && user.role !== "TENANT_ADMIN" && !user.can_manage_users)) {
     return null;
   }
 

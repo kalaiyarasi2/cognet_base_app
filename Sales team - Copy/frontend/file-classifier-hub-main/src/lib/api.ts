@@ -179,12 +179,12 @@ export const api = {
   }) => request<any>("/drive/classify", { method: "POST", body: JSON.stringify(body) }),
 
   gpuDriveStatus: (input_folder?: string) =>
-    request<DriveStatusResponse>("/api/gpu-drive/status", undefined, input_folder ? { input_folder } : undefined),
+    request<DriveStatusResponse>("/api/gpu/api/drive/status", undefined, input_folder ? { input_folder } : undefined),
 
   gpuDriveClassify: (body: {
     input_folder: string; output_folder: string;
     max_pages?: number; min_score?: number; model?: string;
-  }) => request<any>("/api/gpu-drive/classify", { method: "POST", body: JSON.stringify(body) }),
+  }) => request<any>("/api/gpu/api/drive/classify", { method: "POST", body: JSON.stringify(body) }),
 
   gpuExtractDirect: (file: File, pipeline?: string) => {
     const fd = new FormData();
@@ -381,7 +381,7 @@ export const api = {
     ),
 
   /** Forgot / Reset password */
-  forgotPassword: (email: string, new_password: str) =>
+  forgotPassword: (email: string, new_password: string) =>
     request<{ status: string; message: string }>(
       "/api/auth/forgot-password",
       { method: "POST", body: JSON.stringify({ email, new_password }) }

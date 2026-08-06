@@ -105,7 +105,7 @@ export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onTogg
     }
 
     if (item.to === "/") {
-      return allowedList.includes("dashboard") || allowedList.includes("DASHBOARD");
+      return user?.role === "ADMIN";
     }
 
     const moduleKey = (item.moduleCode || item.to.replace(/^\//, "").split("?")[0]).toUpperCase();
