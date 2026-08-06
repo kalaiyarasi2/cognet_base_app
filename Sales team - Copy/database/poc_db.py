@@ -5,22 +5,18 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-DB_PATHS = [
-    BASE_DIR / "file-classification-" / "converter.db",
-    BASE_DIR / "converter.db"
-]
+DB_PATH = BASE_DIR / "converter.db"
 
 def get_connections():
-    conns = []
-    for p in DB_PATHS:
-        try:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(str(p), check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            conns.append(conn)
-        except Exception:
-            pass
-    return conns
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False, timeout=60.0)
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=30000;")
+    except Exception:
+        pass
+    return [conn]
 
 def init_poc_tables():
     conns = get_connections()
@@ -121,7 +117,7 @@ def init_poc_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL,
             full_name TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('ADMIN', 'USER')),
+            role TEXT NOT NULL CHECK(role IN ('ADMIN', 'TENANT_ADMIN', 'USER')),
             access_status TEXT DEFAULT 'GRANTED' CHECK(access_status IN ('GRANTED', 'REVOKED')),
             source TEXT CHECK(source IN ('MANUAL', 'EXISTING_DB')),
             granted_by TEXT NOT NULL,
@@ -141,6 +137,31 @@ def init_poc_tables():
             cursor.execute("ALTER TABLE app_permissions ADD COLUMN password_hash TEXT")
         except Exception:
             pass
+            
+        # Migration: Recreate table if old CHECK constraint limits role to just 'ADMIN', 'USER'
+        try:
+            cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='app_permissions'")
+            row = cursor.fetchone()
+            if row and "'ADMIN', 'USER'" in row[0]:
+                cursor.execute("ALTER TABLE app_permissions RENAME TO app_permissions_old")
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS app_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT UNIQUE NOT NULL,
+                    full_name TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(role IN ('ADMIN', 'TENANT_ADMIN', 'USER')),
+                    access_status TEXT DEFAULT 'GRANTED' CHECK(access_status IN ('GRANTED', 'REVOKED')),
+                    source TEXT CHECK(source IN ('MANUAL', 'EXISTING_DB')),
+                    granted_by TEXT NOT NULL,
+                    allowed_modules TEXT DEFAULT 'ALL',
+                    granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    password_hash TEXT
+                );
+                """)
+                cursor.execute("INSERT INTO app_permissions (id, email, full_name, role, access_status, source, granted_by, allowed_modules, granted_at, password_hash) SELECT id, email, full_name, role, access_status, source, granted_by, allowed_modules, granted_at, password_hash FROM app_permissions_old")
+                cursor.execute("DROP TABLE app_permissions_old")
+        except Exception as e:
+            print(f"[WARN] Failed to migrate app_permissions table constraint: {e}")
 
         # 8. Workflow Projects Table (Co-Pilot Saved Workflows)
         cursor.execute("""
@@ -168,89 +189,43 @@ def init_poc_tables():
         );
         """)
 
+        # 10. Tenant Management Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tenants (
+            tenant_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_code TEXT UNIQUE NOT NULL,
+            tenant_name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            active INTEGER DEFAULT 1,
+            enabled_modules TEXT DEFAULT 'INVOICE,SBC',
+            output_root TEXT DEFAULT '',
+            default_confidence_threshold REAL DEFAULT 0.85,
+            created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # Migrations for tenants table
+        try:
+            cursor.execute("ALTER TABLE tenants ADD COLUMN output_root TEXT DEFAULT ''")
+        except Exception:
+            pass
+            
+        try:
+            cursor.execute("ALTER TABLE tenants ADD COLUMN default_confidence_threshold REAL DEFAULT 0.85")
+        except Exception:
+            pass
+            
+        try:
+            cursor.execute("ALTER TABLE tenants ADD COLUMN created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception:
+            pass
+
         conn.commit()
         _seed_initial_records(cursor, conn)
         conn.close()
 
 def _seed_initial_records(cursor, conn):
-    # Seed Universal History if empty
-    cursor.execute("SELECT COUNT(*) FROM universal_history")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO universal_history (module, action, file_name, status, details, created_date)
-        VALUES 
-        ('PARITY_SETUP', 'SBC Extraction & Plan Parity', 'SBC_Benefit_Plan_2026.pdf', 'SUCCESS', 'Carrier: BCBS, Copay: $25 Specialist / $15 PCP', datetime('now', '-2 hours')),
-        ('RENEWAL_PROCESS', 'Census Roster Rate Audit', 'Employee_Census_2026.xlsx & BCBS_Invoice.pdf', 'SUCCESS', 'Matched members & calculated updated renewal census', datetime('now', '-1 hours')),
-        ('RESOURCING_EDGE', 'Insurance Plan Schema Parse', '91812_116079 Plan and Rate Comparison.pdf', 'SUCCESS', 'Iris ID Systems Medical & Dental extracted structure.json', datetime('now', '-30 minutes')),
-        ('RPVE', 'Ingestion Flow Verification', 'MED- Aetna July Invoice.pdf & RAPT Census.xlsx', 'SUCCESS', 'Insurer: Aetna Health Inc, Total Value: $13,754.25', datetime('now', '-5 minutes')),
-        ('CONVERTER', 'Excel to JSON Format Conversion', 'LLM_RESOLVED_AUDIT_REPORT.xlsx', 'SUCCESS', 'Converted to json output format', datetime('now', '-3 minutes'))
-        """)
-
-    # Seed Parity
-    cursor.execute("SELECT COUNT(*) FROM parity_history")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO parity_history (task_id, original_file_name, status, copay_summary, created_date)
-        VALUES 
-        ('task_sbc_01', 'SBC_Benefit_Plan_2026.pdf', 'SUCCESS', 'Copay: $25 Specialist / $15 PCP', datetime('now', '-2 hours')),
-        ('task_sbc_02', 'Summary_of_Benefits_Coverage.pdf', 'SUCCESS', 'Copay: $30 Specialist / $20 PCP', datetime('now', '-10 minutes'))
-        """)
-
-    # Seed Renewal
-    cursor.execute("SELECT COUNT(*) FROM renewal_history")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO renewal_history (job_id, census_name, invoice_name, status, download_url, created_date)
-        VALUES 
-        ('ren_8820', 'Employee_Census_2026.xlsx', 'BCBS_Renewal_Invoice_April2026.pdf', 'SUCCESS', '/api/renewal/output/WORKED_CENSUS_updated.xlsx', datetime('now', '-1 hours')),
-        ('ren_8821', 'RAPT_Census_45.xlsx', 'MED_Aetna_July_Invoice.pdf', 'SUCCESS', '/api/renewal/output/WORKED_CENSUS_Aetna.xlsx', datetime('now', '-15 minutes'))
-        """)
-
-    # Seed Resourcing Edge
-    cursor.execute("SELECT COUNT(*) FROM resourcing_history")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO resourcing_history (pdf_filename, status, plan_names, output_json, created_date)
-        VALUES 
-        ('91812_116079 Plan and Rate Comparison.pdf', 'SUCCESS', 'Iris ID Systems Medical & Dental', 'structure.json', datetime('now', '-30 minutes'))
-        """)
-
-    # Seed RPVE
-    cursor.execute("SELECT COUNT(*) FROM rpve_history")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO rpve_history (flow_id, file_names, status, insurer, total_value, created_date)
-        VALUES 
-        ('rpve_flow_101', 'MED- Aetna July Invoice.pdf, RAPT Census 45.xlsx', 'SUCCESS', 'Aetna Health Inc', '$13,754.25', datetime('now', '-5 minutes'))
-        """)
-
-    # Seed App Permissions
-    cursor.execute("SELECT COUNT(*) FROM app_permissions")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO app_permissions (email, full_name, role, access_status, source, granted_by)
-        VALUES 
-        ('admin@local', 'Super Administrator', 'ADMIN', 'GRANTED', 'MANUAL', 'SYSTEM'),
-        ('admin@company.com', 'Enterprise Admin', 'ADMIN', 'GRANTED', 'MANUAL', 'SYSTEM'),
-        ('user@company.com', 'Standard User', 'USER', 'GRANTED', 'MANUAL', 'admin@company.com')
-        """)
-
-    # Seed Company Employees (Simulated Existing DB)
-    cursor.execute("SELECT COUNT(*) FROM company_employees")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO company_employees (employee_code, full_name, email, department, title)
-        VALUES 
-        ('EMP-001', 'Super Administrator', 'admin@local', 'IT Systems', 'Lead System Admin'),
-        ('EMP-002', 'Enterprise Admin', 'admin@company.com', 'IT Security', 'Security Director'),
-        ('EMP-003', 'Standard User', 'user@company.com', 'Sales & Operations', 'Senior Analyst'),
-        ('EMP-004', 'Sarah Jenkins', 'sarah.j@company.com', 'Underwriting', 'Lead Underwriter'),
-        ('EMP-005', 'David Miller', 'david.m@company.com', 'Human Resources', 'HR Manager'),
-        ('EMP-006', 'Rachel Green', 'rachel.g@company.com', 'Sales & Marketing', 'Account Executive'),
-        ('EMP-007', 'Alex Turner', 'alex.t@company.com', 'Claims Processing', 'Claims Specialist')
-        """)
-
-    conn.commit()
+    pass
 
 def log_universal(module: str, action: str, file_name: str, status: str, details: str = "", processed_by: str = "SYSTEM"):
     init_poc_tables()
@@ -402,6 +377,8 @@ def get_user_permission(email: str):
                 return dict(row)
         except Exception:
             pass
+        finally:
+            conn.close()
     return None
 
 def grant_user_access(email: str, full_name: str, role: str, source: str = "MANUAL", granted_by: str = "admin@local", allowed_modules: str = "ALL"):
@@ -409,7 +386,7 @@ def grant_user_access(email: str, full_name: str, role: str, source: str = "MANU
     init_poc_tables()
     clean_email = email.strip().lower()
     clean_name = full_name.strip() if full_name else clean_email.split('@')[0].capitalize()
-    role_upper = role.upper() if role.upper() in ("ADMIN", "USER") else "USER"
+    role_upper = role.upper() if role.upper() in ("ADMIN", "TENANT_ADMIN", "USER") else "USER"
     modules_str = allowed_modules if isinstance(allowed_modules, str) else ",".join(allowed_modules) if allowed_modules else "ALL"
     
     for conn in get_connections():
@@ -429,6 +406,8 @@ def grant_user_access(email: str, full_name: str, role: str, source: str = "MANU
             conn.commit()
         except Exception as e:
             print(f"[WARN] Error granting user access for {clean_email}: {e}")
+        finally:
+            conn.close()
 
 def revoke_user_access(email: str):
     """Revoke user access in the app_permissions DB."""
@@ -444,6 +423,8 @@ def revoke_user_access(email: str):
             conn.commit()
         except Exception as e:
             print(f"[WARN] Error revoking user access for {clean_email}: {e}")
+        finally:
+            conn.close()
 
 def delete_user_permission(email: str):
     """Permanently delete user permission from app_permissions DB."""
@@ -459,6 +440,8 @@ def delete_user_permission(email: str):
             conn.commit()
         except Exception as e:
             print(f"[WARN] Error deleting user permission for {clean_email}: {e}")
+        finally:
+            conn.close()
 
 import hashlib
 
@@ -497,6 +480,8 @@ def update_user_password(email: str, new_password: str) -> bool:
             return True
         except Exception as e:
             print(f"[WARN] Error updating password for {clean_email}: {e}")
+        finally:
+            conn.close()
     return False
 
 def list_all_permissions():
@@ -510,6 +495,8 @@ def list_all_permissions():
             return [dict(r) for r in rows]
         except Exception:
             pass
+        finally:
+            conn.close()
     return []
 
 def list_company_employees():
@@ -530,6 +517,8 @@ def list_company_employees():
             return [dict(r) for r in rows]
         except Exception:
             pass
+        finally:
+            conn.close()
     return []
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -607,5 +596,143 @@ def delete_workflow_project(project_id: str, owner_email: str) -> bool:
             pass
     return False
 
+# ── Tenant Management Database Helpers ────────────────────────────────────────
+
+def list_tenants():
+    """List all configured tenants."""
+    init_poc_tables()
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM tenants ORDER BY tenant_id ASC")
+            rows = cursor.fetchall()
+            tenants = []
+            for r in rows:
+                d = dict(r)
+                d["active"] = bool(d.get("active", 1))
+                modules_str = d.get("enabled_modules") or ""
+                if isinstance(modules_str, str):
+                    d["enabled_modules"] = [m.strip() for m in modules_str.split(",") if m.strip()]
+                tenants.append(d)
+            return tenants
+        except Exception as e:
+            print(f"[WARN] Error listing tenants: {e}")
+        finally:
+            conn.close()
+    return []
+
+def get_tenant(tenant_code: str):
+    """Fetch a single tenant by tenant_code."""
+    init_poc_tables()
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM tenants WHERE UPPER(tenant_code) = UPPER(?)", (tenant_code.strip(),))
+            row = cursor.fetchone()
+            if row:
+                d = dict(row)
+                d["active"] = bool(d.get("active", 1))
+                modules_str = d.get("enabled_modules") or ""
+                if isinstance(modules_str, str):
+                    d["enabled_modules"] = [m.strip() for m in modules_str.split(",") if m.strip()]
+                return d
+        except Exception:
+            pass
+        finally:
+            conn.close()
+    return None
+
+def create_tenant(tenant_code: str, tenant_name: str, email: str, active: bool = True, enabled_modules = None, default_confidence_threshold: float = 0.85, output_root: str = ""):
+    """Create a new tenant record."""
+    init_poc_tables()
+    if enabled_modules is None:
+        enabled_modules = ["INVOICE", "SBC"]
+    if isinstance(enabled_modules, list):
+        modules_str = ",".join(enabled_modules)
+    else:
+        modules_str = str(enabled_modules)
+
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO tenants (tenant_code, tenant_name, email, active, enabled_modules, default_confidence_threshold, output_root)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (tenant_code.strip().upper(), tenant_name.strip(), email.strip().lower(), 1 if active else 0, modules_str, default_confidence_threshold, output_root))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"[WARN] Error creating tenant {tenant_code}: {e}")
+            raise e
+        finally:
+            conn.close()
+    return False
+
+def update_tenant(tenant_code: str, **kwargs):
+    """Update tenant fields (active, enabled_modules, default_confidence_threshold, email, tenant_name)."""
+    init_poc_tables()
+    current = get_tenant(tenant_code)
+    if not current:
+        return False
+
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            updates = []
+            params = []
+            
+            if "tenant_name" in kwargs and kwargs["tenant_name"] is not None:
+                updates.append("tenant_name = ?")
+                params.append(kwargs["tenant_name"])
+            if "email" in kwargs and kwargs["email"] is not None:
+                updates.append("email = ?")
+                params.append(kwargs["email"])
+            if "active" in kwargs and kwargs["active"] is not None:
+                updates.append("active = ?")
+                params.append(1 if kwargs["active"] else 0)
+            if "enabled_modules" in kwargs and kwargs["enabled_modules"] is not None:
+                mods = kwargs["enabled_modules"]
+                if isinstance(mods, list):
+                    mods = ",".join(mods)
+                updates.append("enabled_modules = ?")
+                params.append(mods)
+            if "default_confidence_threshold" in kwargs and kwargs["default_confidence_threshold"] is not None:
+                updates.append("default_confidence_threshold = ?")
+                params.append(kwargs["default_confidence_threshold"])
+            if "output_root" in kwargs and kwargs["output_root"] is not None:
+                updates.append("output_root = ?")
+                params.append(kwargs["output_root"])
+
+            if not updates:
+                return True
+
+            params.append(tenant_code.strip().upper())
+            sql = f"UPDATE tenants SET {', '.join(updates)} WHERE UPPER(tenant_code) = UPPER(?)"
+            cursor.execute(sql, params)
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"[WARN] Error updating tenant {tenant_code}: {e}")
+        finally:
+            conn.close()
+    return False
+
+def delete_tenant(tenant_code: str):
+    """Delete a tenant by tenant_code."""
+    init_poc_tables()
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM tenants WHERE UPPER(tenant_code) = UPPER(?)", (tenant_code.strip(),))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            pass
+        finally:
+            conn.close()
+    return False
+
 # Initialize tables on import
 init_poc_tables()
+
+

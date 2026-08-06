@@ -175,7 +175,20 @@ export function UserManagement() {
       e.department.toLowerCase().includes(searchEmployees.toLowerCase())
   );
 
-  const isAdmin = adminUser?.role === "ADMIN";
+  const canInvite = !!adminUser?.can_manage_users;
+  const isGlobalAdmin = !!adminUser?.can_manage_tenants;
+
+  const adminModulesRaw = adminUser?.allowed_modules;
+  let adminAllowedList: string[] = [];
+  if (Array.isArray(adminModulesRaw)) {
+    adminAllowedList = adminModulesRaw.map(s => s.toLowerCase());
+  } else if (typeof adminModulesRaw === "string" && adminModulesRaw !== "ALL") {
+    adminAllowedList = adminModulesRaw.split(",").map(s => s.trim().toLowerCase());
+  }
+  
+  const visibleModules = isGlobalAdmin || adminModulesRaw === "ALL"
+    ? AVAILABLE_MODULES
+    : AVAILABLE_MODULES.filter(m => adminAllowedList.includes(m.id.toLowerCase()));
 
   return (
     <div className="space-y-6">
@@ -208,7 +221,7 @@ export function UserManagement() {
       )}
 
       {/* ─── Manual Invite ─── */}
-      {isAdmin && (
+      {canInvite && (
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-[13px] font-semibold mb-4 flex items-center gap-2">
             <UserPlus className="w-4 h-4 text-primary" />
@@ -249,12 +262,14 @@ export function UserManagement() {
                 >
                   USER
                 </button>
-                <button
-                  onClick={() => setInviteRole("ADMIN")}
-                  className={`flex-1 text-[11px] font-semibold rounded-lg border transition-all ${inviteRole === "ADMIN" ? "bg-amber-500/10 border-amber-500/30 text-amber-600" : "border-border hover:bg-accent text-muted-foreground"}`}
-                >
-                  ADMIN
-                </button>
+                {isGlobalAdmin && (
+                  <button
+                    onClick={() => setInviteRole("ADMIN")}
+                    className={`flex-1 text-[11px] font-semibold rounded-lg border transition-all ${inviteRole === "ADMIN" ? "bg-amber-500/10 border-amber-500/30 text-amber-600" : "border-border hover:bg-accent text-muted-foreground"}`}
+                  >
+                    ADMIN
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -266,7 +281,7 @@ export function UserManagement() {
                 Select Allowed Applications / Modules for User:
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {AVAILABLE_MODULES.map((mod) => {
+                {visibleModules.map((mod) => {
                   const isChecked = selectedModules.includes(mod.id);
                   return (
                     <label
@@ -343,7 +358,7 @@ export function UserManagement() {
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Status</th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Source</th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Granted By</th>
-                  {isAdmin && <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>}
+                  {canInvite && <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -392,7 +407,7 @@ export function UserManagement() {
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{p.source}</td>
                     <td className="px-4 py-3 text-muted-foreground">{p.granted_by}</td>
-                    {isAdmin && (
+                    {canInvite && (
                       <td className="px-4 py-3 text-right">
                         {actionLoading === p.email ? (
                           <Loader2 className="w-4 h-4 animate-spin ml-auto text-muted-foreground" />
@@ -472,7 +487,7 @@ export function UserManagement() {
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Department</th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Title</th>
                   <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">App Access</th>
-                  {isAdmin && <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>}
+                  {canInvite && <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -498,7 +513,7 @@ export function UserManagement() {
                         <span className="text-[10px] text-muted-foreground">Not Granted</span>
                       )}
                     </td>
-                    {isAdmin && (
+                    {canInvite && (
                       <td className="px-4 py-3 text-right">
                         {actionLoading === e.email ? (
                           <Loader2 className="w-4 h-4 animate-spin ml-auto text-muted-foreground" />

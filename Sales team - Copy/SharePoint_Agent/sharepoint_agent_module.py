@@ -348,6 +348,8 @@ class SharePointAgent:
                                 self.log(f"Drive '{d.get('name')}' root children returned HTTP {rc.status_code}")
                         except Exception as ex:
                             self.log(f"Drive '{d.get('name')}' root peek error: {ex}")
+            except Exception as e:
+                self.log(f"Drive list fetch error at '{d_url}': {e}")
 
         # ── FINAL FALLBACK: access 'Shared Documents' via the SharePoint Lists API ──────────
         # The /drives endpoint only lists drives the token can see. The "Shared Documents"

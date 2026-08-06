@@ -166,7 +166,7 @@ except Exception as e:
     print("   Will fall back to subprocess method if needed.")
 
 # Configuration for paths
-INVOICE_SCRIPT = BASE_DIR.parent / "Invoice_pdf_extractor/Invoice_Extraction-main/universal_pdf_extractor_v3.py"
+INVOICE_SCRIPT = BASE_DIR.parent / "Invoice_pdf_extractor/Invoice_Extraction-main/structural_pdf_extractor.py"
 STRUCTURAL_INVOICE_SCRIPT = BASE_DIR.parent / "Invoice_pdf_extractor/Invoice_Extraction-main/structural_pdf_extractor.py"
 INSURANCE_SCRIPT = BASE_DIR.parent / "Insurance_pdf_extractor-main/backend/chunked_extractor.py"
 INSURANCE_OUTPUT_DIR = INSURANCE_BACKEND_DIR / "outputs"

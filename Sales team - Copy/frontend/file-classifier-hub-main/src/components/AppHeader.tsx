@@ -1,4 +1,4 @@
-import { Bell, Moon, Sun, Search, ChevronDown, Settings2, Info, User, LogOut, PanelLeft, ShieldCheck, UserRound } from "lucide-react";
+import { Bell, Moon, Sun, Search, ChevronDown, Settings2, Info, User, LogOut, PanelLeft, ShieldCheck, UserRound, Building2 } from "lucide-react";
 import { useSettings, useApp, useAuth } from "@/lib/store";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -143,9 +143,14 @@ export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) 
             <Info className="w-3.5 h-3.5" /> About
           </DropdownMenuItem>
           {displayRole === "ADMIN" && (
-            <DropdownMenuItem onClick={() => navigate({ to: "/access" })}>
-              <User className="w-3.5 h-3.5" /> User Access
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem onClick={() => navigate({ to: "/tenants" })}>
+                <Building2 className="w-3.5 h-3.5" /> Tenant Management
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate({ to: "/access" })}>
+                <User className="w-3.5 h-3.5" /> User Access
+              </DropdownMenuItem>
+            </>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem className="text-destructive" onClick={handleLogout} id="header-signout-btn">

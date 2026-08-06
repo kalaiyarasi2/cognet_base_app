@@ -186,13 +186,15 @@ export const api = {
     max_pages?: number; min_score?: number; model?: string;
   }) => request<any>("/api/gpu-drive/classify", { method: "POST", body: JSON.stringify(body) }),
 
-  gpuExtractDirect: (file: File) => {
+  gpuExtractDirect: (file: File, pipeline?: string) => {
     const fd = new FormData();
     fd.append("file", file);
+    const headers: any = { "X-Source-Module": "DRIVE" };
+    if (pipeline) headers["X-Document-Type"] = pipeline;
     return request<any>("/api/gpu/api/extract", {
       method: "POST",
       body: fd,
-      headers: { "X-Source-Module": "DRIVE" }
+      headers
     });
   },
 
@@ -373,7 +375,7 @@ export const api = {
   // ─── Auth & Admin Access Management ───────────────────────────────────────
   /** Login with email & optional password (checked against app_permissions DB). Returns JWT + user. */
   authLogin: (email: string, password?: string) =>
-    request<{ status: string; token: string; user: { email: string; name: string; role: string; allowed_modules?: any } }>(
+    request<{ status: string; token: string; user: { email: string; name: string; role: string; allowed_modules?: any; can_manage_tenants?: boolean; can_manage_users?: boolean } }>(
       "/api/auth/login",
       { method: "POST", body: JSON.stringify({ email, password }) }
     ),
@@ -387,7 +389,7 @@ export const api = {
 
   /** SSO Callback exchange (code from Microsoft or direct email) */
   ssoCallback: (code?: string, email?: string) =>
-    request<{ status: string; token: string; user: { email: string; name: string; role: string; allowed_modules?: any } }>(
+    request<{ status: string; token: string; user: { email: string; name: string; role: string; allowed_modules?: any; can_manage_tenants?: boolean; can_manage_users?: boolean } }>(
       "/api/auth/sso/callback",
       { method: "POST", body: JSON.stringify({ code, email }) }
     ),

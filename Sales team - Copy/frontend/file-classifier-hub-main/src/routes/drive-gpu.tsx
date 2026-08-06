@@ -23,6 +23,15 @@ import ClaimSummary from "@/components/ClaimSummary";
 export const Route = createFileRoute("/drive-gpu")({ component: DriveGpuPage });
 
 function DriveGpuPage() {
+  const search = Route.useSearch() as any;
+  const pipeline = search.pipeline || "";
+
+  let pageTitle = "GPU-Accelerated Drive";
+  if (pipeline === "INSURANCE") pageTitle = "Insurance";
+  else if (pipeline === "BANK_STATEMENT") pageTitle = "Bank Statement";
+  else if (pipeline === "INVOICE") pageTitle = "Invoice";
+  else if (pipeline === "WORK_COMP") pageTitle = "Workers' Compensation";
+
   const defaultIn = useSettings((s) => s.defaultInputFolder);
   const defaultOut = useSettings((s) => s.defaultOutputFolder);
 
@@ -86,7 +95,7 @@ function DriveGpuPage() {
         )
       );
 
-      const res = await api.gpuExtractDirect(file);
+      const res = await api.gpuExtractDirect(file, pipeline);
       
       // Fetch JSON contents
       let schema: any = null;
@@ -447,7 +456,7 @@ function DriveGpuPage() {
     <>
       <PageHeader
         icon={HardDrive}
-        title="GPU-Accelerated Drive"
+        title={pageTitle}
         description="Process loss runs, ACORDs, invoices, and bank statements in a local folder or via direct file upload using the high-performance GPU extraction pipeline."
       />
 

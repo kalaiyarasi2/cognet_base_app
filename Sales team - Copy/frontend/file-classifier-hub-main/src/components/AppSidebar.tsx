@@ -3,12 +3,13 @@ import {
   LayoutDashboard, FileText, Tags,
   Workflow, FolderTree, Cloud, BarChart3, Activity, Terminal,
   Settings2, SlidersHorizontal, Info, Shield, ChevronLeft, ChevronRight,
-  RefreshCw, Scale, Cpu, FileCheck, HardDrive, Share2, FileSpreadsheet
+  RefreshCw, Scale, Cpu, FileCheck, HardDrive, Share2, FileSpreadsheet, Building2,
+  CreditCard, ReceiptText, Mail
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-interface NavItem { label: string; to: string; icon: any; }
+interface NavItem { label: string; to: string; icon: any; moduleCode?: string; }
 interface NavGroup { label: string; items: NavItem[]; }
 
 const groups: NavGroup[] = [
@@ -16,29 +17,55 @@ const groups: NavGroup[] = [
     label: "Workspace",
     items: [
       { label: "Dashboard", to: "/", icon: LayoutDashboard },
-      { label: "Text Extraction", to: "/extraction", icon: FileText },
-      { label: "Classification", to: "/classification", icon: Tags },
-      { label: "File Converter", to: "/converter", icon: RefreshCw },
+      { label: "Master GPU Engine", to: "/drive-gpu", icon: HardDrive, moduleCode: "DRIVE_GPU" },
     ],
   },
   {
-    label: "Automation",
+    label: "Sales",
     items: [
+      { label: "Accord", to: "/drive-gpu?pipeline=WORK_COMP", icon: FileText, moduleCode: "WORK_COMP" },
+      { label: "Insurance", to: "/drive-gpu?pipeline=INSURANCE", icon: Shield, moduleCode: "LOSS_RUN" },
+    ],
+  },
+  {
+    label: "Payroll",
+    items: [
+      { label: "Invoice", to: "/drive-gpu?pipeline=INVOICE", icon: ReceiptText, moduleCode: "INVOICE" },
+      { label: "Renewal Process", to: "/renewal-process", icon: RefreshCw, moduleCode: "RENEWAL" },
+      { label: "RPVE", to: "/rpve", icon: FileCheck, moduleCode: "RPVE" },
+      { label: "SBC", to: "/parity-setup", icon: Scale, moduleCode: "SBC" },
+      { label: "RE", to: "/resourcing-edge", icon: Cpu, moduleCode: "RE" },
+      { label: "Payroll Extractor", to: "/payroll-extractor", icon: FileSpreadsheet, moduleCode: "PAYROLL" },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { label: "Bank Statement", to: "/drive-gpu?pipeline=BANK_STATEMENT", icon: CreditCard, moduleCode: "BANK_STATEMENT" },
+      { label: "Vendor Invoice", to: "/drive-gpu?pipeline=VENDOR_INVOICE", icon: ReceiptText, moduleCode: "VENDOR_INVOICE" },
+    ],
+  },
+  {
+    label: "Tools & Core Engines",
+    items: [
+      { label: "Text Extraction", to: "/extraction", icon: FileText },
+      { label: "Classification", to: "/classification", icon: Tags },
+      { label: "File Converter", to: "/converter", icon: RefreshCw },
       { label: "File Organiser", to: "/pipeline", icon: Workflow },
+    ],
+  },
+  {
+    label: "Integration",
+    items: [
       { label: "Google Drive", to: "/drive", icon: Cloud },
       { label: "OneDrive", to: "/onedrive", icon: Cloud },
       { label: "SharePoint", to: "/sharepoint", icon: Share2 },
-      { label: "Drive", to: "/drive-gpu", icon: HardDrive },
-      { label: "Parity Setup", to: "/parity-setup", icon: Scale },
-      { label: "Renewal Process", to: "/renewal-process", icon: RefreshCw },
-      { label: "Resourcing Edge", to: "/resourcing-edge", icon: Cpu },
-      { label: "RPVE", to: "/rpve", icon: FileCheck },
-      { label: "Payroll Extractor", to: "/payroll-extractor", icon: FileSpreadsheet },
+      { label: "Outlook Agent", to: "/outlook", icon: Mail },
       { label: "Work Flow Designer", to: "/co-pilot", icon: Workflow },
     ],
   },
   {
-    label: "Insights",
+    label: "Insight",
     items: [
       { label: "System Health", to: "/health", icon: Activity },
       { label: "Logs", to: "/logs", icon: Terminal },
@@ -47,9 +74,10 @@ const groups: NavGroup[] = [
   {
     label: "System",
     items: [
+      { label: "Tenants", to: "/tenants", icon: Building2 },
       { label: "Configuration", to: "/configuration", icon: SlidersHorizontal },
-      { label: "Settings", to: "/settings", icon: Settings2 },
       { label: "User Access", to: "/access", icon: Shield },
+      { label: "Settings", to: "/settings", icon: Settings2 },
       { label: "About", to: "/about", icon: Info },
     ],
   },
@@ -60,13 +88,11 @@ import { useAuth } from "@/lib/store";
 export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { user } = useAuth();
-
-  const isUserAdmin = user?.role === "ADMIN";
   const rawModules = user?.allowed_modules;
 
   function isItemAllowed(item: NavItem): boolean {
-    if (isUserAdmin) return true;
-    if (item.to === "/access") return false; // Admin only
+    if (item.to === "/tenants") return !!user?.can_manage_tenants || user?.role === "ADMIN";
+    if (item.to === "/access") return !!user?.can_manage_users || user?.role === "ADMIN" || user?.role === "TENANT_ADMIN";
     if (["/settings", "/about"].includes(item.to)) return true; // Settings & About always available
 
     let allowedList: string[] = [];
@@ -79,10 +105,10 @@ export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onTogg
     }
 
     if (item.to === "/") {
-      return allowedList.includes("dashboard");
+      return allowedList.includes("dashboard") || allowedList.includes("DASHBOARD");
     }
 
-    const moduleKey = item.to.replace(/^\//, "");
+    const moduleKey = (item.moduleCode || item.to.replace(/^\//, "").split("?")[0]).toUpperCase();
     return allowedList.includes(moduleKey);
   }
 

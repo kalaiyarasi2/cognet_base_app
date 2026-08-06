@@ -60,7 +60,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 def get_current_user_from_token(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         # Default fallback for unauthenticated requests in dev mode
-        return {"email": "admin@local", "name": "Super Administrator", "role": "ADMIN", "allowed_modules": "ALL"}
+        return {"email": "admin@local", "name": "Super Administrator", "role": "ADMIN", "allowed_modules": "ALL", "can_manage_tenants": True, "can_manage_users": True}
     
     token = authorization.split(" ")[1]
     try:
@@ -156,7 +156,9 @@ async def sso_callback(req: SSOCallbackRequest):
         "email": perm["email"],
         "name": perm["full_name"],
         "role": perm["role"],
-        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules
+        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules,
+        "can_manage_tenants": perm["role"] == "ADMIN",
+        "can_manage_users": perm["role"] in ("ADMIN", "TENANT_ADMIN")
     }
     token = create_access_token(user_payload)
     
@@ -195,7 +197,9 @@ async def direct_login(req: LoginRequest):
         "email": perm["email"],
         "name": perm["full_name"],
         "role": perm["role"],
-        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules
+        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules,
+        "can_manage_tenants": perm["role"] == "ADMIN",
+        "can_manage_users": perm["role"] in ("ADMIN", "TENANT_ADMIN")
     }
     token = create_access_token(user_payload)
     
@@ -244,6 +248,11 @@ async def list_admin_users(user: dict = Depends(get_current_user_from_token)):
 async def admin_grant_access(req: GrantAccessRequest, user: dict = Depends(get_current_user_from_token)):
     """Admin grants access to a user manually or from the company employee directory."""
     admin_email = user.get("email", "admin@local")
+    admin_role = user.get("role", "USER")
+    
+    if admin_role == "TENANT_ADMIN" and req.role == "ADMIN":
+        raise HTTPException(status_code=403, detail="Tenant admins cannot create global ADMIN accounts.")
+
     
     modules_val = req.allowed_modules
     if isinstance(modules_val, list):
@@ -282,3 +291,90 @@ async def admin_delete_access(req: RevokeAccessRequest, user: dict = Depends(get
         "status": "ok",
         "message": f"Successfully deleted user permission for {req.email}."
     }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tenant Management Endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+class CreateTenantRequest(BaseModel):
+    tenant_code: str
+    tenant_name: str
+    email: str
+    active: bool = True
+    enabled_modules: Optional[List[str]] = ["INVOICE", "SBC"]
+    default_confidence_threshold: Optional[float] = 0.85
+    output_root: Optional[str] = ""
+
+class UpdateTenantRequest(BaseModel):
+    tenant_name: Optional[str] = None
+    email: Optional[str] = None
+    active: Optional[bool] = None
+    enabled_modules: Optional[List[str]] = None
+    default_confidence_threshold: Optional[float] = None
+    output_root: Optional[str] = None
+
+@router.get("/admin/tenants")
+async def list_tenants_endpoint():
+    """List all tenant organizations."""
+    tenants = poc_db.list_tenants()
+    return {"status": "ok", "tenants": tenants}
+
+@router.post("/admin/tenants")
+async def create_tenant_endpoint(req: CreateTenantRequest):
+    """Create a new tenant organization connected to DB."""
+    try:
+        existing = poc_db.get_tenant(req.tenant_code)
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Tenant code '{req.tenant_code}' already exists.")
+        
+        success = poc_db.create_tenant(
+            tenant_code=req.tenant_code,
+            tenant_name=req.tenant_name,
+            email=req.email,
+            active=req.active,
+            enabled_modules=req.enabled_modules,
+            default_confidence_threshold=req.default_confidence_threshold or 0.85,
+            output_root=req.output_root or ""
+        )
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to create tenant in database.")
+            
+        if req.email:
+            poc_db.grant_user_access(
+                email=req.email,
+                full_name=f"{req.tenant_name} Admin",
+                role="TENANT_ADMIN",
+                source="MANUAL",
+                granted_by="admin@local",
+                allowed_modules=req.enabled_modules or "ALL"
+            )
+            
+        return {"status": "ok", "message": f"Tenant '{req.tenant_code}' created successfully."}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/admin/tenants/{tenant_code}")
+async def update_tenant_endpoint(tenant_code: str, req: UpdateTenantRequest):
+    """Update tenant settings, module access, or status."""
+    success = poc_db.update_tenant(
+        tenant_code=tenant_code,
+        tenant_name=req.tenant_name,
+        email=req.email,
+        active=req.active,
+        enabled_modules=req.enabled_modules,
+        default_confidence_threshold=req.default_confidence_threshold,
+        output_root=req.output_root
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Tenant '{tenant_code}' not found or update failed.")
+    return {"status": "ok", "message": f"Tenant '{tenant_code}' updated successfully."}
+
+@router.delete("/admin/tenants/{tenant_code}")
+async def delete_tenant_endpoint(tenant_code: str):
+    """Delete a tenant record."""
+    success = poc_db.delete_tenant(tenant_code)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Tenant '{tenant_code}' not found.")
+    return {"status": "ok", "message": f"Tenant '{tenant_code}' deleted successfully."}
+

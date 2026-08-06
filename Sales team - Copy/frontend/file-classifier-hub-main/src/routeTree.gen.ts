@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as TenantsRouteImport } from './routes/tenants'
 import { Route as SharepointRouteImport } from './routes/sharepoint'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RpveRouteImport } from './routes/rpve'
@@ -19,10 +20,12 @@ import { Route as RenewalProcessRouteImport } from './routes/renewal-process'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as PayrollExtractorRouteImport } from './routes/payroll-extractor'
 import { Route as ParitySetupRouteImport } from './routes/parity-setup'
+import { Route as OutlookRouteImport } from './routes/outlook'
 import { Route as OrganisationRouteImport } from './routes/organisation'
 import { Route as OnedriveRouteImport } from './routes/onedrive'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as InvoiceRouteImport } from './routes/invoice'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as ExtractionRouteImport } from './routes/extraction'
 import { Route as DriveGpuRouteImport } from './routes/drive-gpu'
@@ -40,6 +43,11 @@ import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TenantsRoute = TenantsRouteImport.update({
+  id: '/tenants',
+  path: '/tenants',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SharepointRoute = SharepointRouteImport.update({
@@ -87,6 +95,11 @@ const ParitySetupRoute = ParitySetupRouteImport.update({
   path: '/parity-setup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OutlookRoute = OutlookRouteImport.update({
+  id: '/outlook',
+  path: '/outlook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrganisationRoute = OrganisationRouteImport.update({
   id: '/organisation',
   path: '/organisation',
@@ -105,6 +118,11 @@ const LogsRoute = LogsRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvoiceRoute = InvoiceRouteImport.update({
+  id: '/invoice',
+  path: '/invoice',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HealthRoute = HealthRouteImport.update({
@@ -186,10 +204,12 @@ export interface FileRoutesByFullPath {
   '/drive-gpu': typeof DriveGpuRoute
   '/extraction': typeof ExtractionRoute
   '/health': typeof HealthRoute
+  '/invoice': typeof InvoiceRoute
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
+  '/outlook': typeof OutlookRoute
   '/parity-setup': typeof ParitySetupRoute
   '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
@@ -199,6 +219,7 @@ export interface FileRoutesByFullPath {
   '/rpve': typeof RpveRoute
   '/settings': typeof SettingsRoute
   '/sharepoint': typeof SharepointRoute
+  '/tenants': typeof TenantsRoute
   '/upload': typeof UploadRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
@@ -215,10 +236,12 @@ export interface FileRoutesByTo {
   '/drive-gpu': typeof DriveGpuRoute
   '/extraction': typeof ExtractionRoute
   '/health': typeof HealthRoute
+  '/invoice': typeof InvoiceRoute
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
+  '/outlook': typeof OutlookRoute
   '/parity-setup': typeof ParitySetupRoute
   '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
@@ -228,6 +251,7 @@ export interface FileRoutesByTo {
   '/rpve': typeof RpveRoute
   '/settings': typeof SettingsRoute
   '/sharepoint': typeof SharepointRoute
+  '/tenants': typeof TenantsRoute
   '/upload': typeof UploadRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
@@ -245,10 +269,12 @@ export interface FileRoutesById {
   '/drive-gpu': typeof DriveGpuRoute
   '/extraction': typeof ExtractionRoute
   '/health': typeof HealthRoute
+  '/invoice': typeof InvoiceRoute
   '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
+  '/outlook': typeof OutlookRoute
   '/parity-setup': typeof ParitySetupRoute
   '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
@@ -258,6 +284,7 @@ export interface FileRoutesById {
   '/rpve': typeof RpveRoute
   '/settings': typeof SettingsRoute
   '/sharepoint': typeof SharepointRoute
+  '/tenants': typeof TenantsRoute
   '/upload': typeof UploadRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
@@ -276,10 +303,12 @@ export interface FileRouteTypes {
     | '/drive-gpu'
     | '/extraction'
     | '/health'
+    | '/invoice'
     | '/login'
     | '/logs'
     | '/onedrive'
     | '/organisation'
+    | '/outlook'
     | '/parity-setup'
     | '/payroll-extractor'
     | '/pipeline'
@@ -289,6 +318,7 @@ export interface FileRouteTypes {
     | '/rpve'
     | '/settings'
     | '/sharepoint'
+    | '/tenants'
     | '/upload'
     | '/auth/callback'
   fileRoutesByTo: FileRoutesByTo
@@ -305,10 +335,12 @@ export interface FileRouteTypes {
     | '/drive-gpu'
     | '/extraction'
     | '/health'
+    | '/invoice'
     | '/login'
     | '/logs'
     | '/onedrive'
     | '/organisation'
+    | '/outlook'
     | '/parity-setup'
     | '/payroll-extractor'
     | '/pipeline'
@@ -318,6 +350,7 @@ export interface FileRouteTypes {
     | '/rpve'
     | '/settings'
     | '/sharepoint'
+    | '/tenants'
     | '/upload'
     | '/auth/callback'
   id:
@@ -334,10 +367,12 @@ export interface FileRouteTypes {
     | '/drive-gpu'
     | '/extraction'
     | '/health'
+    | '/invoice'
     | '/login'
     | '/logs'
     | '/onedrive'
     | '/organisation'
+    | '/outlook'
     | '/parity-setup'
     | '/payroll-extractor'
     | '/pipeline'
@@ -347,6 +382,7 @@ export interface FileRouteTypes {
     | '/rpve'
     | '/settings'
     | '/sharepoint'
+    | '/tenants'
     | '/upload'
     | '/auth/callback'
   fileRoutesById: FileRoutesById
@@ -364,10 +400,12 @@ export interface RootRouteChildren {
   DriveGpuRoute: typeof DriveGpuRoute
   ExtractionRoute: typeof ExtractionRoute
   HealthRoute: typeof HealthRoute
+  InvoiceRoute: typeof InvoiceRoute
   LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
   OnedriveRoute: typeof OnedriveRoute
   OrganisationRoute: typeof OrganisationRoute
+  OutlookRoute: typeof OutlookRoute
   ParitySetupRoute: typeof ParitySetupRoute
   PayrollExtractorRoute: typeof PayrollExtractorRoute
   PipelineRoute: typeof PipelineRoute
@@ -377,6 +415,7 @@ export interface RootRouteChildren {
   RpveRoute: typeof RpveRoute
   SettingsRoute: typeof SettingsRoute
   SharepointRoute: typeof SharepointRoute
+  TenantsRoute: typeof TenantsRoute
   UploadRoute: typeof UploadRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
 }
@@ -388,6 +427,13 @@ declare module '@tanstack/react-router' {
       path: '/upload'
       fullPath: '/upload'
       preLoaderRoute: typeof UploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tenants': {
+      id: '/tenants'
+      path: '/tenants'
+      fullPath: '/tenants'
+      preLoaderRoute: typeof TenantsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sharepoint': {
@@ -453,6 +499,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ParitySetupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/outlook': {
+      id: '/outlook'
+      path: '/outlook'
+      fullPath: '/outlook'
+      preLoaderRoute: typeof OutlookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/organisation': {
       id: '/organisation'
       path: '/organisation'
@@ -479,6 +532,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invoice': {
+      id: '/invoice'
+      path: '/invoice'
+      fullPath: '/invoice'
+      preLoaderRoute: typeof InvoiceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/health': {
@@ -588,10 +648,12 @@ const rootRouteChildren: RootRouteChildren = {
   DriveGpuRoute: DriveGpuRoute,
   ExtractionRoute: ExtractionRoute,
   HealthRoute: HealthRoute,
+  InvoiceRoute: InvoiceRoute,
   LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
   OnedriveRoute: OnedriveRoute,
   OrganisationRoute: OrganisationRoute,
+  OutlookRoute: OutlookRoute,
   ParitySetupRoute: ParitySetupRoute,
   PayrollExtractorRoute: PayrollExtractorRoute,
   PipelineRoute: PipelineRoute,
@@ -601,6 +663,7 @@ const rootRouteChildren: RootRouteChildren = {
   RpveRoute: RpveRoute,
   SettingsRoute: SettingsRoute,
   SharepointRoute: SharepointRoute,
+  TenantsRoute: TenantsRoute,
   UploadRoute: UploadRoute,
   AuthCallbackRoute: AuthCallbackRoute,
 }

@@ -166,8 +166,10 @@ export const useApp = create<AppState>()(
 export interface AuthUser {
   email: string;
   name: string;
-  role: "ADMIN" | "USER";
+  role: "ADMIN" | "TENANT_ADMIN" | "USER";
   allowed_modules?: string[] | string;
+  can_manage_tenants?: boolean;
+  can_manage_users?: boolean;
 }
 
 interface AuthState {
