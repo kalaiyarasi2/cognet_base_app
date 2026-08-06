@@ -322,15 +322,25 @@ print("[INFO] Unified Sales Team Workspace API Server initialized successfully."
 if __name__ == "__main__":
     import uvicorn
     import logging
+    import os
     
+    # Check if running under IIS HttpPlatformHandler
+    iis_port = os.getenv("HTTP_PLATFORM_PORT") or os.getenv("PORT")
+    port = int(iis_port) if iis_port else 8000
+    host = "127.0.0.1" if iis_port else "0.0.0.0"
+    is_reload = False if iis_port else True
+
     # Silence the chatty watchfiles logger
     logging.getLogger("watchfiles.main").setLevel(logging.WARNING)
+    
+    print(f"[INFO] Launching API server on {host}:{port} (IIS HttpPlatformHandler: {bool(iis_port)})")
     
     # Run uvicorn with reload exclusions so it ignores DB/log file changes
     uvicorn.run(
         "app:app", 
-        host="0.0.0.0", 
-        port=8000, 
-        reload=True,
+        host=host, 
+        port=port, 
+        reload=is_reload,
         reload_excludes=["*.log", "*.db", "*.sqlite", "*.sqlite3", "database/*", "logs/*", "temp_uploads/*"]
     )
+
