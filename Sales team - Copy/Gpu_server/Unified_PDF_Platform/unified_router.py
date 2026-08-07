@@ -1,5 +1,7 @@
 import os
 import sys
+import shutil
+import inspect
 import subprocess
 import json
 import re
@@ -2051,13 +2053,18 @@ Return ONLY the company name or UNKNOWN:"""
             page_texts = [(doc[i].get_text() or "") for i in range(len(doc))]
             doc.close()
             
+            ranges_kwargs = {
+                "pdf_path": pdf_path,
+                "page_texts": page_texts,
+                "temp_split_root": OUTPUT_BASE / "merged_invoice_splits",
+                "header_patterns": MERGED_INVOICE_HEADER_PATTERNS,
+            }
+            if "client" in inspect.signature(handle_merged_pdf_with_page_texts).parameters:
+                ranges_kwargs["client"] = self.sync_client
+
             ranges, sub_pdfs = await asyncio.to_thread(
                 handle_merged_pdf_with_page_texts,
-                pdf_path=pdf_path,
-                page_texts=page_texts,
-                temp_split_root=OUTPUT_BASE / "merged_invoice_splits",
-                header_patterns=MERGED_INVOICE_HEADER_PATTERNS,
-                client=self.sync_client, # handle_merge likely uses sync client
+                **ranges_kwargs
             )
         except Exception as e:
             print(f"[WARN] Merge detection failed: {e}")
