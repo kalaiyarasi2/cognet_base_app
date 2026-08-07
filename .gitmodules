@@ -1,0 +1,11 @@
+[submodule "Sales team - Copy/File-Convertor"]
+	path = Sales team - Copy/File-Convertor
+	url = https://github.com/kalaiyarasi2/File-Convertor.git
+
+[submodule "Sales team - Copy/Payroll_extractor"]
+	path = Sales team - Copy/Payroll_extractor
+	url = https://github.com/kalaiyarasi2/Payroll_extractor.git
+
+[submodule "Sales team - Copy/file-classification-"]
+	path = Sales team - Copy/file-classification-
+	url = https://github.com/kalaiyarasi2/file-classification-.git

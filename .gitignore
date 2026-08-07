@@ -36,3 +36,6 @@ temp_*/
 multiple agent/
 audit_logs/
 config/
+monitor/monitor.log
+converter.db-shm
+converter.db-wal
