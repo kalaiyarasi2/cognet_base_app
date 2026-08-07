@@ -9,6 +9,7 @@ import { Panel } from "@/components/Panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { getBackendUrl } from "@/lib/api";
 
 export const Route = createFileRoute("/tenants")({
   component: TenantManagementPage,
@@ -71,7 +72,7 @@ function TenantManagementPage() {
   const fetchTenants = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/admin/tenants");
+      const res = await fetch(`${getBackendUrl()}/api/admin/tenants`);
       if (res.ok) {
         const data = await res.json();
         if (data.status === "ok" && Array.isArray(data.tenants)) {
@@ -104,7 +105,7 @@ function TenantManagementPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch("http://localhost:8000/api/admin/tenants", {
+      const res = await fetch(`${getBackendUrl()}/api/admin/tenants`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -143,7 +144,7 @@ function TenantManagementPage() {
       : [...currentEnabled, moduleCode];
 
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/tenants/${tenant.tenant_code}`, {
+      const res = await fetch(`${getBackendUrl()}/api/admin/tenants/${tenant.tenant_code}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled_modules: newModules }),
@@ -164,7 +165,7 @@ function TenantManagementPage() {
   async function handleToggleTenantStatus(tenant: TenantRecord) {
     const newStatus = !tenant.active;
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/tenants/${tenant.tenant_code}`, {
+      const res = await fetch(`${getBackendUrl()}/api/admin/tenants/${tenant.tenant_code}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ active: newStatus }),
@@ -185,7 +186,7 @@ function TenantManagementPage() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/tenants/${tenant.tenant_code}`, {
+      const res = await fetch(`${getBackendUrl()}/api/admin/tenants/${tenant.tenant_code}`, {
         method: "DELETE",
       });
       const data = await res.json();

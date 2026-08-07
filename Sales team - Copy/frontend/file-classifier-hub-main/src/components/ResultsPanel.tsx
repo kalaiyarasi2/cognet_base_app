@@ -6,6 +6,7 @@ import type { DocumentFile } from "@/types/extractor";
 import JsonViewer from "./JsonViewer";
 import TableView from "./TableView";
 import { toast } from "sonner";
+import { getBackendUrl } from "@/lib/api";
 
 interface ResultsPanelProps {
   document: DocumentFile | null;
@@ -114,9 +115,11 @@ const ResultsPanel = ({
   const tableData = getTableData();
 
   const handleDownloadJson = async () => {
-    if (document.jsonUrl) {
+    const targetJsonUrl = document.jsonPath ? `${getBackendUrl()}/api/gpu/api/download/${document.jsonPath}` : (document.jsonUrl ? document.jsonUrl.replace(/http:\/\/127\.0\.0\.1:\d+|http:\/\/localhost:\d+/g, getBackendUrl()) : null);
+    
+    if (targetJsonUrl) {
       try {
-        const response = await fetch(document.jsonUrl);
+        const response = await fetch(targetJsonUrl);
         if (!response.ok) throw new Error("Download failed");
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
@@ -141,7 +144,7 @@ const ResultsPanel = ({
   };
 
   const handleDownloadExcel = async () => {
-    const downloadUrl = document.excelUrl || (document.excelPath ? `http://localhost:8000/api/gpu/api/download/${document.excelPath}` : null);
+    const downloadUrl = document.excelPath ? `${getBackendUrl()}/api/gpu/api/download/${document.excelPath}` : (document.excelUrl ? document.excelUrl.replace(/http:\/\/127\.0\.0\.1:\d+|http:\/\/localhost:\d+/g, getBackendUrl()) : null);
     
     if (!downloadUrl) {
       console.error("No Excel file URL or path available");
@@ -177,7 +180,7 @@ const ResultsPanel = ({
     setIsSummarizing(true);
     setSummaryText(null);
     try {
-      const response = await fetch("http://localhost:8000/api/gpu/api/claim-summary", {
+      const response = await fetch(`${getBackendUrl()}/api/gpu/api/claim-summary`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ claims }),

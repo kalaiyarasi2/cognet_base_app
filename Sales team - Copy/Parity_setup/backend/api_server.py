@@ -23,6 +23,22 @@ from dotenv import load_dotenv
 from src.extractors.universal_extractor import UniversalExtractor
 from src.validation.rules_engine import RulesEngine
 # from src.output.excel_writer import ExcelWriter
+import pandas as pd
+
+class ExcelWriter:
+    def __init__(self, mapping_json_path: str):
+        self.mapping_json_path = mapping_json_path
+        
+    def write_consolidated(self, data_list, template_path, output_path):
+        import logging
+        log = logging.getLogger("api_server")
+        try:
+            df = pd.json_normalize(data_list)
+            df.to_excel(output_path, index=False)
+            log.info(f"Fallback ExcelWriter created {output_path}")
+        except Exception as e:
+            log.error(f"Fallback ExcelWriter failed: {e}")
+            pd.DataFrame([{"Message": "Excel conversion failed or ExcelWriter missing"}]).to_excel(output_path, index=False)
 
 load_dotenv()
 
@@ -185,6 +201,35 @@ async def download_excel(task_id: str):
         path=excel_path,
         filename=f"{filename}_extraction.xlsx" if not filename.endswith(".xlsx") else filename,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+@app.get("/download-json/{task_id}")
+@app.get("/api/download-json/{task_id}")
+async def download_json(task_id: str):
+    """
+    Download the generated JSON file
+    """
+    task = TASKS.get(task_id)
+    filename = task["fileName"] if task else f"SBC_{task_id}"
+
+    if task and task.get("results", {}).get("jsonPath"):
+        json_path = Path(task["results"]["jsonPath"])
+    else:
+        json_path = OUTPUT_DIR / "03_parsed_json" / f"{task_id}.json"
+
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail=f"JSON file for task {task_id} not found")
+
+    # Clean up filename
+    if filename.lower().endswith(".pdf"):
+        dl_filename = filename[:-4] + "_extracted.json"
+    else:
+        dl_filename = f"{filename}_extracted.json"
+
+    return FileResponse(
+        path=json_path,
+        filename=dl_filename,
+        media_type="application/json"
     )
 
 

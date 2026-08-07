@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/store";
+import { getBackendUrl } from "@/lib/api";
 
 export interface TenantInfo {
   tenant_id: number;
@@ -52,7 +53,7 @@ export function useTenant() {
       }
 
       try {
-        const fetchUrl = `http://localhost:8000/api/modules?tenant_code=${encodeURIComponent(targetCode)}`;
+        const fetchUrl = `${getBackendUrl()}/api/modules?tenant_code=${encodeURIComponent(targetCode)}`;
         const res = await fetch(fetchUrl);
         if (res.ok) {
           const data = await res.json();

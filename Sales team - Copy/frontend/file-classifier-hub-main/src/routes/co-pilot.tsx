@@ -37,6 +37,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import axios from "axios";
+import { getBackendUrl } from "@/lib/api";
 
 export const Route = createFileRoute("/co-pilot")({
   component: CoPilotPage,
@@ -223,7 +224,7 @@ export function CoPilotPage() {
   /* ── Project Persistence ─────────────────────────────────────── */
   const fetchProjects = useCallback(async () => {
     try {
-      const response = await axios.get("http://localhost:8000/api/workflow/projects", { withCredentials: true });
+      const response = await axios.get(`${getBackendUrl()}/api/workflow/projects`, { withCredentials: true });
       if (Array.isArray(response.data)) {
         setSavedWorkflows(response.data);
       }
@@ -253,7 +254,7 @@ export function CoPilotPage() {
       if (!confirm) return;
     }
     try {
-      const response = await axios.get(`http://localhost:8000/api/workflow/projects/${id}`, { withCredentials: true });
+      const response = await axios.get(`${getBackendUrl()}/api/workflow/projects/${id}`, { withCredentials: true });
       if (response.data.status === "success") {
         setNodes(response.data.project.nodes || []);
         setEdges(response.data.project.edges || []);
@@ -285,7 +286,7 @@ export function CoPilotPage() {
         nodes: nodes,
         edges: edges
       };
-      const response = await axios.post("http://localhost:8000/api/workflow/projects/save", payload, { withCredentials: true });
+      const response = await axios.post(`${getBackendUrl()}/api/workflow/projects/save`, payload, { withCredentials: true });
       if (response.data.status === "success") {
         toast.success("Workflow saved successfully!");
         setCurrentWorkflowId(response.data.id);
@@ -317,7 +318,7 @@ export function CoPilotPage() {
     const confirm = window.confirm("Are you sure you want to delete this workflow?");
     if (!confirm) return;
     try {
-      const response = await axios.delete(`http://localhost:8000/api/workflow/projects/${id}`, { withCredentials: true });
+      const response = await axios.delete(`${getBackendUrl()}/api/workflow/projects/${id}`, { withCredentials: true });
       if (response.data.status === "success") {
         toast.success("Workflow deleted.");
         fetchProjects();
@@ -345,7 +346,7 @@ export function CoPilotPage() {
         formData.append("files", file);
       });
 
-      const response = await axios.post("http://localhost:8000/api/workflow/run-workflow", formData, {
+      const response = await axios.post(`${getBackendUrl()}/api/workflow/run-workflow`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
         withCredentials: true
       });
@@ -357,13 +358,16 @@ export function CoPilotPage() {
         // If the workflow contains a "Local Save" node without an absolute path, automatically trigger a browser download fallback
         const localSaveNode = nodes.find(n => n.type === "outputNode" && (n.data?.outputType === "local" || !n.data?.outputType));
         if (localSaveNode && !localSaveNode.data?.savePath && response.data.simulated_output_data) {
+          const inputFiles = Object.values(uploadedFiles);
+          const baseName = inputFiles.length > 0 ? inputFiles[0].name.replace(/\.[^/.]+$/, "") : "workflow_result";
+
           // 1. Download JSON
           const jsonString = JSON.stringify(response.data.simulated_output_data, null, 2);
           const blob = new Blob([jsonString], { type: "application/json" });
           const url = URL.createObjectURL(blob);
           const link = document.createElement("a");
           link.href = url;
-          link.download = "workflow_result.json";
+          link.download = `${baseName}.json`;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
@@ -371,16 +375,30 @@ export function CoPilotPage() {
           
           // 2. Download Excel if available
           if (response.data.simulated_output_data.excel) {
-             const excelUrl = response.data.simulated_output_data.excel;
-             // We can just open the URL in a hidden iframe or create an anchor to trigger the browser download
-             const excelLink = document.createElement("a");
-             excelLink.href = excelUrl;
-             // Ensure it triggers download
-             excelLink.setAttribute("download", "");
-             excelLink.target = "_blank"; // Fallback
-             document.body.appendChild(excelLink);
-             excelLink.click();
-             document.body.removeChild(excelLink);
+             setTimeout(async () => {
+               try {
+                 let excelUrl = response.data.simulated_output_data.excel;
+                 // Sanitize URL to ensure it traverses the IIS proxy instead of failing on localhost:8000
+                 if (excelUrl.includes("localhost")) {
+                   excelUrl = excelUrl.replace(/^https?:\/\/localhost:\d+/, getBackendUrl() || window.location.origin);
+                 }
+                 
+                 // Fetch as blob to guarantee the download attribute works and bypass cross-origin restrictions
+                 const res = await axios.get(excelUrl, { responseType: 'blob', withCredentials: true });
+                 const blobUrl = URL.createObjectURL(res.data);
+                 
+                 const excelLink = document.createElement("a");
+                 excelLink.href = blobUrl;
+                 excelLink.download = `${baseName}.xlsx`;
+                 document.body.appendChild(excelLink);
+                 excelLink.click();
+                 document.body.removeChild(excelLink);
+                 URL.revokeObjectURL(blobUrl);
+               } catch (err) {
+                 console.error("Failed to download Excel file:", err);
+                 toast.error("Failed to download Excel output");
+               }
+             }, 500);
           }
         }
       } else {

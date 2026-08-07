@@ -11,7 +11,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { api } from "@/lib/api";
-import { useApp } from "@/lib/store";
+import { useApp, safeUUID } from "@/lib/store";
 
 export const Route = createFileRoute("/upload")({ component: UploadPage });
 
@@ -30,7 +30,7 @@ function UploadPage() {
     const tooBig = files.filter((f) => f.size > 50 * 1024 * 1024);
     if (tooBig.length) toast.error(`${tooBig.length} file(s) exceed 50 MB`);
     const ok = files.filter((f) => f.size <= 50 * 1024 * 1024);
-    setQueue((q) => [...q, ...ok.map((f) => ({ id: crypto.randomUUID(), file: f, status: "queued" as const }))]);
+    setQueue((q) => [...q, ...ok.map((f) => ({ id: safeUUID(), file: f, status: "queued" as const }))]);
   }
 
   async function runOne(id: string, action: "classify" | "extract" | "detect") {

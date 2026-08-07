@@ -2,9 +2,13 @@
 
 export function getDefaultBackendUrl(): string {
   if (typeof window === "undefined") return "http://localhost:8000";
-  const protocol = window.location.protocol;
-  const hostname = window.location.hostname || "localhost";
-  return `${protocol}//${hostname}:8000`;
+  // Use same origin so IIS reverse proxy (any port) routes /api/* correctly.
+  // Falls back to localhost:8000 only when running on bare localhost dev server.
+  const hostname = window.location.hostname;
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return `${window.location.protocol}//${hostname}:8000`;
+  }
+  return window.location.origin;
 }
 
 export function getBackendUrl(): string {

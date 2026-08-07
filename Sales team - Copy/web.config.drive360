@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+
+  <system.webServer>
+
+    <!-- Show detailed errors while debugging -->
+    <httpErrors errorMode="Detailed" existingResponse="PassThrough" />
+
+    <!-- IIS serves the static client files -->
+    <staticContent>
+      <mimeMap fileExtension=".mjs" mimeType="application/javascript" />
+    </staticContent>
+
+    <rewrite>
+      <rules>
+
+        <!-- 1. API calls → Python backend on port 9000 -->
+        <rule name="API Proxy" stopProcessing="true">
+          <match url="^api(.*)" />
+          <action type="Rewrite" url="http://localhost:9000/api{R:1}" />
+        </rule>
+
+        <!-- 2. Swagger / OpenAPI docs → Python backend -->
+        <rule name="Docs Proxy" stopProcessing="true">
+          <match url="^(docs|openapi\.json|redoc)(.*)" />
+          <action type="Rewrite" url="http://localhost:9000/{R:1}{R:2}" />
+        </rule>
+
+        <!-- 3. Classifier sub-app routes (no /api/ prefix) → Python backend -->
+        <rule name="Classifier Routes" stopProcessing="true">
+          <match url="^(health|config|detect|extract|classify|organise|pipeline|drive|report|list-directories|select-folder|google|onedrive)(.*)" />
+          <action type="Rewrite" url="http://localhost:9000/{R:1}{R:2}" />
+        </rule>
+
+        <!-- 4. Static assets → serve directly from client/ folder -->
+        <rule name="Static Files" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions logicalGrouping="MatchAll">
+            <add input="{REQUEST_FILENAME}" matchType="IsFile" />
+          </conditions>
+          <action type="None" />
+        </rule>
+
+        <!-- 5. Everything else → Wrangler SSR on port 3000 -->
+        <rule name="Frontend SSR" stopProcessing="true">
+          <match url=".*" />
+          <action type="Rewrite" url="http://localhost:3000/{R:0}" />
+        </rule>
+
+      </rules>
+    </rewrite>
+
+    <proxy enabled="true" preserveHostHeader="true" reverseRewriteHostInResponseHeaders="false" />
+
+  </system.webServer>
+
+</configuration>

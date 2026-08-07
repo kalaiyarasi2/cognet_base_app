@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { api, type PipelineResponse } from "@/lib/api";
-import { useApp, useSettings } from "@/lib/store";
+import { useApp, useSettings, safeUUID } from "@/lib/store";
 import { toast } from "sonner";
 import { FolderPickerModal } from "@/components/FolderPickerModal";
 
@@ -110,7 +110,7 @@ function PipelinePage() {
     setRunning(true); setResult(null); setLogs([]); setStepIdx(0);
     const log = (m: string) => setLogs((L) => [...L, `[${new Date().toLocaleTimeString()}] ${m}`]);
     log(`Starting Client-side local pipeline...`);
-    const runId = crypto.randomUUID ? crypto.randomUUID() : "client-" + Math.random().toString(36).substring(2, 15);
+    const runId = safeUUID();
 
     let files: any[] = [];
     let successful = 0;

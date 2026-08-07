@@ -33,7 +33,11 @@ export function CustomAgentNode({ data }: { data: any }) {
           Configure Fields ({fieldCount})
         </button>
 
-        <Handle type="source" position={Position.Right} id="custom-source" />
+        <div style={{ position: "absolute", right: -4, top: "35%", transform: "translateY(-50%)", fontSize: 9, color: "#94a3b8", fontWeight: 600 }}>JSON</div>
+        <Handle type="source" position={Position.Right} id="json" style={{ top: "35%", background: "#f59e0b" }} />
+        
+        <div style={{ position: "absolute", right: -4, top: "65%", transform: "translateY(-50%)", fontSize: 9, color: "#94a3b8", fontWeight: 600 }}>Excel</div>
+        <Handle type="source" position={Position.Right} id="excel" style={{ top: "65%", background: "#10b981" }} />
       </div>
     </NodeWrapper>
   );

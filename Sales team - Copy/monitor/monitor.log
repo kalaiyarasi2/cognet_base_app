@@ -1740,3 +1740,22 @@ NotImplementedError
 2026-08-06 15:29:15,868 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
 2026-08-06 15:29:34,077 - monitor_db - INFO - Database initialized successfully
 2026-08-06 15:29:34,311 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-06 12:51:22,857 - monitor_db - INFO - Database initialized successfully
+2026-08-06 12:51:23,237 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-06 12:51:26,261 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-06 12:51:40,941 - h5py._conv - DEBUG - Creating converter from 7 to 5
+2026-08-06 12:51:40,943 - h5py._conv - DEBUG - Creating converter from 5 to 7
+2026-08-06 12:51:40,943 - h5py._conv - DEBUG - Creating converter from 7 to 5
+2026-08-06 12:51:40,943 - h5py._conv - DEBUG - Creating converter from 5 to 7
+2026-08-06 12:51:45,108 - monitor_db - INFO - Database initialized successfully
+2026-08-06 12:51:45,217 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-06 12:51:46,920 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-06 12:51:54,370 - h5py._conv - DEBUG - Creating converter from 7 to 5
+2026-08-06 12:51:54,370 - h5py._conv - DEBUG - Creating converter from 5 to 7
+2026-08-06 12:51:54,370 - h5py._conv - DEBUG - Creating converter from 7 to 5
+2026-08-06 12:51:54,371 - h5py._conv - DEBUG - Creating converter from 5 to 7
+2026-08-06 12:51:54,884 - asyncio - DEBUG - Using selector: SelectSelector
+2026-08-06 12:51:56,731 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-06 12:51:57,570 - rpve.worker - INFO - Started worker thread: rpve-worker-0
+2026-08-06 12:51:57,571 - rpve.worker - INFO - Started worker thread: rpve-worker-1
+2026-08-06 12:51:57,573 - rpve.worker - INFO - Started worker thread: rpve-worker-2
