@@ -179,7 +179,7 @@ export function PayrollExtractorPage() {
       {/* Header Banner */}
       <PageHeader
         icon={FileCheck}
-        title="Payroll Extractor"
+        title="Payroll Register Extraction"
         description="Automated Payroll Data Extraction & Structuring Engine"
       />
 

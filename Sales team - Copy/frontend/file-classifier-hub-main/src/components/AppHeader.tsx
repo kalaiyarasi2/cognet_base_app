@@ -1,4 +1,5 @@
 import { Bell, Moon, Sun, Search, ChevronDown, Settings2, Info, User, LogOut, PanelLeft, ShieldCheck, UserRound, Building2 } from "lucide-react";
+import logoUrl from "../logo.png";
 import { useSettings, useApp, useAuth } from "@/lib/store";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -41,7 +42,7 @@ export function AppHeader({ onToggleSidebar }: { onToggleSidebar: () => void }) 
       </button>
 
       <div className="flex items-center gap-2">
-        <span className="text-[13px] font-semibold">DRIVE</span>
+        <img src={logoUrl} alt="DRIVE AI Logo" className="h-6 object-contain" />
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium tracking-wider">
           ENTERPRISE
         </span>

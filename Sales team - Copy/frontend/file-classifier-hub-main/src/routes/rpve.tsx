@@ -224,14 +224,14 @@ export function RpvePage() {
       {/* Header Banner (Preserved as requested) */}
       <PageHeader
         icon={FileCheck}
-        title="RPVE"
+        title="Invoice to Census"
         description="Data Retrieval Ingestion Verification Engine • Resource-Prestige-Velocity-Engage"
       />
 
       {/* Drag & Drop Upload Hub */}
       <Panel
         title="Data Retrieval Ingestion Verification Engine"
-        description="RPVE (Resource-Prestige-Velocity-Engage)"
+        description="Invoice to Census (Resource-Prestige-Velocity-Engage)"
       >
         <div
           onDragOver={(e) => e.preventDefault()}

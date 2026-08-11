@@ -1,9 +1,12 @@
 import { Handle, Position, useNodeId, useReactFlow } from "@xyflow/react";
-import { Download, HardDrive, Cloud, Mail, Database, Power, CheckCircle2 } from "lucide-react";
+import { Download, HardDrive, Cloud, Mail, Database, Power, CheckCircle2, FolderOpen, Trash2 } from "lucide-react";
 import { NodeWrapper } from "./NodeWrapper";
 import { useQuery } from "@tanstack/react-query";
 import { api, getBackendUrl } from "@/lib/api";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { get, set, del } from "idb-keyval";
+import { useState, useEffect } from "react";
 
 export function OutputNode({ data }: { data: any }) {
   const id = useNodeId()!;
@@ -42,8 +45,46 @@ export function OutputNode({ data }: { data: any }) {
   const Icon = icons[outputType] || Download;
   const { updateNodeData } = useReactFlow();
 
-  const handlePathChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    updateNodeData(id, { savePath: e.target.value });
+  const [folderName, setFolderName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (outputType === "local") {
+      get(`workflow_dir_${id}`).then((handle: any) => {
+        if (handle && handle.name) {
+          setFolderName(handle.name);
+          updateNodeData(id, { hasLocalFolderHandle: true });
+        }
+      }).catch(() => {});
+    }
+  }, [id, outputType, updateNodeData]);
+
+  const handleSelectFolder = async () => {
+    try {
+      if (typeof window.showDirectoryPicker !== 'function') {
+        toast.error("Folder selection is not supported in this browser or requires HTTPS.");
+        return;
+      }
+      // @ts-ignore
+      const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      await set(`workflow_dir_${id}`, dirHandle);
+      setFolderName(dirHandle.name);
+      updateNodeData(id, { hasLocalFolderHandle: true, savePath: "" });
+    } catch (e: any) {
+      if (e.name !== 'AbortError') {
+        console.error("User cancelled or API not supported", e);
+        toast.error("Failed to open folder picker: " + e.message);
+      }
+    }
+  };
+
+  const handleClearFolder = async () => {
+    try {
+      await del(`workflow_dir_${id}`);
+      setFolderName(null);
+      updateNodeData(id, { hasLocalFolderHandle: false });
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
@@ -75,28 +116,41 @@ export function OutputNode({ data }: { data: any }) {
         </div>
 
         {outputType === "local" && (
-          <div style={{ marginTop: 4 }}>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, marginLeft: 4 }}>
-              Optional Absolute Path:
+          <div className="nodrag" style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6, marginLeft: 4 }}>
+              Save to your PC:
             </div>
-            <input
-              type="text"
-              placeholder="e.g. C:\Users\Downloads\result.json"
-              value={data.savePath || ""}
-              onChange={handlePathChange}
-              style={{
-                width: "100%",
-                padding: "6px 10px",
-                fontSize: 12,
-                borderRadius: 8,
-                border: "1px solid #e2e8f0",
-                background: "#f8fafc",
-                color: "#334155",
-                outline: "none",
-              }}
-              onFocus={(e) => e.target.style.borderColor = "#cbd5e1"}
-              onBlur={(e) => e.target.style.borderColor = "#e2e8f0"}
-            />
+            {folderName ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <FolderOpen style={{ width: 14, height: 14, color: "#64748b", flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: "#334155", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 500 }}>
+                    {folderName}
+                  </span>
+                </div>
+                <button
+                  onClick={handleClearFolder}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                  title="Remove folder"
+                  onMouseEnter={(e) => e.currentTarget.style.color = "#ef4444"}
+                  onMouseLeave={(e) => e.currentTarget.style.color = "#94a3b8"}
+                >
+                  <Trash2 style={{ width: 14, height: 14, color: "inherit" }} />
+                </button>
+              </div>
+            ) : (
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectFolder();
+                }} 
+                style={{ width: "100%", padding: "0 10px", gap: 6, height: 28, fontSize: 11, borderRadius: 6, borderColor: "#e2e8f0", color: "#475569" }} 
+              >
+                <FolderOpen style={{ width: 12, height: 12 }} /> Choose Folder
+              </Button>
+            )}
           </div>
         )}
 

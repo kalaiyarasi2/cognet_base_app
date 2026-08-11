@@ -39,11 +39,16 @@ AGENT_MAPPINGS = {
     "Classification": "/classify/pdf",
     "File Converter": "/api/convert",
     "Data extraction": "/api/gpu/api/extract",
+    "Benefit Invoice Extraction": "/api/gpu/api/extract",
     "RPVE Agent": "/api/rpve/api/extract",
+    "Invoice to Census": "/api/rpve/api/extract",
     "Parity Agent": "/api/parity/api/extract",
+    "SBC plan summary": "/api/parity/api/extract",
     "Renewal Agent": "/api/renewal/api/process",
+    "Census Creation": "/api/renewal/api/process",
     "Resourcing Agent": "/api/resourcing/api/process-pdf",
-    "Payroll Extractor": "/api/payroll/process-pdf"
+    "Payroll Extractor": "/api/payroll/process-pdf",
+    "Payroll Register Extraction": "/api/payroll/process-pdf"
 }
 
 @router.post("/run-workflow")
@@ -140,8 +145,9 @@ async def run_workflow(
                         # 1. Load Dummy Base Schema
                         base_schema = {"name": "string", "dob": "string", "city": "string"}
 
-                        # 2. Extract Custom Schema from payload
-                        custom_schema = connected_custom_nodes[0].data.get("customSchema", {})
+                        # 2. Extract Custom Schema from payload (frontend uses 'customFields' list)
+                        custom_fields_list = connected_custom_nodes[0].data.get("customFields", [])
+                        custom_schema = {field.get("name"): field.get("type", "string") for field in custom_fields_list if field.get("name")}
 
                         # 3. Merge Schemas
                         merged_schema = {**base_schema, **custom_schema}
@@ -190,18 +196,30 @@ async def run_workflow(
                                                 "invoice": (invoice_meta[1], inv_f, invoice_meta[2]),
                                                 "census": (census_meta[1], cen_f, census_meta[2])
                                             }
-                                            resp = await client.post(f"http://127.0.0.1:8000{endpoint}", files=client_files, data=data_payload, params=params_payload)
+                                            resp = await client.post(f"http://127.0.0.1:9000{endpoint}", files=client_files, data=data_payload, params=params_payload)
                                             resp.raise_for_status()
                                 else:
                                     target_file_meta = current_temp_files[0]
                                     with open(target_file_meta[0], "rb") as f_out:
                                         client_files = {"file": (target_file_meta[1], f_out, target_file_meta[2])}
-                                        resp = await client.post(f"http://127.0.0.1:8000{endpoint}", files=client_files, data=data_payload, params=params_payload)
+                                        resp = await client.post(f"http://127.0.0.1:9000{endpoint}", files=client_files, data=data_payload, params=params_payload)
                                         resp.raise_for_status()
 
                                 if resp is not None:
                                     try:
                                         final_output_data = resp.json()
+                                        
+                                        # Map GPU Server's nested results to top-level 'excel' and 'json' keys
+                                        if isinstance(final_output_data, dict) and "results" in final_output_data and isinstance(final_output_data["results"], list):
+                                            if len(final_output_data["results"]) > 0:
+                                                first_result = final_output_data["results"][0]
+                                                if isinstance(first_result, dict):
+                                                    if first_result.get("excel_url"):
+                                                        final_output_data["excel"] = first_result["excel_url"]
+                                                    if first_result.get("json_url"):
+                                                        final_output_data["json"] = first_result["json_url"]
+                                                    if first_result.get("file_name"):
+                                                        final_output_data["file_name"] = first_result["file_name"]
                                     except Exception:
                                         final_output_data = {"message": f"Successfully processed by {label}, but output was not JSON."}
                                     execution_log.append(f"{label} processing completed successfully.")
@@ -247,6 +265,35 @@ async def run_workflow(
                                                         with open(target_json_path, "w") as jf:
                                                             json.dump(existing_data, jf, indent=4)
                                                         execution_log.append(f"Injected custom fields into generated JSON.")
+                                                
+                                                # Also inject into Excel if it exists
+                                                output_excel_rel = final_output_data.get("output_file", "")
+                                                if output_excel_rel:
+                                                    excel_filename = os.path.basename(output_excel_rel)
+                                                    target_excel_path = os.path.join(gpu_outputs_dir, excel_filename)
+                                                    if os.path.exists(target_excel_path):
+                                                        try:
+                                                            import pandas as pd
+                                                            df = pd.read_excel(target_excel_path)
+                                                            excel_injected = False
+                                                            for k, v in custom_schema.items():
+                                                                if k not in df.columns:
+                                                                    v_type = v.get("type", "string") if isinstance(v, dict) else v
+                                                                    if v_type == "string":
+                                                                        df[k] = "Male" if k.lower() == "gender" else "Extracted Demo Data"
+                                                                    elif v_type == "number":
+                                                                        df[k] = 100
+                                                                    elif v_type == "boolean":
+                                                                        df[k] = True
+                                                                    else:
+                                                                        df[k] = "Demo"
+                                                                    excel_injected = True
+                                                            if excel_injected:
+                                                                df.to_excel(target_excel_path, index=False)
+                                                                execution_log.append(f"Injected custom fields into generated Excel.")
+                                                        except Exception as excel_err:
+                                                            execution_log.append(f"Failed to inject custom fields into Excel: {str(excel_err)}")
+
                                         except Exception as json_err:
                                             execution_log.append(f"Failed to inject custom fields: {str(json_err)}")
                                     # --------------------------------------
@@ -348,8 +395,8 @@ async def run_workflow(
                 elif output_type == "local" or not output_type:
                     actual_file_meta = current_temp_files[0] if current_temp_files else None
                     if not save_path:
-                        # Two-way save method: fallback to local Downloads if no path is given
-                        download_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
+                        # Two-way save method: fallback to temp dir if no path is given (browser will handle actual download)
+                        download_dir = os.path.join(tempfile.gettempdir(), 'cognet_workflow_outputs')
                         os.makedirs(download_dir, exist_ok=True)
                         if actual_file_meta:
                             base_name = os.path.splitext(actual_file_meta[1])[0]
@@ -393,13 +440,21 @@ async def run_workflow(
                             if not specific_name and actual_file_meta:
                                 specific_name = f"{os.path.splitext(actual_file_meta[1])[0]}.json"
                             path = await download_file(simulated_data["json"], target_dir, specific_filename=specific_name)
-                            execution_log.append(f"Downloaded final processed JSON to: {path}")
+                            execution_log.append(f"Prepared final processed JSON for browser download.")
                             has_downloaded_json = True
 
                             # Update final_output_data so the frontend shows the actual processed data
                             try:
                                 with open(path, 'r', encoding='utf-8') as f:
-                                    final_output_data = json.load(f)
+                                    loaded_data = json.load(f)
+                                    if isinstance(final_output_data, dict):
+                                        final_output_data["extracted_data"] = loaded_data
+                                        if isinstance(final_output_data.get("excel"), str):
+                                            final_output_data["excel"] = final_output_data["excel"].replace("127.0.0.1", "localhost")
+                                        if isinstance(final_output_data.get("json"), str):
+                                            final_output_data["json"] = final_output_data["json"].replace("127.0.0.1", "localhost")
+                                    else:
+                                        final_output_data = loaded_data
                             except Exception:
                                 pass
 
@@ -453,7 +508,7 @@ async def run_workflow(
                             if not json_save_path and actual_file_meta:
                                 specific_name = f"{os.path.splitext(actual_file_meta[1])[0]}.xlsx"
                             path = await download_file(simulated_data["excel"], target_dir, specific_filename=specific_name)
-                            execution_log.append(f"Downloaded Excel output to: {path}")
+                            execution_log.append(f"Prepared Excel output for browser download.")
 
                     except Exception as e:
                         execution_log.append(f"Reached Output Node ({next_node.id}). Failed to save output to {save_path}: {e}")

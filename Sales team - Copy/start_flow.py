@@ -171,12 +171,7 @@ if OutlookAgentModule is not None:
                 logger.warning("Failed to read/refresh from simple cache: %s", e)
 
         # 1b. Check Active Dashboard Sessions (OneDrive OAuth Cache Sync)
-        sessions_dir = Path(r"c:\Users\Intern\file classifier agent\sessions")
-        # Fallback to general sibling directory pattern
-        if not sessions_dir.exists():
-            sessions_dir = Path(r"c:\Users\Intern\file classifier agent\.sessions")
-        if not sessions_dir.exists():
-            sessions_dir = WORKSPACE_DIR / ".." / "file classifier agent" / ".sessions"
+        sessions_dir = WORKSPACE_DIR / ".sessions"
 
         if sessions_dir.exists():
             import glob

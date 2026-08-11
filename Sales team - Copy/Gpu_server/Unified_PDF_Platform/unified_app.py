@@ -529,8 +529,8 @@ async def drive_classify(body: DriveClassifyRequest):
                 "output_dir": str(dest_dir),
                 "excel_path": excel_filename,
                 "json_path": json_filename,
-                "excel_url": f"http://localhost:8000/api/gpu/api/download/{excel_filename}" if excel_filename else None,
-                "json_url": f"http://localhost:8000/api/gpu/api/download/{json_filename}" if json_filename else None,
+                "excel_url": f"http://localhost:9000/api/gpu/api/download/{excel_filename}" if excel_filename else None,
+                "json_url": f"http://localhost:9000/api/gpu/api/download/{json_filename}" if json_filename else None,
                 "result": data,
                 "metadata": {
                     "insurer": insurer,

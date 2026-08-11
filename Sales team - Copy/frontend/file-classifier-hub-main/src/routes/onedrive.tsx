@@ -24,6 +24,7 @@ export const Route = createFileRoute("/onedrive")({ component: OneDrivePage });
 
 const POC_ENGINES = [
   { id: "AUTO", label: "Auto Router (Default AI Classification)", desc: "Automatic document classification & pipeline routing", mode: "Default" },
+  { id: "FULL_PIPELINE", label: "Full Pipeline (Auto-Route & Process)", desc: "Classify all documents and automatically route to specific POCs", mode: "Batch" },
   { id: "CONVERTER", label: "Universal File Converter (Single File)", desc: "Process individual files (CSV, Excel, PDF) into structured JSON/XML", mode: "Single File" },
   { id: "INSURANCE", label: "Insurance Loss Runs & ACORD", desc: "Loss history & ACORD policy extraction", mode: "Single File" },
   { id: "WORK_COMP", label: "Workers' Compensation (ACORD 130)", desc: "Workers' Comp forms & rating schedule audit", mode: "Single File" },

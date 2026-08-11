@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Mail, Loader2, AlertTriangle, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, CheckCircle2, X } from "lucide-react";
 import { useAuth } from "@/lib/store";
 import { api } from "@/lib/api";
+import logoUrl from "../logo.png";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -123,16 +124,8 @@ function LoginPage() {
         zIndex: 1,
       }}>
         {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "32px" }}>
-          <div style={{
-            width: 36, height: 36,
-            background: "linear-gradient(135deg, #0057FF 0%, #0099FF 100%)",
-            borderRadius: 8,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <span style={{ color: "#fff", fontWeight: 800, fontSize: 16, letterSpacing: -0.5 }}>C</span>
-          </div>
-          <span style={{ fontSize: 18, fontWeight: 700, color: "#0f1117", letterSpacing: -0.3 }}>CogNet</span>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: "32px" }}>
+          <img src={logoUrl} alt="DRIVE AI Logo" style={{ height: "48px", objectFit: "contain" }} />
         </div>
 
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0f1117", margin: "0 0 4px 0" }}>Welcome back!</h1>

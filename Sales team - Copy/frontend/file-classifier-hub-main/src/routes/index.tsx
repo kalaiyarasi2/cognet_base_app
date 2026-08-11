@@ -80,7 +80,7 @@ function Dashboard() {
     queryKey: ["health"], queryFn: api.health, retry: false, refetchInterval: 30000,
   });
 
-  const { data: autoStatus } = useQuery({
+  const { data: autoStatus, isLoading: isAutoStatusLoading } = useQuery({
     queryKey: ["automation-status"],
     queryFn: api.automationStatus,
     refetchInterval: 3000,
@@ -139,7 +139,9 @@ function Dashboard() {
   });
 
   const handleStart = () => {
-    const connected = selectedProvider === "outlook" ? autoStatus?.outlook_connected : autoStatus?.gmail_connected;
+    if (!autoStatus) return; // Wait until status is loaded
+
+    const connected = selectedProvider === "outlook" ? autoStatus.outlook_connected : autoStatus.gmail_connected;
     if (!connected) {
       toast.warning(`Please sign in to your ${selectedProvider === "outlook" ? "Microsoft" : "Google"} account first.`);
       navigate({ to: selectedProvider === "outlook" ? "/onedrive" : "/drive" });
@@ -261,11 +263,11 @@ function Dashboard() {
 
           <div className="flex items-center gap-2 self-end md:self-center">
             {autoStatus?.running ? (
-              <Button size="sm" variant="destructive" onClick={() => stopMutation.mutate()} disabled={stopMutation.isPending}>
+              <Button size="sm" variant="destructive" onClick={() => stopMutation.mutate()} disabled={stopMutation.isPending || isAutoStatusLoading}>
                 Stop Polling
               </Button>
             ) : (
-              <Button size="sm" className="bg-success hover:bg-success/90 text-success-foreground" onClick={handleStart} disabled={startMutation.isPending}>
+              <Button size="sm" className="bg-success hover:bg-success/90 text-success-foreground" onClick={handleStart} disabled={startMutation.isPending || isAutoStatusLoading}>
                 Start Polling
               </Button>
             )}

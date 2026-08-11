@@ -6,6 +6,13 @@
     <!-- Show detailed errors while debugging -->
     <httpErrors errorMode="Detailed" existingResponse="PassThrough" />
 
+    <security>
+      <requestFiltering>
+        <!-- Increase upload limit to ~1GB (1073741824 bytes) -->
+        <requestLimits maxAllowedContentLength="1073741824" />
+      </requestFiltering>
+    </security>
+
     <!-- IIS serves the static client files -->
     <staticContent>
       <mimeMap fileExtension=".mjs" mimeType="application/javascript" />

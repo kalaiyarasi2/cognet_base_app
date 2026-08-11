@@ -269,7 +269,7 @@ export function ParitySetupPage() {
       {/* Top Header */}
       <PageHeader
         icon={FileText}
-        title="SBC / Parity Setup"
+        title="SBC plan summary"
         description="Automated Health Plan Extraction & Structured Data Schema Mapping"
       />
 

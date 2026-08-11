@@ -298,17 +298,7 @@ try:
 except Exception as _wf_err:
     print(f"[WARN] Failed to include workflow router: {_wf_err}")
 
-# Include OneDrive OAuth Routes
-try:
-    import sys
-    onedrive_path = WORKSPACE_DIR / "file-classification-old"
-    if str(onedrive_path) not in sys.path:
-        sys.path.insert(0, str(onedrive_path))
-    from onedrive_oauth import router as onedrive_router
-    app.include_router(onedrive_router)
-    print("[INFO] OneDrive OAuth router included successfully.")
-except Exception as _od_err:
-    print(f"[WARN] Failed to include onedrive router: {_od_err}")
+
 
 # Mount the full dispatcher at root — every other request goes through it.
 # We use Starlette's Mount directly so we control path stripping ourselves.

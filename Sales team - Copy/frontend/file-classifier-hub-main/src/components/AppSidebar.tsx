@@ -23,19 +23,18 @@ const groups: NavGroup[] = [
   {
     label: "Sales",
     items: [
-      { label: "Accord", to: "/drive-gpu?pipeline=WORK_COMP", icon: FileText, moduleCode: "WORK_COMP" },
-      { label: "Insurance", to: "/drive-gpu?pipeline=INSURANCE", icon: Shield, moduleCode: "LOSS_RUN" },
+      { label: "Accord 130", to: "/drive-gpu?pipeline=WORK_COMP", icon: FileText, moduleCode: "WORK_COMP" },
+      { label: "Loss Run", to: "/drive-gpu?pipeline=INSURANCE", icon: Shield, moduleCode: "LOSS_RUN" },
     ],
   },
   {
-    label: "Payroll",
+    label: "Payroll &Benefits",
     items: [
-      { label: "Invoice", to: "/drive-gpu?pipeline=INVOICE", icon: ReceiptText, moduleCode: "INVOICE" },
-      { label: "Renewal Process", to: "/renewal-process", icon: RefreshCw, moduleCode: "RENEWAL" },
-      { label: "RPVE", to: "/rpve", icon: FileCheck, moduleCode: "RPVE" },
-      { label: "SBC", to: "/parity-setup", icon: Scale, moduleCode: "SBC" },
-      { label: "RE", to: "/resourcing-edge", icon: Cpu, moduleCode: "RE" },
-      { label: "Payroll Extractor", to: "/payroll-extractor", icon: FileSpreadsheet, moduleCode: "PAYROLL" },
+      { label: "Benefit Invoice Extraction", to: "/drive-gpu?pipeline=INVOICE", icon: ReceiptText, moduleCode: "INVOICE" },
+      { label: "Census Creation", to: "/renewal-process", icon: RefreshCw, moduleCode: "RENEWAL" },
+      { label: "Invoice to Census", to: "/rpve", icon: FileCheck, moduleCode: "RPVE" },
+      { label: "SBC plan summary", to: "/parity-setup", icon: Scale, moduleCode: "SBC" },
+      { label: "Payroll Register Extraction", to: "/payroll-extractor", icon: FileSpreadsheet, moduleCode: "PAYROLL" },
     ],
   },
   {
@@ -52,6 +51,7 @@ const groups: NavGroup[] = [
       { label: "Classification", to: "/classification", icon: Tags },
       { label: "File Converter", to: "/converter", icon: RefreshCw },
       { label: "File Organiser", to: "/pipeline", icon: Workflow },
+      { label: "Work Flow Designer", to: "/co-pilot", icon: Workflow },
     ],
   },
   {
@@ -60,7 +60,6 @@ const groups: NavGroup[] = [
       { label: "Google Drive", to: "/drive", icon: Cloud },
       { label: "OneDrive", to: "/onedrive", icon: Cloud },
       { label: "SharePoint", to: "/sharepoint", icon: Share2 },
-      { label: "Work Flow Designer", to: "/co-pilot", icon: Workflow },
     ],
   },
   {

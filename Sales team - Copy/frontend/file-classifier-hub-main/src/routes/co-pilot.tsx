@@ -38,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import axios from "axios";
 import { getBackendUrl } from "@/lib/api";
+import { get } from "idb-keyval";
 
 export const Route = createFileRoute("/co-pilot")({
   component: CoPilotPage,
@@ -102,13 +103,13 @@ const sidebarGroups = [
           ]
         } 
       },
-      { type: "invoiceAgentNode", label: "Data extraction", icon: Bot, data: { label: "Data extraction" } },
+      { type: "invoiceAgentNode", label: "Benefit Invoice Extraction", icon: Bot, data: { label: "Benefit Invoice Extraction" } },
       { type: "customAgentNode", label: "Customization Agent", icon: Settings, data: { label: "Customization Agent" } },
-      { type: "agentNode", label: "RPVE Agent", icon: Bot, data: { label: "RPVE Agent" } },
+      { type: "agentNode", label: "Invoice to Census", icon: Bot, data: { label: "Invoice to Census" } },
       { type: "agentNode", label: "Resourcing Agent", icon: Bot, data: { label: "Resourcing Agent" } },
-      { type: "agentNode", label: "Parity Agent", icon: Bot, data: { label: "Parity Agent" } },
-      { type: "agentNode", label: "Renewal Agent", icon: Bot, data: { label: "Renewal Agent" } },
-      { type: "payrollAgentNode", label: "Payroll Extractor", icon: Bot, data: { label: "Payroll Extractor" } },
+      { type: "agentNode", label: "SBC plan summary", icon: Bot, data: { label: "SBC plan summary" } },
+      { type: "agentNode", label: "Census Creation", icon: Bot, data: { label: "Census Creation" } },
+      { type: "payrollAgentNode", label: "Payroll Register Extraction", icon: Bot, data: { label: "Payroll Register Extraction" } },
     ],
   },
   {
@@ -336,6 +337,22 @@ export function CoPilotPage() {
 
   /* ── Run workflow ──────────────────────────────────────────── */
   const handleRunWorkflow = useCallback(async () => {
+    // 0. Chrome requires requestPermission() to be called immediately during a transient user activation (the click).
+    // If we wait for the backend response, Chrome will block the permission request with a DOMException.
+    const localSaveNode = nodes.find((n) => n.type === "outputNode" && (!n.data?.outputType || n.data?.outputType === "local"));
+    if (localSaveNode && localSaveNode.data?.hasLocalFolderHandle) {
+      try {
+        const handle = await get(`workflow_dir_${localSaveNode.id}`);
+        if (handle) {
+          if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
+            await handle.requestPermission({ mode: 'readwrite' });
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to request permission early:", e);
+      }
+    }
+
     setIsRunning(true);
     setResult(null);
     try {
@@ -355,51 +372,121 @@ export function CoPilotPage() {
         toast.success("Workflow completed successfully!");
         setResult(response.data);
 
-        // If the workflow contains a "Local Save" node without an absolute path, automatically trigger a browser download fallback
+        // If the workflow contains a "Local Save" node, automatically trigger a browser download fallback
+        // even if they provide an absolute path (since the absolute path saves on the server, not the client's PC)
         const localSaveNode = nodes.find(n => n.type === "outputNode" && (n.data?.outputType === "local" || !n.data?.outputType));
-        if (localSaveNode && !localSaveNode.data?.savePath && response.data.simulated_output_data) {
-          const inputFiles = Object.values(uploadedFiles);
-          const baseName = inputFiles.length > 0 ? inputFiles[0].name.replace(/\.[^/.]+$/, "") : "workflow_result";
+        const dataExtractionNode = nodes.find(n => n.type === "invoiceAgentNode");
+        const outputFormat = dataExtractionNode?.data?.outputFormat || "Both";
 
-          // 1. Download JSON
-          const jsonString = JSON.stringify(response.data.simulated_output_data, null, 2);
-          const blob = new Blob([jsonString], { type: "application/json" });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = `${baseName}.json`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          
-          // 2. Download Excel if available
-          if (response.data.simulated_output_data.excel) {
-             setTimeout(async () => {
-               try {
-                 let excelUrl = response.data.simulated_output_data.excel;
-                 // Sanitize URL to ensure it traverses the IIS proxy instead of failing on localhost:8000
-                 if (excelUrl.includes("localhost")) {
-                   excelUrl = excelUrl.replace(/^https?:\/\/localhost:\d+/, getBackendUrl() || window.location.origin);
-                 }
-                 
-                 // Fetch as blob to guarantee the download attribute works and bypass cross-origin restrictions
-                 const res = await axios.get(excelUrl, { responseType: 'blob', withCredentials: true });
-                 const blobUrl = URL.createObjectURL(res.data);
-                 
-                 const excelLink = document.createElement("a");
-                 excelLink.href = blobUrl;
-                 excelLink.download = `${baseName}.xlsx`;
-                 document.body.appendChild(excelLink);
-                 excelLink.click();
-                 document.body.removeChild(excelLink);
-                 URL.revokeObjectURL(blobUrl);
-               } catch (err) {
-                 console.error("Failed to download Excel file:", err);
-                 toast.error("Failed to download Excel output");
-               }
-             }, 500);
+        if (response.data.simulated_output_data) {
+          const inputFiles = Object.values(uploadedFiles);
+          let baseName = "workflow_result";
+          if (response.data.simulated_output_data.file_name) {
+            baseName = response.data.simulated_output_data.file_name.replace(/\.[^/.]+$/, "");
+          } else if (inputFiles.length > 0) {
+            baseName = inputFiles[0].name.replace(/\.[^/.]+$/, "");
           }
+          const shouldDownloadJSON = outputFormat === "JSON" || outputFormat === "Both";
+          const shouldDownloadExcel = outputFormat === "Excel" || outputFormat === "Both";
+
+          const performDownload = async () => {
+            let dirHandle: any = null;
+            
+            // 1. Check if user selected a local folder using File System API
+            if (localSaveNode && localSaveNode.data?.hasLocalFolderHandle) {
+              try {
+                dirHandle = await get(`workflow_dir_${localSaveNode.id}`);
+                if (dirHandle) {
+                  // Request write permissions if the page was reloaded
+                  if ((await dirHandle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
+                    const req = await dirHandle.requestPermission({ mode: 'readwrite' });
+                    if (req !== 'granted') dirHandle = null;
+                  }
+                }
+              } catch (e) {
+                console.warn("Failed to retrieve directory handle or permission denied", e);
+                dirHandle = null;
+              }
+            }
+
+            // 2. If we have a directory handle, write directly to it!
+            if (dirHandle) {
+              try {
+                if (shouldDownloadJSON) {
+                  const jsonString = JSON.stringify(response.data.simulated_output_data, null, 2);
+                  const jsonFileHandle = await dirHandle.getFileHandle(`${baseName}.json`, { create: true });
+                  const jsonWritable = await jsonFileHandle.createWritable();
+                  await jsonWritable.write(jsonString);
+                  await jsonWritable.close();
+                }
+
+                if (shouldDownloadExcel && response.data.simulated_output_data.excel) {
+                  let excelUrl = response.data.simulated_output_data.excel;
+                  if (excelUrl.includes("localhost")) {
+                    excelUrl = excelUrl.replace(/^https?:\/\/localhost:\d+/, getBackendUrl() || window.location.origin);
+                  }
+                  const res = await axios.get(excelUrl, { responseType: 'blob', withCredentials: true });
+                  const excelFileHandle = await dirHandle.getFileHandle(`${baseName}.xlsx`, { create: true });
+                  const excelWritable = await excelFileHandle.createWritable();
+                  await excelWritable.write(res.data);
+                  await excelWritable.close();
+                }
+                
+                toast.success(`Saved successfully to ${dirHandle.name}`);
+                return; // Exit here so we don't trigger the fallback!
+              } catch (err) {
+                console.error("Failed to write to selected folder:", err);
+                toast.error("Failed to write to folder, falling back to download.");
+              }
+            }
+
+            // 3. FALLBACK: Normal browser download
+            // 1. Download JSON
+            if (shouldDownloadJSON) {
+              const jsonString = JSON.stringify(response.data.simulated_output_data, null, 2);
+              const blob = new Blob([jsonString], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `${baseName}.json`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }
+            
+            // 2. Download Excel if available
+            if (shouldDownloadExcel && response.data.simulated_output_data.excel) {
+               setTimeout(async () => {
+                 try {
+                   let excelUrl = response.data.simulated_output_data.excel;
+                   // Sanitize URL to ensure it traverses the IIS proxy instead of failing on localhost:8000
+                   if (excelUrl.includes("localhost")) {
+                     excelUrl = excelUrl.replace(/^https?:\/\/localhost:\d+/, getBackendUrl() || window.location.origin);
+                   }
+                   
+                   toast.info("Starting Excel download...");
+                   
+                   // Fetch as blob to guarantee the download attribute works and bypass cross-origin restrictions
+                   const res = await axios.get(excelUrl, { responseType: 'blob', withCredentials: true });
+                   const blobUrl = URL.createObjectURL(res.data);
+                   
+                   const excelLink = document.createElement("a");
+                   excelLink.href = blobUrl;
+                   excelLink.download = `${baseName}.xlsx`;
+                   document.body.appendChild(excelLink);
+                   excelLink.click();
+                   document.body.removeChild(excelLink);
+                   URL.revokeObjectURL(blobUrl);
+                 } catch (err) {
+                   console.error("Failed to download Excel file:", err);
+                   toast.error("Failed to download Excel output");
+                 }
+               }, 500);
+            }
+          };
+          
+          performDownload();
         }
       } else {
         toast.error(response.data.message || "Workflow failed");

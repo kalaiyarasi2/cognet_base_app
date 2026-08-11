@@ -149,7 +149,7 @@ export function RenewalProcessPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
           icon={RefreshCw}
-          title="Automated Renewal Processing"
+          title="Census Creation"
           description="Automated matching of employee census rosters with carrier benefit renewal rates."
         />
         <div className="flex items-center gap-2 shrink-0">

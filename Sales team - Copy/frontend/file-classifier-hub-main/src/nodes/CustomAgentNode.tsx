@@ -13,7 +13,7 @@ export function CustomAgentNode({ data }: { data: any }) {
   return (
     <NodeWrapper id={id}>
       <div className="bg-white border-2 border-blue-200 rounded-xl p-4 w-64 shadow-sm flex flex-col gap-3">
-        <Handle type="target" position={Position.Left} />
+        {/* Removed misleading target handle */}
         
         <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
           <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shadow-inner">
@@ -33,11 +33,7 @@ export function CustomAgentNode({ data }: { data: any }) {
           Configure Fields ({fieldCount})
         </button>
 
-        <div style={{ position: "absolute", right: -4, top: "35%", transform: "translateY(-50%)", fontSize: 9, color: "#94a3b8", fontWeight: 600 }}>JSON</div>
-        <Handle type="source" position={Position.Right} id="json" style={{ top: "35%", background: "#f59e0b" }} />
-        
-        <div style={{ position: "absolute", right: -4, top: "65%", transform: "translateY(-50%)", fontSize: 9, color: "#94a3b8", fontWeight: 600 }}>Excel</div>
-        <Handle type="source" position={Position.Right} id="excel" style={{ top: "65%", background: "#10b981" }} />
+        {/* Removed misleading source handles for JSON/Excel as this is a global configuration node */}
       </div>
     </NodeWrapper>
   );

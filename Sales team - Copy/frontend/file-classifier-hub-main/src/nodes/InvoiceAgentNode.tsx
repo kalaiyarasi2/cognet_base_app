@@ -1,9 +1,10 @@
-import { Handle, Position, useNodeId } from "@xyflow/react";
+import { Handle, Position, useNodeId, useReactFlow } from "@xyflow/react";
 import { Bot } from "lucide-react";
 import { NodeWrapper } from "./NodeWrapper";
 
 export function InvoiceAgentNode({ data }: { data: any }) {
   const id = useNodeId()!;
+  const { updateNodeData } = useReactFlow();
   return (
     <NodeWrapper id={id}>
       <div style={{
@@ -29,11 +30,22 @@ export function InvoiceAgentNode({ data }: { data: any }) {
           <div style={{ color: "#1e293b", fontWeight: 600, fontSize: 14 }}>Data extraction</div>
           <div style={{ color: "#94a3b8", fontSize: 11 }}>Agent</div>
         </div>
-        <div style={{ position: "absolute", right: 8, top: "35%", transform: "translateY(-50%)", fontSize: 9, color: "#94a3b8", fontWeight: 600 }}>JSON</div>
-        <Handle type="source" position={Position.Right} id="json" style={{ top: "35%", background: "#f59e0b" }} />
-        
-        <div style={{ position: "absolute", right: 8, top: "65%", transform: "translateY(-50%)", fontSize: 9, color: "#94a3b8", fontWeight: 600 }}>Excel</div>
-        <Handle type="source" position={Position.Right} id="excel" style={{ top: "65%", background: "#10b981" }} />
+        <Handle type="source" position={Position.Right} id="output" style={{ top: "50%", background: "#3b82f6" }} />
+      </div>
+      
+      <div className="nodrag" style={{ background: "#fff", borderLeft: "1.5px solid #e2e8f0", borderRight: "1.5px solid #e2e8f0", borderBottom: "1.5px solid #e2e8f0", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, padding: "10px 14px", marginTop: -16, paddingTop: 20 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={{ fontSize: 10, color: "#64748b", fontWeight: 600 }}>Download Format</label>
+          <select 
+            value={data.outputFormat || "Both"}
+            onChange={(e) => updateNodeData(id, { outputFormat: e.target.value })}
+            style={{ fontSize: 11, padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1", outline: "none", color: "#334155", background: "#f8fafc" }}
+          >
+            <option value="Both">Both (JSON & Excel)</option>
+            <option value="JSON">JSON Only</option>
+            <option value="Excel">Excel Only</option>
+          </select>
+        </div>
       </div>
     </NodeWrapper>
   );

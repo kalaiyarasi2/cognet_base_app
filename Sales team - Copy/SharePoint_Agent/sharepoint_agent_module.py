@@ -1014,7 +1014,10 @@ class SharePointAgent:
                                 json.dump(result_summary, f_out, indent=2)
                                 
                             # Upload result back to output folder on SharePoint
-                            self.upload_file(self.output_folder, output_local)
+                            bundle_name = f"{Path(file_name).stem} - {self.poc_engine.upper()}"
+                            bundle_folder = f"{self.output_folder.rstrip('/')}/{bundle_name}"
+                            self.upload_file(bundle_folder, local_path)
+                            self.upload_file(bundle_folder, output_local)
                             
                             self.processed_history.append({
                                 "id": item_id,

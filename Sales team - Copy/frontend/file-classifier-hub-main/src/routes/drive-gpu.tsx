@@ -28,10 +28,11 @@ function DriveGpuPage() {
   const pipeline = search.pipeline || "";
 
   let pageTitle = "GPU-Accelerated Drive";
-  if (pipeline === "INSURANCE") pageTitle = "Insurance";
+  if (pipeline === "INSURANCE") pageTitle = "Loss Run";
   else if (pipeline === "BANK_STATEMENT") pageTitle = "Bank Statement";
-  else if (pipeline === "INVOICE") pageTitle = "Invoice";
-  else if (pipeline === "WORK_COMP") pageTitle = "Workers' Compensation";
+  else if (pipeline === "INVOICE") pageTitle = "Benefit Invoice Extraction";
+  else if (pipeline === "WORK_COMP") pageTitle = "Accord 130";
+  else if (pipeline === "VENDOR_INVOICE") pageTitle = "Vendor Invoice";
 
   const defaultIn = useSettings((s) => s.defaultInputFolder);
   const defaultOut = useSettings((s) => s.defaultOutputFolder);

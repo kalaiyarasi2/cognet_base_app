@@ -144,7 +144,9 @@ const ResultsPanel = ({
   };
 
   const handleDownloadExcel = async () => {
-    const downloadUrl = document.excelPath ? `${getBackendUrl()}/api/gpu/api/download/${document.excelPath}` : (document.excelUrl ? document.excelUrl.replace(/http:\/\/127\.0\.0\.1:\d+|http:\/\/localhost:\d+/g, getBackendUrl()) : null);
+    const excelPath = document.excelPath || document.excel_path;
+    const excelUrl = document.excelUrl || document.excel_url;
+    const downloadUrl = excelPath ? `${getBackendUrl()}/api/gpu/api/download/${excelPath}` : (excelUrl ? excelUrl.replace(/http:\/\/127\.0\.0\.1:\d+|http:\/\/localhost:\d+/g, getBackendUrl()) : null);
     
     if (!downloadUrl) {
       console.error("No Excel file URL or path available");
@@ -160,7 +162,8 @@ const ResultsPanel = ({
       const url = URL.createObjectURL(blob);
       const a = globalThis.document.createElement("a");
       a.href = url;
-      const filename = document.excelPath?.split("/").pop() || "extracted_data.xlsx";
+      const excelPath = document.excelPath || document.excel_path;
+      const filename = excelPath?.split("/").pop() || "extracted_data.xlsx";
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
@@ -333,7 +336,7 @@ const ResultsPanel = ({
           <FileJson className="w-3.5 h-3.5 mr-1.5" />
           Download JSON
         </Button>
-        <Button size="sm" variant="outline" onClick={handleDownloadExcel} disabled={!document.excelPath} className="h-8 text-[11px] font-bold">
+        <Button size="sm" variant="outline" onClick={handleDownloadExcel} disabled={!(document.excelPath || document.excel_path || document.excelUrl || document.excel_url)} className="h-8 text-[11px] font-bold">
           <Download className="w-3.5 h-3.5 mr-1.5" />
           Download Excel
         </Button>
