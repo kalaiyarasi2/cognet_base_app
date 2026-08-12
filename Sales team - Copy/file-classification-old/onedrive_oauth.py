@@ -667,19 +667,8 @@ async def cloud_onedrive_classify(request: Request, body: OneDriveDriveClassifyR
             if sorted_folder_id:
                 logger.info("Reusing existing 'sorted' folder: %s", sorted_folder_id)
             else:
-                # Create "sorted" folder
-                create_url = f"https://graph.microsoft.com/v1.0/me/drive/items/{body.onedrive_output_folder_id}/children"
-                create_body = {
-                    "name": "sorted",
-                    "folder": {},
-                    "@microsoft.graph.conflictBehavior": "fail"
-                }
-                create_res = requests.post(create_url, headers=headers, json=create_body)
-                if create_res.status_code in (200, 201):
-                    sorted_folder_id = create_res.json().get("id")
-                    logger.info("Created new 'sorted' folder in OneDrive: %s", sorted_folder_id)
-                else:
-                    raise ValueError(f"Failed to create 'sorted' folder in OneDrive: {create_res.text}")
+                sorted_folder_id = body.onedrive_output_folder_id
+                  logger.info("Using user-selected OneDrive folder as direct output: %s", sorted_folder_id)
 
             # Upload subfolders and files
             for cat_folder in temp_output.iterdir():
@@ -772,8 +761,6 @@ async def cloud_onedrive_classify(request: Request, body: OneDriveDriveClassifyR
                               "category": cat_name,
                               "destination": f"sorted/{cat_name}/{item.name}"
                           })
-                    else:
-                        logger.error("Failed to upload %s to OneDrive: %s", pdf_file.name, upload_res.text)
 
             # 7. Delete original files from OneDrive (if copy_mode is False)
             if not body.copy_mode:

@@ -673,7 +673,35 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
             logger.error("[ROUTING] UnifiedRouter fallback failed: %s", e, exc_info=True)
             return {"error": f"UnifiedRouter fallback failed: {str(e)}"}
 
-
+def upload_to_onedrive_cloud(token: str, category: str, filename: str, file_path: Path):
+    import requests
+    import os
+    
+    sanitized_cat = category.strip().upper().replace(" ", "_").replace("-", "_")
+    logger.info("Uploading %s directly to OneDrive Cloud (Category: %s)", filename, sanitized_cat)
+    
+    upload_url = f"https://graph.microsoft.com/v1.0/me/drive/root:/sorted/{sanitized_cat}/{filename}:/content"
+    
+    with open(file_path, 'rb') as f:
+        file_data = f.read()
+        
+    content_type = "application/pdf"
+    if filename.endswith(".json"):
+        content_type = "application/json"
+    elif filename.endswith(".xlsx"):
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": content_type
+    }
+    
+    try:
+        resp = requests.put(upload_url, headers=headers, data=file_data)
+        resp.raise_for_status()
+        logger.info("[CLOUD STORE] Successfully uploaded %s to cloud OneDrive.", filename)
+    except Exception as e:
+        logger.error("[CLOUD STORE] Failed to upload %s to OneDrive: %s", filename, e)
 
 def execute_flow(
     provider: str,
@@ -781,8 +809,11 @@ def execute_flow(
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         dest_pdf_path = dest_dir / filename
-        shutil.copy2(temp_pdf_path, dest_pdf_path)
-        logger.info("[STORE] PDF saved to: %s", dest_pdf_path)
+        if outlook_token and provider == "outlook":
+            upload_to_onedrive_cloud(outlook_token, category, filename, temp_pdf_path)
+        else:
+            shutil.copy2(temp_pdf_path, dest_pdf_path)
+            logger.info("[STORE] PDF saved to: %s", dest_pdf_path)
 
         # ── DB: log file classification ───────────────────────────────────
         if _mdb_ok:
@@ -840,15 +871,21 @@ def execute_flow(
             excel_out = extract_result.get("excel")
             if excel_out and os.path.exists(excel_out):
                 excel_dest = dest_dir / f"{filename_stem}_extracted.xlsx"
-                shutil.copy2(excel_out, excel_dest)
-                logger.info("[STORE] Excel output saved to: %s", excel_dest)
+                if outlook_token and provider == "outlook":
+                    upload_to_onedrive_cloud(outlook_token, category, f"{filename_stem}_extracted.xlsx", Path(excel_out))
+                else:
+                    shutil.copy2(excel_out, excel_dest)
+                    logger.info("[STORE] Excel output saved to: %s", excel_dest)
 
             # JSON
             json_out = extract_result.get("json")
             if json_out and os.path.exists(json_out):
                 json_dest = dest_dir / f"{filename_stem}_extracted.json"
-                shutil.copy2(json_out, json_dest)
-                logger.info("[STORE] JSON output saved to: %s", json_dest)
+                if outlook_token and provider == "outlook":
+                    upload_to_onedrive_cloud(outlook_token, category, f"{filename_stem}_extracted.json", Path(json_out))
+                else:
+                    shutil.copy2(json_out, json_dest)
+                    logger.info("[STORE] JSON output saved to: %s", json_dest)
 
             # TXT Log
             txt_dest = dest_dir / f"{filename_stem}_text.txt"
@@ -981,12 +1018,69 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    def resolve_onedrive_base_path():
+        import glob
+        import json
+        import os
+        import jwt
+        
+        sessions_dir = '.sessions'
+        email = None
+        name = None
+        # 1. Get email/name from active session
+        if os.path.exists(sessions_dir):
+            session_files = glob.glob(os.path.join(sessions_dir, 'onedrive_*.json'))
+            if session_files:
+                session_files.sort(key=os.path.getmtime, reverse=True)
+                with open(session_files[0], 'r') as f:
+                    data = json.load(f)
+                    token = data.get('access_token')
+                    if token:
+                        try:
+                            decoded = jwt.decode(token, options={'verify_signature': False})
+                            email = decoded.get('upn') or decoded.get('unique_name') or decoded.get('email')
+                            name = decoded.get('name')
+                        except Exception:
+                            pass
+        
+        # 2. Search for the OneDrive folder
+        user_profile = os.path.expanduser('~')
+        possible_folders = glob.glob(os.path.join(user_profile, '*Cognet HR Solutions*'))
+        
+        if not possible_folders and os.path.exists('C:\\Users'):
+            for user_dir in os.listdir('C:\\Users'):
+                user_path = os.path.join('C:\\Users', user_dir)
+                if os.path.isdir(user_path):
+                    folders = glob.glob(os.path.join(user_path, '*Cognet HR Solutions*'))
+                    possible_folders.extend(folders)
+                    
+        if not possible_folders:
+            return os.path.join(user_profile, 'OneDrive - Cognet HR Solutions Pvt Ltd')
+            
+        if email or name:
+            # Try to find a folder that matches the name or email
+            search_terms = []
+            if name: search_terms.extend(name.lower().split())
+            if email: search_terms.append(email.split('@')[0].lower())
+            
+            for folder in possible_folders:
+                folder_name_lower = os.path.basename(folder).lower()
+                for term in search_terms:
+                    if term and term in folder_name_lower:
+                        return folder
+                        
+        # Default to the first one found if no match
+        return possible_folders[0]
+
+    dynamic_onedrive_base = resolve_onedrive_base_path()
+
     # Resolve input staging path
     if args.input and args.input != "./temp_inbox":
         temp_inbox = Path(args.input).resolve()
     else:
         if args.provider == "outlook":
-            in_env = "C:\\Users\\Intern\\OneDrive - Cognet HR Solutions Pvt Ltd\\uploads"
+            import os
+            in_env = os.path.join(dynamic_onedrive_base, "uploads")
         else:
             in_env = os.getenv("GOOGLE_DRIVE_ROOT") or "./temp_inbox"
         logger.info("[CONFIG] Input staging folder resolved to: %s", in_env)
@@ -997,7 +1091,8 @@ def main() -> int:
         output_root = Path(args.output).resolve()
     else:
         if args.provider == "outlook":
-            out_env = "C:\\Users\\Intern\\OneDrive - Cognet HR Solutions Pvt Ltd\\sorted"
+            import os
+            out_env = os.path.join(dynamic_onedrive_base, "sorted")
         else:
             out_env = os.getenv("GOOGLE_DRIVE_OUTPUT") or "./sorted"
         logger.info("[CONFIG] Output storage folder resolved to: %s", out_env)
