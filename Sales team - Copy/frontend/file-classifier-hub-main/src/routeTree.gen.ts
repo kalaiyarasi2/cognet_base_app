@@ -17,6 +17,7 @@ import { Route as RpveRouteImport } from './routes/rpve'
 import { Route as ResourcingEdgeRouteImport } from './routes/resourcing-edge'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RenewalProcessRouteImport } from './routes/renewal-process'
+import { Route as PshClaimValidatorRouteImport } from './routes/psh-claim-validator'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as PayrollExtractorRouteImport } from './routes/payroll-extractor'
 import { Route as ParitySetupRouteImport } from './routes/parity-setup'
@@ -79,6 +80,11 @@ const ReportsRoute = ReportsRouteImport.update({
 const RenewalProcessRoute = RenewalProcessRouteImport.update({
   id: '/renewal-process',
   path: '/renewal-process',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PshClaimValidatorRoute = PshClaimValidatorRouteImport.update({
+  id: '/psh-claim-validator',
+  path: '/psh-claim-validator',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PipelineRoute = PipelineRouteImport.update({
@@ -220,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/parity-setup': typeof ParitySetupRoute
   '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
+  '/psh-claim-validator': typeof PshClaimValidatorRoute
   '/renewal-process': typeof RenewalProcessRoute
   '/reports': typeof ReportsRoute
   '/resourcing-edge': typeof ResourcingEdgeRoute
@@ -253,6 +260,7 @@ export interface FileRoutesByTo {
   '/parity-setup': typeof ParitySetupRoute
   '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
+  '/psh-claim-validator': typeof PshClaimValidatorRoute
   '/renewal-process': typeof RenewalProcessRoute
   '/reports': typeof ReportsRoute
   '/resourcing-edge': typeof ResourcingEdgeRoute
@@ -287,6 +295,7 @@ export interface FileRoutesById {
   '/parity-setup': typeof ParitySetupRoute
   '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
+  '/psh-claim-validator': typeof PshClaimValidatorRoute
   '/renewal-process': typeof RenewalProcessRoute
   '/reports': typeof ReportsRoute
   '/resourcing-edge': typeof ResourcingEdgeRoute
@@ -322,6 +331,7 @@ export interface FileRouteTypes {
     | '/parity-setup'
     | '/payroll-extractor'
     | '/pipeline'
+    | '/psh-claim-validator'
     | '/renewal-process'
     | '/reports'
     | '/resourcing-edge'
@@ -355,6 +365,7 @@ export interface FileRouteTypes {
     | '/parity-setup'
     | '/payroll-extractor'
     | '/pipeline'
+    | '/psh-claim-validator'
     | '/renewal-process'
     | '/reports'
     | '/resourcing-edge'
@@ -388,6 +399,7 @@ export interface FileRouteTypes {
     | '/parity-setup'
     | '/payroll-extractor'
     | '/pipeline'
+    | '/psh-claim-validator'
     | '/renewal-process'
     | '/reports'
     | '/resourcing-edge'
@@ -422,6 +434,7 @@ export interface RootRouteChildren {
   ParitySetupRoute: typeof ParitySetupRoute
   PayrollExtractorRoute: typeof PayrollExtractorRoute
   PipelineRoute: typeof PipelineRoute
+  PshClaimValidatorRoute: typeof PshClaimValidatorRoute
   RenewalProcessRoute: typeof RenewalProcessRoute
   ReportsRoute: typeof ReportsRoute
   ResourcingEdgeRoute: typeof ResourcingEdgeRoute
@@ -489,6 +502,13 @@ declare module '@tanstack/react-router' {
       path: '/renewal-process'
       fullPath: '/renewal-process'
       preLoaderRoute: typeof RenewalProcessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/psh-claim-validator': {
+      id: '/psh-claim-validator'
+      path: '/psh-claim-validator'
+      fullPath: '/psh-claim-validator'
+      preLoaderRoute: typeof PshClaimValidatorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pipeline': {
@@ -678,6 +698,7 @@ const rootRouteChildren: RootRouteChildren = {
   ParitySetupRoute: ParitySetupRoute,
   PayrollExtractorRoute: PayrollExtractorRoute,
   PipelineRoute: PipelineRoute,
+  PshClaimValidatorRoute: PshClaimValidatorRoute,
   RenewalProcessRoute: RenewalProcessRoute,
   ReportsRoute: ReportsRoute,
   ResourcingEdgeRoute: ResourcingEdgeRoute,

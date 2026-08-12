@@ -4,7 +4,7 @@ import {
   Workflow, FolderTree, Cloud, BarChart3, Activity, Terminal, Globe,
   Settings2, SlidersHorizontal, Info, Shield, ChevronLeft, ChevronRight,
   RefreshCw, Scale, Cpu, FileCheck, HardDrive, Share2, FileSpreadsheet, Building2,
-  CreditCard, ReceiptText, Mail
+  CreditCard, ReceiptText, Mail, ClipboardCheck
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,7 @@ const groups: NavGroup[] = [
       { label: "Invoice to Census", to: "/rpve", icon: FileCheck, moduleCode: "RPVE" },
       { label: "SBC plan summary", to: "/parity-setup", icon: Scale, moduleCode: "SBC" },
       { label: "Payroll Register Extraction", to: "/payroll-extractor", icon: FileSpreadsheet, moduleCode: "PAYROLL" },
+      { label: "PSH-UI Claim Validator", to: "/psh-claim-validator", icon: ClipboardCheck, moduleCode: "PSH_CLAIM" },
     ],
   },
   {

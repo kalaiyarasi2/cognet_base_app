@@ -21,6 +21,8 @@ venv/
 converter.db
 logs/
 **/logs/
+*.log
+**/*.log
 
 # Uploads, Outputs & Temp files
 output/
@@ -59,3 +61,4 @@ Sales team - Copy/test_custom_agent.py
 Sales team - Copy/web.config.drive360
 fix_image.ps1
 Sales team - Copy/.sessions/
+Sales team - Copy/import_errors.log

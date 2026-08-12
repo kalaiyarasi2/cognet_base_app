@@ -56,6 +56,7 @@ function Dashboard() {
           "PIPELINE": "/pipeline",
           "CONVERTER": "/converter",
           "PAYROLL": "/payroll-extractor",
+          "PSH_CLAIM": "/psh-claim-validator",
           "EXTRACTION": "/extraction",
           "CLASSIFICATION": "/classification"
         };
