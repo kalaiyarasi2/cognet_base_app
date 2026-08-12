@@ -36,6 +36,7 @@ const FIELD_META: Record<string, { label: string; icon: any }> = {
   agency_address_line_1:     { label: "Agency Address Line 1",   icon: MapPin },
   agency_address_line_2:     { label: "Agency Address Line 2",   icon: MapPin },
   separation_code:           { label: "Separation Code",         icon: ScanLine },
+  calculated_claim_liability:{ label: "Calculated Claim Liability", icon: DollarSign },
 };
 
 const FIELD_KEYS = Object.keys(FIELD_META);
