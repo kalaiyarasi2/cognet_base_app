@@ -4,7 +4,7 @@ import {
   Workflow, FolderTree, Cloud, BarChart3, Activity, Terminal, Globe,
   Settings2, SlidersHorizontal, Info, Shield, ChevronLeft, ChevronRight,
   RefreshCw, Scale, Cpu, FileCheck, HardDrive, Share2, FileSpreadsheet, Building2,
-  CreditCard, ReceiptText, Mail, ClipboardCheck
+  CreditCard, ReceiptText, Mail, ClipboardCheck, Coins
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -66,6 +66,7 @@ const groups: NavGroup[] = [
   {
     label: "Insight",
     items: [
+      { label: "Token Utilization", to: "/token-utilization", icon: Coins },
       { label: "System Health", to: "/health", icon: Activity },
       { label: "Logs", to: "/logs", icon: Terminal },
       { label: "Login Monitor", to: "/login-monitor", icon: Globe },

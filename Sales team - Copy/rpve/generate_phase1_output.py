@@ -334,6 +334,15 @@ def extract_phase1_data_with_chunking(text: str, doc_type: str) -> Dict:
                 response_format={"type": "json_object"},
                 temperature=0.0
             )
+            # Universal Token Monitor
+            try:
+                import sys as _sys, os as _os
+                _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')
+                if _cp not in _sys.path: _sys.path.insert(0, _cp)
+                from core.universal_token_monitor import track_usage as _tm
+                _tm(response.usage, model="gpt-4o", poc_name="rpve",
+                    file_name=f"phase1_chunk_{chunk_index+1}", step_name="phase1_chunk_extraction")
+            except Exception: pass
             
             # Parse response
             raw_content = response.choices[0].message.content
@@ -482,6 +491,15 @@ def extract_phase1_data(pdf_path: Path) -> Dict:
                 response_format={"type": "json_object"},
                 temperature=0.0
             )
+            # Universal Token Monitor
+            try:
+                import sys as _sys, os as _os
+                _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')
+                if _cp not in _sys.path: _sys.path.insert(0, _cp)
+                from core.universal_token_monitor import track_usage as _tm
+                _tm(response.usage, model="gpt-4o", poc_name="rpve",
+                    file_name="phase1_small_doc", step_name="phase1_single_call")
+            except Exception: pass
             
             extracted_data = json.loads(response.choices[0].message.content)
             employees = extracted_data.get("employees", [])
@@ -812,6 +830,15 @@ def generate_phase1_output_from_text(
                 response_format={"type": "json_object"},
                 temperature=0.0
             )
+            # Universal Token Monitor
+            try:
+                import sys as _sys, os as _os
+                _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')
+                if _cp not in _sys.path: _sys.path.insert(0, _cp)
+                from core.universal_token_monitor import track_usage as _tm
+                _tm(response.usage, model="gpt-4o", poc_name="rpve",
+                    file_name="phase1_stream_doc", step_name="phase1_stream_call")
+            except Exception: pass
             
             extracted_data = json.loads(response.choices[0].message.content)
         else:

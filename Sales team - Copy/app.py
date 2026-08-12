@@ -276,6 +276,29 @@ async def get_dashboard_stats_endpoint():
     except Exception as e:
         return {"status": "error", "error": str(e), "stats": {}}
 
+@app.get("/api/token-usage", tags=["Token Usage"])
+async def get_token_usage(
+    poc_name: str = None,
+    file_name: str = None,
+    recent: int = None
+):
+    """
+    Universal Token Usage endpoint.
+    - No params           → grand totals + per-POC breakdown + file_summaries (1 row per file)
+    - ?recent=50          → 50 most recent individual LLM call records
+    """
+    try:
+        from core.universal_token_monitor import get_summary, get_recent_calls, get_file_summaries
+        if recent is not None:
+            data = get_recent_calls(limit=recent, poc_name=poc_name)
+            file_sums = get_file_summaries(limit=recent, poc_name=poc_name)
+            return {"status": "ok", "recent_calls": data, "file_summaries": file_sums}
+        data = get_summary(poc_name=poc_name, file_name=file_name)
+        file_sums = get_file_summaries(limit=100, poc_name=poc_name)
+        return {"status": "ok", "data": data, "file_summaries": file_sums}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "data": {}}
+
 # Include Auth & Admin User Management Routes
 try:
     from auth_routes import router as auth_router

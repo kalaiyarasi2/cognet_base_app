@@ -275,7 +275,7 @@ Each plan object must strictly have this flat structure:
 """
 
 
-def _call_openai(client, prompt: str, page_label: str) -> dict:
+def _call_openai(client, prompt: str, page_label: str, file_name: str = "unknown") -> dict:
     """Make a single GPT-4o call and return parsed JSON."""
     response = client.chat.completions.create(
         model=LLM_MODEL,
@@ -285,6 +285,15 @@ def _call_openai(client, prompt: str, page_label: str) -> dict:
     )
     raw = response.choices[0].message.content
     logger.info("  %s -> LLM responded (%d chars)", page_label, len(raw))
+    # Universal Token Monitor
+    try:
+        import sys as _sys, os as _os
+        _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')
+        if _cp not in _sys.path: _sys.path.insert(0, _cp)
+        from core.universal_token_monitor import track_usage as _tm
+        _tm(response.usage, model=LLM_MODEL, poc_name="resourcing-edge",
+            file_name=file_name, step_name=f"page_extraction_{page_label}")
+    except Exception: pass
     try:
         return json.loads(raw)
     except json.JSONDecodeError as exc:

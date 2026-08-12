@@ -441,6 +441,15 @@ def _node_categorize_email(state: _EmailAgentState) -> dict:
                 temperature=0.1,
                 max_tokens=10,
             )
+            # Universal Token Monitor
+            try:
+                import sys as _sys, os as _os
+                _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')
+                if _cp not in _sys.path: _sys.path.insert(0, _cp)
+                from core.universal_token_monitor import track_usage as _tm
+                _tm(resp.usage, model=oa_model, poc_name="outlook-agent",
+                    file_name=email.get('subject', 'email')[:80], step_name="email_classification")
+            except Exception: pass
             raw      = resp.choices[0].message.content.strip()
             category = next(
                 (n for n in valid_names if n.lower() == raw.lower()), "uncategorized"
@@ -932,6 +941,15 @@ class OutlookAgentModule:
             temperature=0.1,
             max_tokens=10,
         )
+        # Universal Token Monitor
+        try:
+            import sys as _sys, os as _os
+            _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')
+            if _cp not in _sys.path: _sys.path.insert(0, _cp)
+            from core.universal_token_monitor import track_usage as _tm
+            _tm(resp.usage, model=self.openai_model, poc_name="outlook-agent",
+                file_name=subject[:80], step_name="standalone_email_classification")
+        except Exception: pass
         raw = resp.choices[0].message.content.strip()
         return next((n for n in valid if n.lower() == raw.lower()), "uncategorized")
 

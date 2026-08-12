@@ -766,6 +766,16 @@ Here is the layout-preserved extracted text for the pages:
                 max_tokens=4096,
                 temperature=0,
             )
+            # Universal Token Monitor
+            try:
+                import sys as _sys, os as _os
+                _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')
+                if _cp not in _sys.path: _sys.path.insert(0, _cp)
+                from core.universal_token_monitor import track_usage as _tm
+                _page_label = f"pages_{batch[0][0]}_to_{batch[-1][0]}"
+                _tm(response.usage, model="gpt-4o", poc_name="renewal-process",
+                    file_name="invoice_census", step_name=f"renewal_extraction_{_page_label}")
+            except Exception: pass
 
             result_text = response.choices[0].message.content.strip()
             # Clean up markdown code fences if present

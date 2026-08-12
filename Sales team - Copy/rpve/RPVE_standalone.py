@@ -1079,6 +1079,15 @@ PDF TEXT: {text}
                 response_format={"type": "json_object"},
             )
             raw = response.choices[0].message.content
+            # Universal Token Monitor
+            try:
+                import sys as _sys, os as _os
+                _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')
+                if _cp not in _sys.path: _sys.path.insert(0, _cp)
+                from core.universal_token_monitor import track_usage as _tm
+                _tm(response.usage, model="gpt-4o", poc_name="rpve",
+                    file_name="census_document", step_name="chunk_extraction")
+            except Exception: pass
 
             # Strategy 1: Direct parsing
             try:

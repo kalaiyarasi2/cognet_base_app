@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as TokenUtilizationRouteImport } from './routes/token-utilization'
 import { Route as TenantsRouteImport } from './routes/tenants'
 import { Route as SharepointRouteImport } from './routes/sharepoint'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -45,6 +46,11 @@ import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TokenUtilizationRoute = TokenUtilizationRouteImport.update({
+  id: '/token-utilization',
+  path: '/token-utilization',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TenantsRoute = TenantsRouteImport.update({
@@ -234,6 +240,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/sharepoint': typeof SharepointRoute
   '/tenants': typeof TenantsRoute
+  '/token-utilization': typeof TokenUtilizationRoute
   '/upload': typeof UploadRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
@@ -268,6 +275,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/sharepoint': typeof SharepointRoute
   '/tenants': typeof TenantsRoute
+  '/token-utilization': typeof TokenUtilizationRoute
   '/upload': typeof UploadRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
@@ -303,6 +311,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/sharepoint': typeof SharepointRoute
   '/tenants': typeof TenantsRoute
+  '/token-utilization': typeof TokenUtilizationRoute
   '/upload': typeof UploadRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
@@ -339,6 +348,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sharepoint'
     | '/tenants'
+    | '/token-utilization'
     | '/upload'
     | '/auth/callback'
   fileRoutesByTo: FileRoutesByTo
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sharepoint'
     | '/tenants'
+    | '/token-utilization'
     | '/upload'
     | '/auth/callback'
   id:
@@ -407,6 +418,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/sharepoint'
     | '/tenants'
+    | '/token-utilization'
     | '/upload'
     | '/auth/callback'
   fileRoutesById: FileRoutesById
@@ -442,6 +454,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SharepointRoute: typeof SharepointRoute
   TenantsRoute: typeof TenantsRoute
+  TokenUtilizationRoute: typeof TokenUtilizationRoute
   UploadRoute: typeof UploadRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
 }
@@ -453,6 +466,13 @@ declare module '@tanstack/react-router' {
       path: '/upload'
       fullPath: '/upload'
       preLoaderRoute: typeof UploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/token-utilization': {
+      id: '/token-utilization'
+      path: '/token-utilization'
+      fullPath: '/token-utilization'
+      preLoaderRoute: typeof TokenUtilizationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tenants': {
@@ -706,6 +726,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SharepointRoute: SharepointRoute,
   TenantsRoute: TenantsRoute,
+  TokenUtilizationRoute: TokenUtilizationRoute,
   UploadRoute: UploadRoute,
   AuthCallbackRoute: AuthCallbackRoute,
 }

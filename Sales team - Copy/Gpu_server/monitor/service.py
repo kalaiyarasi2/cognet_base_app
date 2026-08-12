@@ -339,6 +339,40 @@ class RequestMonitor:
             success = monitor_db.add_metadata(request_id, metadata)
             if success:
                 logger.info(f"Recorded AI call for {request_id}: {model}, {total_prompt+total_completion} tokens, ${total_cost:.4f} total cost")
+                
+                # Also forward to Universal Token Monitor for central analytics dashboard
+                try:
+                    import sys as _sys, os as _os
+                    _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', '..')
+                    if _cp not in _sys.path: _sys.path.insert(0, _cp)
+                    from core.universal_token_monitor import track_usage as _tm
+                    _fname = (req_data.get('filename') if req_data else None) or "unknown"
+                    _raw_doc = str(req_data.get('document_type') if req_data else "").upper()
+                    
+                    # Normalize doc type to clean POC name
+                    if "INSURANCE" in _raw_doc or "LOSS" in _raw_doc:
+                        _poc_tag = "gpu-insurance"
+                    elif "WORK" in _raw_doc or "COMP" in _raw_doc:
+                        _poc_tag = "gpu-work_comp"
+                    elif "INVOICE" in _raw_doc:
+                        _poc_tag = "gpu-invoice"
+                    elif "BANK" in _raw_doc:
+                        _poc_tag = "gpu-bank_statement"
+                    elif "RPVE" in _raw_doc:
+                        _poc_tag = "gpu-rpve"
+                    else:
+                        _poc_tag = f"gpu-{_raw_doc.lower()}" if _raw_doc and _raw_doc != "UNKNOWN" else "gpu-server"
+
+                    _tm(
+                        {'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens},
+                        model=model,
+                        poc_name=_poc_tag,
+                        file_name=_fname,
+                        step_name="gpu_ai_pipeline"
+                    )
+                except Exception as _f_err:
+                    logger.warning(f"Failed to forward to Universal Token Monitor: {_f_err}")
+
             return success
         except Exception as e:
             logger.error(f"Failed to record AI usage for {request_id}: {e}")

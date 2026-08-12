@@ -478,6 +478,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ session_id }),
     }),
+
+  getTokenUsage: (poc_name?: string, file_name?: string, recent?: number) => {
+    const query: Record<string, any> = {};
+    if (poc_name) query.poc_name = poc_name;
+    if (file_name) query.file_name = file_name;
+    if (recent) query.recent = recent;
+    return request<{
+      status: string;
+      data?: any;
+      recent_calls?: TokenCallRecord[];
+      file_summaries?: TokenFileSummaryRecord[];
+    }>("/api/token-usage", undefined, query);
+  },
 };
 
 export interface UserSessionRecord {
@@ -512,4 +525,34 @@ export interface ResourcingHistoryRecord {
   output_json: string | null;
   error_message: string | null;
   created_date: string | null;
+}
+
+export interface TokenCallRecord {
+  id: number;
+  timestamp: string;
+  poc_name: string;
+  file_name: string;
+  step_name: string;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  session_id?: string;
+}
+
+export interface TokenFileSummaryRecord {
+  id: number;
+  poc_name: string;
+  file_name: string;
+  session_id?: string;
+  total_llm_calls: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
+  total_tokens: number;
+  total_cost_usd: number;
+  first_seen: string;
+  last_updated: string;
+  models?: string[];
+  calls?: TokenCallRecord[];
 }
