@@ -19,6 +19,7 @@ import { Route as ResourcingEdgeRouteImport } from './routes/resourcing-edge'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RenewalProcessRouteImport } from './routes/renewal-process'
 import { Route as PshClaimValidatorRouteImport } from './routes/psh-claim-validator'
+import { Route as PshClaimExtractorRouteImport } from './routes/psh-claim-extractor'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as PayrollExtractorRouteImport } from './routes/payroll-extractor'
 import { Route as ParitySetupRouteImport } from './routes/parity-setup'
@@ -91,6 +92,11 @@ const RenewalProcessRoute = RenewalProcessRouteImport.update({
 const PshClaimValidatorRoute = PshClaimValidatorRouteImport.update({
   id: '/psh-claim-validator',
   path: '/psh-claim-validator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PshClaimExtractorRoute = PshClaimExtractorRouteImport.update({
+  id: '/psh-claim-extractor',
+  path: '/psh-claim-extractor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PipelineRoute = PipelineRouteImport.update({
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/parity-setup': typeof ParitySetupRoute
   '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
+  '/psh-claim-extractor': typeof PshClaimExtractorRoute
   '/psh-claim-validator': typeof PshClaimValidatorRoute
   '/renewal-process': typeof RenewalProcessRoute
   '/reports': typeof ReportsRoute
@@ -267,6 +274,7 @@ export interface FileRoutesByTo {
   '/parity-setup': typeof ParitySetupRoute
   '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
+  '/psh-claim-extractor': typeof PshClaimExtractorRoute
   '/psh-claim-validator': typeof PshClaimValidatorRoute
   '/renewal-process': typeof RenewalProcessRoute
   '/reports': typeof ReportsRoute
@@ -303,6 +311,7 @@ export interface FileRoutesById {
   '/parity-setup': typeof ParitySetupRoute
   '/payroll-extractor': typeof PayrollExtractorRoute
   '/pipeline': typeof PipelineRoute
+  '/psh-claim-extractor': typeof PshClaimExtractorRoute
   '/psh-claim-validator': typeof PshClaimValidatorRoute
   '/renewal-process': typeof RenewalProcessRoute
   '/reports': typeof ReportsRoute
@@ -340,6 +349,7 @@ export interface FileRouteTypes {
     | '/parity-setup'
     | '/payroll-extractor'
     | '/pipeline'
+    | '/psh-claim-extractor'
     | '/psh-claim-validator'
     | '/renewal-process'
     | '/reports'
@@ -375,6 +385,7 @@ export interface FileRouteTypes {
     | '/parity-setup'
     | '/payroll-extractor'
     | '/pipeline'
+    | '/psh-claim-extractor'
     | '/psh-claim-validator'
     | '/renewal-process'
     | '/reports'
@@ -410,6 +421,7 @@ export interface FileRouteTypes {
     | '/parity-setup'
     | '/payroll-extractor'
     | '/pipeline'
+    | '/psh-claim-extractor'
     | '/psh-claim-validator'
     | '/renewal-process'
     | '/reports'
@@ -446,6 +458,7 @@ export interface RootRouteChildren {
   ParitySetupRoute: typeof ParitySetupRoute
   PayrollExtractorRoute: typeof PayrollExtractorRoute
   PipelineRoute: typeof PipelineRoute
+  PshClaimExtractorRoute: typeof PshClaimExtractorRoute
   PshClaimValidatorRoute: typeof PshClaimValidatorRoute
   RenewalProcessRoute: typeof RenewalProcessRoute
   ReportsRoute: typeof ReportsRoute
@@ -529,6 +542,13 @@ declare module '@tanstack/react-router' {
       path: '/psh-claim-validator'
       fullPath: '/psh-claim-validator'
       preLoaderRoute: typeof PshClaimValidatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/psh-claim-extractor': {
+      id: '/psh-claim-extractor'
+      path: '/psh-claim-extractor'
+      fullPath: '/psh-claim-extractor'
+      preLoaderRoute: typeof PshClaimExtractorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pipeline': {
@@ -718,6 +738,7 @@ const rootRouteChildren: RootRouteChildren = {
   ParitySetupRoute: ParitySetupRoute,
   PayrollExtractorRoute: PayrollExtractorRoute,
   PipelineRoute: PipelineRoute,
+  PshClaimExtractorRoute: PshClaimExtractorRoute,
   PshClaimValidatorRoute: PshClaimValidatorRoute,
   RenewalProcessRoute: RenewalProcessRoute,
   ReportsRoute: ReportsRoute,
