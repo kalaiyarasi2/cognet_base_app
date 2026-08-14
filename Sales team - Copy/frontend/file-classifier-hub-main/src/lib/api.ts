@@ -255,7 +255,7 @@ export const api = {
       drives: string[];
     }>("/list-directories", undefined, path ? { path } : undefined),
 
-  automationStatus: () =>
+  automationStatus: (userEmail?: string) =>
     request<{
       outlook_connected: boolean;
       gmail_connected: boolean;
@@ -263,16 +263,21 @@ export const api = {
       active_provider: "outlook" | "gmail" | null;
       pid: number | null;
       started_at: number | null;
-    }>("/api/automation/status"),
+      active_users?: Array<{ user_email: string; pid: number; provider: string; started_at: number }>;
+      user_email?: string;
+    }>("/api/automation/status", undefined, userEmail ? { user_email: userEmail } : undefined),
 
-  automationStart: (provider: "outlook" | "gmail") =>
-    request<{ status: string; pid: number; provider: string }>("/api/automation/start", {
+  automationStart: (provider: "outlook" | "gmail", userEmail?: string) =>
+    request<{ status: string; pid: number; provider: string; user_email?: string }>("/api/automation/start", {
       method: "POST",
-      body: JSON.stringify({ provider }),
+      body: JSON.stringify({ provider, user_email: userEmail }),
     }),
 
-  automationStop: () =>
-    request<{ status: string }>("/api/automation/stop", { method: "POST" }),
+  automationStop: (userEmail?: string) =>
+    request<{ status: string; stopped_count?: number }>("/api/automation/stop", {
+      method: "POST",
+      body: JSON.stringify({ user_email: userEmail }),
+    }),
 
   automationLogs: (lines: number = 50) =>
     request<{ logs: string[] }>("/api/automation/logs", undefined, { lines }),

@@ -647,10 +647,14 @@ class OutlookAgentModule:
         log_excel:           bool                 = True,
         token_cache_path:    Optional[str]        = None,
         log_level:           int                  = logging.INFO,
+        user_email:          Optional[str]        = None,
     ) -> None:
         _base = os.path.dirname(os.path.abspath(__file__))
         _cfg  = os.path.join(_base, "config")
         _logs = os.path.join(_base, "logs")
+
+        self.user_email          = user_email
+        self.sanitized_user_email = re.sub(r'[^a-zA-Z0-9]', '_', user_email.lower()) if user_email else None
 
         self.azure_client_id     = azure_client_id     or os.getenv("AZURE_CLIENT_ID",     "")
         self.azure_client_secret = azure_client_secret or os.getenv("AZURE_CLIENT_SECRET")
@@ -663,12 +667,12 @@ class OutlookAgentModule:
             categories_file    or os.getenv("CATEGORIES_FILE",    os.path.join(_cfg,  "categories.json"))
         )
         self.excel_log_path      = (
-            excel_log_path     or os.getenv("EXCEL_LOG_PATH",     os.path.join(_logs, "processed_mails_log.xlsx"))
+            excel_log_path     or os.getenv("EXCEL_LOG_PATH",     os.path.join(_logs, f"processed_mails_{self.sanitized_user_email}.xlsx" if self.sanitized_user_email else "processed_mails_log.xlsx"))
         )
         self.processed_ids_file  = (
-            processed_ids_file or os.getenv("PROCESSED_IDS_FILE", os.path.join(_cfg,  "processed_ids.json"))
+            processed_ids_file or os.getenv("PROCESSED_IDS_FILE", os.path.join(_cfg,  f"processed_ids_{self.sanitized_user_email}.json" if self.sanitized_user_email else "processed_ids.json"))
         )
-        self.token_cache_path    = token_cache_path or os.path.join(_cfg, "ms_token_cache.json")
+        self.token_cache_path    = token_cache_path or os.path.join(_cfg, f"ms_token_cache_{self.sanitized_user_email}.json" if self.sanitized_user_email else "ms_token_cache.json")
         self.log_excel           = log_excel
         self._categories         = categories
         logger.setLevel(log_level)

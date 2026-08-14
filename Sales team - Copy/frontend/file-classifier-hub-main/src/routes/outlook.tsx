@@ -85,6 +85,35 @@ function OutlookPage() {
     }
   }
 
+  // User Context & Background Automation
+  const user = useApp((s) => s.user);
+  const userEmail = user?.email || "kalaiyarasig@cognethro.com";
+
+  const automation = useQuery({
+    queryKey: ["automation-status", userEmail],
+    queryFn: () => api.automationStatus(userEmail),
+    refetchInterval: 4000,
+  });
+
+  const isAutoRunning = automation.data?.running ?? false;
+  const autoPid = automation.data?.pid;
+  const activeUsers = automation.data?.active_users || [];
+
+  async function toggleAutomation() {
+    try {
+      if (isAutoRunning) {
+        await api.automationStop(userEmail);
+        toast.info(`Isolated background watcher stopped for ${userEmail}`);
+      } else {
+        await api.automationStart("outlook", userEmail);
+        toast.success(`Isolated background watcher started for ${userEmail}`);
+      }
+      automation.refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to toggle background automation");
+    }
+  }
+
   const isConnected = status.data?.connected ?? true;
   const pdfCount = status.data?.pdf_count ?? 0;
   const pdfFiles = status.data?.pdf_files || [];
@@ -101,11 +130,53 @@ function OutlookPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => status.refetch()}
+          onClick={() => { status.refetch(); automation.refetch(); }}
           className="self-start sm:self-auto gap-2 text-xs font-semibold"
         >
           <RefreshCw className="w-3.5 h-3.5" />
           Refresh
+        </Button>
+      </div>
+
+      {/* Background Watcher Banner */}
+      <div className="p-4 rounded-xl border bg-card/60 backdrop-blur-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "p-2.5 rounded-lg border",
+            isAutoRunning ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600" : "bg-muted border-muted-foreground/20 text-muted-foreground"
+          )}>
+            <Power className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold">User-Isolated Automation Service</h4>
+              <span className={cn(
+                "px-2 py-0.5 text-[10px] font-semibold rounded-full border",
+                isAutoRunning
+                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                  : "bg-muted text-muted-foreground border-border"
+              )}>
+                {isAutoRunning ? `RUNNING (PID ${autoPid})` : "STOPPED"}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Target User: <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">{userEmail}</code>
+              {activeUsers.length > 0 && (
+                <span className="ml-2 font-medium text-foreground">
+                  ({activeUsers.length} total user process{activeUsers.length > 1 ? "es" : ""} active)
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+        <Button
+          variant={isAutoRunning ? "destructive" : "default"}
+          size="sm"
+          onClick={toggleAutomation}
+          className="gap-2 text-xs font-semibold shrink-0"
+        >
+          <Power className="w-3.5 h-3.5" />
+          {isAutoRunning ? "Stop User Watcher" : "Start Isolated Watcher"}
         </Button>
       </div>
 

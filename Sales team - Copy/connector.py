@@ -288,12 +288,12 @@ logging.basicConfig(
 logger = logging.getLogger("unified_workspace_connector")
 
 
-def get_outlook_agent() -> OutlookAgentModule | None:
+def get_outlook_agent(user_email: str | None = None) -> OutlookAgentModule | None:
     if OutlookAgentModule is None:
         logger.error("OutlookAgentModule could not be imported.")
         return None
     try:
-        return OutlookAgentModule()
+        return OutlookAgentModule(user_email=user_email)
     except Exception as exc:
         logger.error("Failed to initialize OutlookAgentModule: %s", exc)
         return None
@@ -518,11 +518,12 @@ def process_outlook_emails(
     pdf_max_pages: int = 3,
     min_score: float = 3.0,
     llm_model: str = "gpt-4o",
+    user_email: str | None = None,
 ) -> int:
     """
     Executes the entire end-to-end multi-repo pipeline.
     """
-    agent = get_outlook_agent()
+    agent = get_outlook_agent(user_email=user_email)
     if not agent:
         return 0
 
@@ -642,7 +643,8 @@ def process_outlook_emails(
                                 action="Email Attachment Processing",
                                 file_name=filename,
                                 status="SUCCESS",
-                                details=f"Classified: {category} (score: {score:.2f}) | PDF: {pdf_type} | Extracted"
+                                details=f"Classified: {category} (score: {score:.2f}) | PDF: {pdf_type} | Extracted",
+                                processed_by=user_email or "SYSTEM"
                             )
                         except Exception as db_err:
                             logger.warning("Failed to log success to converter.db: %s", db_err)
@@ -663,7 +665,8 @@ def process_outlook_emails(
                                     action="Email Attachment Processing",
                                     file_name=filename,
                                     status="SUCCESS",
-                                    details=f"Classified: {category} (score: {score:.2f}) | Skipped (Category: Others)"
+                                    details=f"Classified: {category} (score: {score:.2f}) | Skipped (Category: Others)",
+                                    processed_by=user_email or "SYSTEM"
                                 )
                             except Exception as db_err:
                                 logger.warning("Failed to log OTHERS to converter.db: %s", db_err)
@@ -678,7 +681,8 @@ def process_outlook_emails(
                                     action="Email Attachment Processing",
                                     file_name=filename,
                                     status="FAILED",
-                                    details=str(extract_result.get("error"))
+                                    details=str(extract_result.get("error")),
+                                    processed_by=user_email or "SYSTEM"
                                 )
                             except Exception as db_err:
                                 logger.warning("Failed to log error to converter.db: %s", db_err)
@@ -739,8 +743,17 @@ def main() -> int:
         default="gpt-4o",
         help="LLM model override for classification",
     )
+    parser.add_argument(
+        "--user",
+        default=None,
+        help="User email context for isolated email processing",
+    )
 
     args = parser.parse_args()
+
+    user_email = args.user
+    import re
+    sanitized_user = re.sub(r'[^a-zA-Z0-9]', '_', user_email.lower()) if user_email else None
 
     # Resolve input staging path
     if args.input and args.input != "./temp_inbox":
@@ -748,8 +761,9 @@ def main() -> int:
     else:
         # connector.py always uses Outlook, so default to OneDrive uploads
         in_env = "C:\\Users\\Intern\\OneDrive - Cognet HR Solutions Pvt Ltd\\uploads"
-        logger.info("[CONFIG] Input staging folder resolved to: %s", in_env)
-        temp_inbox = Path(in_env).resolve()
+        base_temp = Path(in_env).resolve()
+        temp_inbox = base_temp / sanitized_user if sanitized_user else base_temp
+        logger.info("[CONFIG] Input staging folder resolved to: %s", temp_inbox)
 
     # Resolve output storage path
     if args.output:
@@ -757,11 +771,12 @@ def main() -> int:
     else:
         # connector.py always uses Outlook, so default to OneDrive sorted
         out_env = "C:\\Users\\Intern\\OneDrive - Cognet HR Solutions Pvt Ltd\\sorted"
-        logger.info("[CONFIG] Output storage folder resolved to: %s", out_env)
-        output_root = Path(out_env).resolve()
+        base_out = Path(out_env).resolve()
+        output_root = base_out / sanitized_user if sanitized_user else base_out
+        logger.info("[CONFIG] Output storage folder resolved to: %s", output_root)
 
     if args.interval is not None and args.interval > 0:
-        logger.info("Continuous watcher started. Press Ctrl+C to stop.")
+        logger.info("Continuous watcher started for user %s. Press Ctrl+C to stop.", user_email or "SYSTEM")
         while True:
             try:
                 process_outlook_emails(
@@ -770,6 +785,7 @@ def main() -> int:
                     pdf_max_pages=args.pages,
                     min_score=args.score,
                     llm_model=args.model,
+                    user_email=user_email,
                 )
                 logger.info("Sleeping for %d seconds...", args.interval)
                 time.sleep(args.interval)
@@ -783,6 +799,7 @@ def main() -> int:
             pdf_max_pages=args.pages,
             min_score=args.score,
             llm_model=args.model,
+            user_email=user_email,
         )
     return 0
 

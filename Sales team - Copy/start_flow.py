@@ -138,7 +138,8 @@ if OutlookAgentModule is not None:
         ]
         
         # 1. Simple Cache Check
-        simple_cache_path = os.path.join(os.path.dirname(self.token_cache_path), "ms_simple_cache.json")
+        simple_cache_name = f"ms_simple_cache_{self.sanitized_user_email}.json" if getattr(self, "sanitized_user_email", None) else "ms_simple_cache.json"
+        simple_cache_path = os.path.join(os.path.dirname(self.token_cache_path), simple_cache_name)
         if os.path.exists(simple_cache_path):
             try:
                 import json
@@ -175,8 +176,14 @@ if OutlookAgentModule is not None:
 
         if sessions_dir.exists():
             import glob
-            session_files = glob.glob(str(sessions_dir / "onedrive_*.json"))
-            session_files.sort(key=os.path.getmtime, reverse=True)
+            session_files = []
+            if getattr(self, "sanitized_user_email", None):
+                user_session = sessions_dir / f"onedrive_{self.sanitized_user_email}.json"
+                if user_session.exists():
+                    session_files.append(str(user_session))
+            if not session_files:
+                session_files = glob.glob(str(sessions_dir / "onedrive_*.json"))
+                session_files.sort(key=os.path.getmtime, reverse=True)
             for s_file in session_files:
                 try:
                     import json
@@ -316,7 +323,7 @@ def change_working_dir(new_dir: Path):
         os.chdir(old_dir)
 
 
-def get_outlook_agent() -> OutlookAgentModule | None:
+def get_outlook_agent(user_email: str | None = None) -> OutlookAgentModule | None:
     try:
         # OUTLOOK_AGENT_DIR was removed from sys.path earlier to prevent namespace
         # collisions. Re-insert it locally so the import succeeds at runtime.
@@ -324,15 +331,15 @@ def get_outlook_agent() -> OutlookAgentModule | None:
         if _agent_dir not in sys.path:
             sys.path.insert(0, _agent_dir)
         from outlook_agent_module import OutlookAgentModule as _OAM
-        return _OAM()
+        return _OAM(user_email=user_email)
     except Exception as exc:
         logger.error("[INIT] Failed to initialize OutlookAgentModule: %s", exc)
         return None
 
 
-def fetch_outlook_attachments(dest_folder: Path, mark_read: bool = True) -> tuple[list[Path], str]:
+def fetch_outlook_attachments(dest_folder: Path, mark_read: bool = True, user_email: str | None = None) -> tuple[list[Path], str]:
     """Fetches unread Outlook attachments and saves them locally."""
-    agent = get_outlook_agent()
+    agent = get_outlook_agent(user_email=user_email)
     if not agent:
         return [], ""
 
@@ -712,6 +719,7 @@ def execute_flow(
     llm_model: str = "gpt-4o",
     mark_read: bool = True,
     run_id: str = None,
+    user_email: str = None,
 ) -> int:
     """Executes the complete multi-repo pipeline for a single cycle."""
     # ── DB: start run ─────────────────────────────────────────────────────────
@@ -724,13 +732,13 @@ def execute_flow(
         except Exception:
             pass
     logger.info("=" * 70)
-    logger.info("STAGE 1: Ingesting files from %s", provider.upper())
+    logger.info("STAGE 1: Ingesting files from %s (User: %s)", provider.upper(), user_email or "SYSTEM")
     logger.info("=" * 70)
 
     # Ingest files
     outlook_token = ""
     if provider == "outlook":
-        ingested_files, outlook_token = fetch_outlook_attachments(temp_inbox, mark_read=mark_read)
+        ingested_files, outlook_token = fetch_outlook_attachments(temp_inbox, mark_read=mark_read, user_email=user_email)
     elif provider == "gmail":
         # Temporary remove sys.modules['auth'] if mocked to allow authenticating with Gmail
         auth_mocked = False
@@ -906,7 +914,8 @@ def execute_flow(
                         action="Email Attachment Processing" if provider in ["outlook", "gmail"] else "Drive Folder Ingestion",
                         file_name=filename,
                         status="SUCCESS",
-                        details=f"Category: {category} | Score: {score:.2f} | PDF Type: {pdf_type} | Rotation: {rotation_info} | Size: {_file_size} KB | Output: {_out_path}"
+                        details=f"Category: {category} | Score: {score:.2f} | PDF Type: {pdf_type} | Rotation: {rotation_info} | Size: {_file_size} KB | Output: {_out_path}",
+                        processed_by=user_email or "SYSTEM"
                     )
                 except Exception as db_err:
                     logger.warning("Failed to log success to converter.db: %s", db_err)
@@ -929,7 +938,8 @@ def execute_flow(
                             action="Email Attachment Processing" if provider in ["outlook", "gmail"] else "Drive Folder Ingestion",
                             file_name=filename,
                             status="SKIPPED",
-                            details=f"Category: Others | Score: {score:.2f} | PDF Type: {pdf_type} | Rotation: {rotation_info} | GPU Skipped | Output: {_out_path}"
+                            details=f"Category: Others | Score: {score:.2f} | PDF Type: {pdf_type} | Rotation: {rotation_info} | GPU Skipped | Output: {_out_path}",
+                            processed_by=user_email or "SYSTEM"
                         )
                     except Exception as db_err:
                         logger.warning("Failed to log OTHERS to converter.db: %s", db_err)
@@ -945,7 +955,8 @@ def execute_flow(
                             action="Email Attachment Processing" if provider in ["outlook", "gmail"] else "Drive Folder Ingestion",
                             file_name=filename,
                             status="FAILED",
-                            details=f"Category: {category} | Score: {score:.2f} | PDF Type: {pdf_type} | Error: {extract_result.get('error', 'Unknown')}"
+                            details=f"Category: {category} | Score: {score:.2f} | PDF Type: {pdf_type} | Error: {extract_result.get('error', 'Unknown')}",
+                            processed_by=user_email or "SYSTEM"
                         )
                     except Exception as db_err:
                         logger.warning("Failed to log error to converter.db: %s", db_err)
@@ -1015,8 +1026,16 @@ def main() -> int:
         action="store_true",
         help="Do not mark emails as read after processing",
     )
+    parser.add_argument(
+        "--user",
+        default=None,
+        help="User email context for isolated email monitoring and processing",
+    )
 
     args = parser.parse_args()
+
+    user_email = args.user
+    sanitized_user = re.sub(r'[^a-zA-Z0-9]', '_', user_email.lower()) if user_email else None
 
     def resolve_onedrive_base_path():
         import glob
@@ -1025,20 +1044,26 @@ def main() -> int:
         import jwt
         
         sessions_dir = '.sessions'
-        email = None
+        email = user_email
         name = None
         # 1. Get email/name from active session
         if os.path.exists(sessions_dir):
-            session_files = glob.glob(os.path.join(sessions_dir, 'onedrive_*.json'))
-            if session_files:
+            session_files = []
+            if sanitized_user:
+                u_sess = os.path.join(sessions_dir, f'onedrive_{sanitized_user}.json')
+                if os.path.exists(u_sess):
+                    session_files.append(u_sess)
+            if not session_files:
+                session_files = glob.glob(os.path.join(sessions_dir, 'onedrive_*.json'))
                 session_files.sort(key=os.path.getmtime, reverse=True)
+            if session_files:
                 with open(session_files[0], 'r') as f:
                     data = json.load(f)
                     token = data.get('access_token')
                     if token:
                         try:
                             decoded = jwt.decode(token, options={'verify_signature': False})
-                            email = decoded.get('upn') or decoded.get('unique_name') or decoded.get('email')
+                            email = decoded.get('upn') or decoded.get('unique_name') or decoded.get('email') or email
                             name = decoded.get('name')
                         except Exception:
                             pass
@@ -1083,8 +1108,10 @@ def main() -> int:
             in_env = os.path.join(dynamic_onedrive_base, "uploads")
         else:
             in_env = os.getenv("GOOGLE_DRIVE_ROOT") or "./temp_inbox"
-        logger.info("[CONFIG] Input staging folder resolved to: %s", in_env)
-        temp_inbox = Path(in_env).resolve()
+        
+        base_temp = Path(in_env).resolve()
+        temp_inbox = base_temp / sanitized_user if sanitized_user else base_temp
+        logger.info("[CONFIG] Input staging folder resolved to: %s", temp_inbox)
 
     # Resolve output storage path
     if args.output:
@@ -1095,12 +1122,14 @@ def main() -> int:
             out_env = os.path.join(dynamic_onedrive_base, "sorted")
         else:
             out_env = os.getenv("GOOGLE_DRIVE_OUTPUT") or "./sorted"
-        logger.info("[CONFIG] Output storage folder resolved to: %s", out_env)
-        output_root = Path(out_env).resolve()
+        
+        base_out = Path(out_env).resolve()
+        output_root = base_out / sanitized_user if sanitized_user else base_out
+        logger.info("[CONFIG] Output storage folder resolved to: %s", output_root)
     mark_read = not args.no_mark_read
 
     if args.interval is not None and args.interval > 0:
-        logger.info("[WATCHER] Watcher started. Polling every %d seconds. Ctrl+C to stop.", args.interval)
+        logger.info("[WATCHER] Watcher started for user %s. Polling every %d seconds. Ctrl+C to stop.", user_email or "SYSTEM", args.interval)
         while True:
             try:
                 cycle_run_id = str(_uuid.uuid4())
@@ -1113,6 +1142,7 @@ def main() -> int:
                     llm_model=args.model,
                     mark_read=mark_read,
                     run_id=cycle_run_id,
+                    user_email=user_email,
                 )
                 time.sleep(args.interval)
             except KeyboardInterrupt:
@@ -1132,6 +1162,7 @@ def main() -> int:
             min_score=args.score,
             llm_model=args.model,
             mark_read=mark_read,
+            user_email=user_email,
         )
     return 0
 
