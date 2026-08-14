@@ -1,8 +1,8 @@
 {
-  "last_updated": "2026-08-12 13:43:32 UTC",
-  "grand_total_cost_usd": 0.0595724,
-  "grand_total_tokens": 19546,
-  "grand_total_calls": 9,
+  "last_updated": "2026-08-14 07:48:06 UTC",
+  "grand_total_cost_usd": 0.09239675,
+  "grand_total_tokens": 32734,
+  "grand_total_calls": 15,
   "pocs": {
     "base-claim": {
       "total_files_processed": 2,
@@ -159,10 +159,10 @@
       }
     },
     "gpu-none": {
-      "total_files_processed": 1,
-      "total_llm_calls": 1,
-      "total_tokens": 1192,
-      "total_cost_usd": 0.00018015,
+      "total_files_processed": 4,
+      "total_llm_calls": 7,
+      "total_tokens": 14380,
+      "total_cost_usd": 0.0330045,
       "files": {
         "Accident Fund 21-25.pdf": {
           "total_llm_calls": 1,
@@ -178,6 +178,87 @@
               "cost_usd": 0.00018015,
               "formatted_cost": "$0.000180",
               "timestamp": "2026-08-12 13:43:32 UTC"
+            }
+          ]
+        },
+        "A Total Solutions, Inc. - Acord.pdf": {
+          "total_llm_calls": 3,
+          "total_tokens": 10916,
+          "total_cost_usd": 0.03246825,
+          "calls_breakdown": [
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o-mini",
+              "prompt_tokens": 751,
+              "completion_tokens": 1,
+              "total_tokens": 752,
+              "cost_usd": 0.00011325,
+              "formatted_cost": "$0.000113",
+              "timestamp": "2026-08-14 05:29:59 UTC"
+            },
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o",
+              "prompt_tokens": 1240,
+              "completion_tokens": 84,
+              "total_tokens": 1324,
+              "cost_usd": 0.00394,
+              "formatted_cost": "$0.003940",
+              "timestamp": "2026-08-14 05:31:29 UTC"
+            },
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o",
+              "prompt_tokens": 7998,
+              "completion_tokens": 842,
+              "total_tokens": 8840,
+              "cost_usd": 0.028415,
+              "formatted_cost": "$0.028415",
+              "timestamp": "2026-08-14 05:31:34 UTC"
+            }
+          ]
+        },
+        "test.pdf": {
+          "total_llm_calls": 1,
+          "total_tokens": 538,
+          "total_cost_usd": 9.33e-05,
+          "calls_breakdown": [
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o-mini",
+              "prompt_tokens": 510,
+              "completion_tokens": 28,
+              "total_tokens": 538,
+              "cost_usd": 9.33e-05,
+              "formatted_cost": "$0.000093",
+              "timestamp": "2026-08-14 06:02:58 UTC"
+            }
+          ]
+        },
+        "APL-MGSI-April 26 1.pdf": {
+          "total_llm_calls": 2,
+          "total_tokens": 1734,
+          "total_cost_usd": 0.0002628,
+          "calls_breakdown": [
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o-mini",
+              "prompt_tokens": 864,
+              "completion_tokens": 3,
+              "total_tokens": 867,
+              "cost_usd": 0.0001314,
+              "formatted_cost": "$0.000131",
+              "timestamp": "2026-08-14 06:04:35 UTC"
+            },
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o-mini",
+              "prompt_tokens": 864,
+              "completion_tokens": 3,
+              "total_tokens": 867,
+              "cost_usd": 0.0001314,
+              "formatted_cost": "$0.000131",
+              "timestamp": "2026-08-14 07:48:06 UTC"
             }
           ]
         }

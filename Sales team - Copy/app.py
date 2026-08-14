@@ -259,6 +259,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global Security Gateway Middleware - Protects ALL file uploads across ALL sub-apps & POCs
+try:
+    from security import SecurityGatewayMiddleware
+    app.add_middleware(SecurityGatewayMiddleware)
+    print("[INFO] Global Security Gateway Middleware initialized across all POCs.")
+except Exception as _mw_err:
+    print(f"[WARN] Failed to initialize Security Gateway Middleware: {_mw_err}")
+
+
 # /api/universal-logs lives here so it is never shadowed by any sub-app
 @app.get("/api/universal-logs", tags=["Universal Logs"])
 async def get_universal_logs(limit: int = 100):
@@ -322,6 +331,15 @@ try:
     print("[INFO] Workflow router included successfully.")
 except Exception as _wf_err:
     print(f"[WARN] Failed to include workflow router: {_wf_err}")
+
+# Include Security Gateway Routes
+try:
+    from security import security_router
+    app.include_router(security_router)
+    print("[INFO] Security Gateway router included successfully.")
+except Exception as _sec_err:
+    print(f"[WARN] Failed to include security router: {_sec_err}")
+
 
 
 
