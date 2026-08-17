@@ -63,3 +63,6 @@ fix_image.ps1
 Sales team - Copy/.sessions/
 Sales team - Copy/import_errors.log
 universal_token_summary.json
+Sales team - Copy/storage/
+Sales team - Copy/scratch/
+Sales team - Copy/tests/

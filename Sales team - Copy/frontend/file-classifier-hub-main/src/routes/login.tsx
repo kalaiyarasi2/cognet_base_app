@@ -9,13 +9,6 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-const DEMO_ACCOUNTS = [
-  { email: "kalaiyarasig@cognethro.com", label: "Super Admin (Kalaiyarasi)", role: "ADMIN" },
-  { email: "admin@local", label: "Super Admin", role: "ADMIN" },
-  { email: "althafm@cognethro.com", label: "Standard User (Althafm)", role: "USER" },
-  { email: "jawagarnathst@cognethro.com", label: "Standard User (Jawa)", role: "USER" },
-];
-
 function LoginPage() {
   const navigate = useNavigate();
   const { login, isAuthenticated, checkAuth } = useAuth();
@@ -26,7 +19,7 @@ function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showDemoAccounts, setShowDemoAccounts] = useState(false);
+
 
   const [loginStep, setLoginStep] = useState<"email" | "password" | "setup" | "otp">("email");
   const [loginOtp, setLoginOtp] = useState("");
@@ -326,65 +319,6 @@ function LoginPage() {
           Sign in with Microsoft
         </button>
 
-        {/* Quick Demo Access toggle */}
-        <div>
-          <button
-            onClick={() => setShowDemoAccounts((v) => !v)}
-            style={{
-              width: "100%", display: "flex", alignItems: "center", justifyContent: "between",
-              padding: "8px 12px", borderRadius: 8, border: "1px border #e5e7eb",
-              background: "#f9fafb", borderStyle: "dashed", cursor: "pointer", fontSize: 12, color: "#6b7280"
-            }}
-          >
-            <span style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-              <Sparkles size={13} style={{ color: "#7c3aed" }} /> Quick demo account list
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 600 }}>{showDemoAccounts ? "Hide" : "Show"}</span>
-          </button>
-
-          {showDemoAccounts && (
-            <div style={{
-              border: "1px solid #e5e7eb", borderRadius: 8,
-              overflow: "hidden", marginTop: 8, marginBottom: 14,
-            }}>
-              {DEMO_ACCOUNTS.map((acc, i) => (
-                <button
-                  key={acc.email}
-                  id={`demo-login-${acc.email.replace(/[@.]/g, "-")}`}
-                  onClick={() => { setEmail(acc.email); document.getElementById("login-password")?.focus(); }}
-                  disabled={loading}
-                  style={{
-                    width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "8px 12px", background: "#fff", border: "none",
-                    borderBottom: i < DEMO_ACCOUNTS.length - 1 ? "1px solid #f3f4f6" : "none",
-                    cursor: loading ? "not-allowed" : "pointer", textAlign: "left",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#f9fafb")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
-                >
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>{acc.label}</div>
-                    <div style={{ fontSize: 10, color: "#9ca3af" }}>{acc.email}</div>
-                  </div>
-                  <span style={{
-                    fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 12,
-                    background: acc.role === "ADMIN" ? "#fef3c7" : "#dbeafe",
-                    color: acc.role === "ADMIN" ? "#d97706" : "#2563eb",
-                    textTransform: "uppercase",
-                  }}>
-                    {acc.role}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Secure login footer */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12 }}>
-          <ShieldCheck size={13} style={{ color: "#9ca3af" }} />
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>Secure login connected to SQLite DB</span>
-        </div>
       </div>
 
       {/* ── RIGHT PANEL — Branding ── */}
