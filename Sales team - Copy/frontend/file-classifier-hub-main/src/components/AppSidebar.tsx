@@ -36,6 +36,7 @@ const groups: NavGroup[] = [
       { label: "SBC plan summary", to: "/parity-setup", icon: Scale, moduleCode: "SBC" },
       { label: "Payroll Register Extraction", to: "/payroll-extractor", icon: FileSpreadsheet, moduleCode: "PAYROLL" },
       { label: "PSH-UI Claim Validator", to: "/psh-claim-validator", icon: ClipboardCheck, moduleCode: "PSH_CLAIM" },
+      { label: "PSH-UI Claim Extractor", to: "/psh-claim-extractor", icon: FileText, moduleCode: "PSH_CLAIM" },
     ],
   },
   {

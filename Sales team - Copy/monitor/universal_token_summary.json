@@ -1,0 +1,68 @@
+{
+  "last_updated": "2026-08-17 09:35:06 UTC",
+  "grand_total_cost_usd": 0.0110778,
+  "grand_total_tokens": 4020,
+  "grand_total_calls": 3,
+  "pocs": {
+    "gpu-none": {
+      "total_files_processed": 1,
+      "total_llm_calls": 2,
+      "total_tokens": 1734,
+      "total_cost_usd": 0.0002628,
+      "files": {
+        "APL-MGSI-April 26 1.pdf": {
+          "total_llm_calls": 2,
+          "total_tokens": 1734,
+          "total_cost_usd": 0.0002628,
+          "calls_breakdown": [
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o-mini",
+              "prompt_tokens": 864,
+              "completion_tokens": 3,
+              "total_tokens": 867,
+              "cost_usd": 0.0001314,
+              "formatted_cost": "$0.000131",
+              "timestamp": "2026-08-14 10:10:39 UTC"
+            },
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o-mini",
+              "prompt_tokens": 864,
+              "completion_tokens": 3,
+              "total_tokens": 867,
+              "cost_usd": 0.0001314,
+              "formatted_cost": "$0.000131",
+              "timestamp": "2026-08-17 09:35:06 UTC"
+            }
+          ]
+        }
+      }
+    },
+    "BASE-CLAIM": {
+      "total_files_processed": 1,
+      "total_llm_calls": 1,
+      "total_tokens": 2286,
+      "total_cost_usd": 0.010815,
+      "files": {
+        "CHOCK II, COLIN K - Entry Screen 1": {
+          "total_llm_calls": 1,
+          "total_tokens": 2286,
+          "total_cost_usd": 0.010815,
+          "calls_breakdown": [
+            {
+              "step": "dual_vision_extraction",
+              "model": "gpt-5.6",
+              "prompt_tokens": 1606,
+              "completion_tokens": 680,
+              "total_tokens": 2286,
+              "cost_usd": 0.010815,
+              "formatted_cost": "$0.010815",
+              "timestamp": "2026-08-14 12:29:06 UTC"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

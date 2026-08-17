@@ -25,6 +25,7 @@ import asyncio
 import argparse
 import logging
 from pathlib import Path
+import re
 from contextlib import contextmanager
 from typing import Any, Dict, List, Set
 
@@ -681,14 +682,23 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
             logger.error("[ROUTING] UnifiedRouter fallback failed: %s", e, exc_info=True)
             return {"error": f"UnifiedRouter fallback failed: {str(e)}"}
 
-def upload_to_onedrive_cloud(token: str, category: str, filename: str, file_path: Path):
+def upload_to_onedrive_cloud(token: str, category: str, filename: str, file_path: Path, user_email: str = None, bundle: str = None):
     import requests
     import os
+    import re
     
     sanitized_cat = category.strip().upper().replace(" ", "_").replace("-", "_")
-    logger.info("Uploading %s directly to OneDrive Cloud (Category: %s)", filename, sanitized_cat)
+    cloud_path = "sorted"
+    if user_email:
+        sanitized_user = re.sub(r'[^a-zA-Z0-9]', '_', user_email.lower())
+        cloud_path += f"/{sanitized_user}"
+    cloud_path += f"/{sanitized_cat}"
+    if bundle:
+        cloud_path += f"/{bundle}"
+        
+    logger.info("Uploading %s directly to OneDrive Cloud (Path: %s)", filename, cloud_path)
     
-    upload_url = f"https://graph.microsoft.com/v1.0/me/drive/root:/sorted/{sanitized_cat}/{filename}:/content"
+    upload_url = f"https://graph.microsoft.com/v1.0/me/drive/root:/{cloud_path}/{filename}:/content"
     
     with open(file_path, 'rb') as f:
         file_data = f.read()
@@ -818,11 +828,10 @@ def execute_flow(
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         dest_pdf_path = dest_dir / filename
+        shutil.copy2(temp_pdf_path, dest_pdf_path)
+        logger.info("[STORE] PDF saved locally to: %s", dest_pdf_path)
         if outlook_token and provider == "outlook":
-            upload_to_onedrive_cloud(outlook_token, category, filename, temp_pdf_path)
-        else:
-            shutil.copy2(temp_pdf_path, dest_pdf_path)
-            logger.info("[STORE] PDF saved to: %s", dest_pdf_path)
+            upload_to_onedrive_cloud(outlook_token, category, filename, temp_pdf_path, user_email=user_email, bundle=filename_stem)
 
         # ── DB: log file classification ───────────────────────────────────
         if _mdb_ok:
@@ -880,21 +889,19 @@ def execute_flow(
             excel_out = extract_result.get("excel")
             if excel_out and os.path.exists(excel_out):
                 excel_dest = dest_dir / f"{filename_stem}_extracted.xlsx"
+                shutil.copy2(excel_out, excel_dest)
+                logger.info("[STORE] Excel output saved locally to: %s", excel_dest)
                 if outlook_token and provider == "outlook":
-                    upload_to_onedrive_cloud(outlook_token, category, f"{filename_stem}_extracted.xlsx", Path(excel_out))
-                else:
-                    shutil.copy2(excel_out, excel_dest)
-                    logger.info("[STORE] Excel output saved to: %s", excel_dest)
+                    upload_to_onedrive_cloud(outlook_token, category, f"{filename_stem}_extracted.xlsx", Path(excel_out), user_email=user_email, bundle=filename_stem)
 
             # JSON
             json_out = extract_result.get("json")
             if json_out and os.path.exists(json_out):
                 json_dest = dest_dir / f"{filename_stem}_extracted.json"
+                shutil.copy2(json_out, json_dest)
+                logger.info("[STORE] JSON output saved locally to: %s", json_dest)
                 if outlook_token and provider == "outlook":
-                    upload_to_onedrive_cloud(outlook_token, category, f"{filename_stem}_extracted.json", Path(json_out))
-                else:
-                    shutil.copy2(json_out, json_dest)
-                    logger.info("[STORE] JSON output saved to: %s", json_dest)
+                    upload_to_onedrive_cloud(outlook_token, category, f"{filename_stem}_extracted.json", Path(json_out), user_email=user_email, bundle=filename_stem)
 
             # TXT Log
             txt_dest = dest_dir / f"{filename_stem}_text.txt"

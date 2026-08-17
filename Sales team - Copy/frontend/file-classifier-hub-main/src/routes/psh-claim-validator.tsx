@@ -18,35 +18,35 @@ export const Route = createFileRoute("/psh-claim-validator")({
 });
 
 // ─── Base-claim- app is mounted at /claim on the main backend (port 8000) ─────
-const PSH_BACKEND_URL = "http://localhost:8000";
+const PSH_BACKEND_URL = "";
 const PSH_CLAIM_PREFIX = "/claim";
 
 // ─── Field metadata matching EXPECTED_KEYS in base-claim- backend ─────────────
 const FIELD_META: Record<string, { label: string; icon: any }> = {
-  claim_sui_account_number:  { label: "SUI Account Number",      icon: Hash },
-  claimant_ssn:              { label: "Claimant SSN",            icon: ShieldAlert },
-  claimant_name:             { label: "Claimant Name",           icon: FileText },
-  claim_start_date:          { label: "Claim Start Date",        icon: Calendar },
-  claim_end_date:            { label: "Claim End Date",          icon: Calendar },
-  byb_date:                  { label: "BYB Date",                icon: Calendar },
-  bye_date:                  { label: "BYE Date",                icon: Calendar },
-  claim_mailing_date:        { label: "Mailing Date",            icon: Calendar },
-  claim_liability_percentage:{ label: "Liability %",             icon: Percent },
-  claim_liability_base_amount:{ label: "Liability Base Amount",  icon: DollarSign },
-  agency_address_line_1:     { label: "Agency Address Line 1",   icon: MapPin },
-  agency_address_line_2:     { label: "Agency Address Line 2",   icon: MapPin },
-  separation_code:           { label: "Separation Code",         icon: ScanLine },
-  calculated_claim_liability:{ label: "Calculated Claim Liability", icon: DollarSign },
+  claim_sui_account_number: { label: "SUI Account Number", icon: Hash },
+  claimant_ssn: { label: "Claimant SSN", icon: ShieldAlert },
+  claimant_name: { label: "Claimant Name", icon: FileText },
+  claim_start_date: { label: "Claim Start Date", icon: Calendar },
+  claim_end_date: { label: "Claim End Date", icon: Calendar },
+  byb_date: { label: "BYB Date", icon: Calendar },
+  bye_date: { label: "BYE Date", icon: Calendar },
+  claim_mailing_date: { label: "Mailing Date", icon: Calendar },
+  claim_liability_percentage: { label: "Liability %", icon: Percent },
+  claim_liability_base_amount: { label: "Liability Base Amount", icon: DollarSign },
+  agency_address_line_1: { label: "Agency Address Line 1", icon: MapPin },
+  agency_address_line_2: { label: "Agency Address Line 2", icon: MapPin },
+  separation_code: { label: "Separation Code", icon: ScanLine },
+  calculated_claim_liability: { label: "Calculated Claim Liability", icon: DollarSign },
 };
 
 const FIELD_KEYS = Object.keys(FIELD_META);
 
 // ─── Processing stages ────────────────────────────────────────────────────────
 const STAGES = [
-  { label: "Image Verified",      sub: "Format validated successfully." },
-  { label: "GPT Vision Running",  sub: "Analyzing dual-panel screenshot..." },
-  { label: "Generating Report",   sub: "Building Excel & JSON outputs..." },
-  { label: "Complete",            sub: "Extraction finished successfully." },
+  { label: "Image Verified", sub: "Format validated successfully." },
+  { label: "GPT Vision Running", sub: "Analyzing dual-panel screenshot..." },
+  { label: "Generating Report", sub: "Building Excel & JSON outputs..." },
+  { label: "Complete", sub: "Extraction finished successfully." },
 ];
 
 type Status = "idle" | "processing" | "complete" | "error";
@@ -65,16 +65,16 @@ const fmtSize = (b: number) =>
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 function PshClaimValidatorPage() {
-  const [file, setFile]             = useState<File | null>(null);
-  const [preview, setPreview]       = useState<string | null>(null);
-  const [status, setStatus]         = useState<Status>("idle");
-  const [stageIdx, setStageIdx]     = useState(0);
-  const [result, setResult]         = useState<ExtractionResult | null>(null);
-  const [error, setError]           = useState<string | null>(null);
-  const [viewMode, setViewMode]     = useState<"table" | "json">("table");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [status, setStatus] = useState<Status>("idle");
+  const [stageIdx, setStageIdx] = useState(0);
+  const [result, setResult] = useState<ExtractionResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "json">("table");
   const [isDragging, setIsDragging] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
-  const fileInputRef                = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── File handlers ─────────────────────────────────────────────────────────
   const handleFile = (f: File) => {
@@ -162,9 +162,9 @@ function PshClaimValidatorPage() {
   };
 
   // ── Computed stats ────────────────────────────────────────────────────────
-  const matchCount    = result ? Object.values(result.validation).filter(v => v === "Match").length : 0;
+  const matchCount = result ? Object.values(result.validation).filter(v => v === "Match").length : 0;
   const mismatchCount = result ? Object.values(result.validation).filter(v => v === "Mismatch").length : 0;
-  const matchPct      = result ? Math.round((matchCount / FIELD_KEYS.length) * 100) : 0;
+  const matchPct = result ? Math.round((matchCount / FIELD_KEYS.length) * 100) : 0;
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -288,8 +288,8 @@ function PshClaimValidatorPage() {
             <Panel title="Extraction Progress" description="Real-time stage tracking">
               <ol className="space-y-0">
                 {STAGES.map((stage, i) => {
-                  const done    = status === "complete" || i < stageIdx;
-                  const active  = status === "processing" && i === stageIdx;
+                  const done = status === "complete" || i < stageIdx;
+                  const active = status === "processing" && i === stageIdx;
                   const errored = status === "error" && i === stageIdx;
                   return (
                     <li key={i} className="flex gap-3 pb-4 last:pb-0 relative">
@@ -298,15 +298,15 @@ function PshClaimValidatorPage() {
                       )}
                       <div className={`
                         w-7 h-7 rounded-full flex items-center justify-center shrink-0 z-10 text-xs font-bold transition-all
-                        ${errored  ? "bg-destructive text-destructive-foreground"
-                        : done     ? "bg-primary text-primary-foreground"
-                        : active   ? "bg-primary/15 text-primary ring-2 ring-primary/30"
-                        : "bg-muted text-muted-foreground/60"}
+                        ${errored ? "bg-destructive text-destructive-foreground"
+                          : done ? "bg-primary text-primary-foreground"
+                            : active ? "bg-primary/15 text-primary ring-2 ring-primary/30"
+                              : "bg-muted text-muted-foreground/60"}
                       `}>
-                        {errored  ? <AlertCircle className="w-3.5 h-3.5" />
-                        : done    ? <CheckCircle2 className="w-3.5 h-3.5" />
-                        : active  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : i + 1}
+                        {errored ? <AlertCircle className="w-3.5 h-3.5" />
+                          : done ? <CheckCircle2 className="w-3.5 h-3.5" />
+                            : active ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : i + 1}
                       </div>
                       <div className="pt-0.5 min-w-0">
                         <p className={`text-[13px] font-medium leading-tight ${active ? "text-primary" : done ? "text-foreground" : "text-muted-foreground/60"}`}>
@@ -363,10 +363,10 @@ function PshClaimValidatorPage() {
               {result.token_usage && Object.keys(result.token_usage).length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2">
                   {[
-                    { k: "prompt_tokens",     label: "Prompt Tokens" },
+                    { k: "prompt_tokens", label: "Prompt Tokens" },
                     { k: "completion_tokens", label: "Output Tokens" },
-                    { k: "total_tokens",      label: "Total Tokens" },
-                    { k: "estimated_cost_usd",label: "Est. Cost" },
+                    { k: "total_tokens", label: "Total Tokens" },
+                    { k: "estimated_cost_usd", label: "Est. Cost" },
                   ].map(({ k, label }) => {
                     const val = result.token_usage[k];
                     const display = k === "estimated_cost_usd" && val != null
@@ -463,11 +463,11 @@ function PshClaimValidatorPage() {
 
                   {/* Rows */}
                   {FIELD_KEYS.map((key, idx) => {
-                    const meta       = FIELD_META[key];
-                    const pdfVal     = result.pdf[key] || "—";
-                    const ocrVal     = result.ocr[key] || "—";
-                    const isMatch    = result.validation[key] === "Match";
-                    const Icon       = meta?.icon ?? FileText;
+                    const meta = FIELD_META[key];
+                    const pdfVal = result.pdf[key] || "—";
+                    const ocrVal = result.ocr[key] || "—";
+                    const isMatch = result.validation[key] === "Match";
+                    const Icon = meta?.icon ?? FileText;
 
                     return (
                       <div

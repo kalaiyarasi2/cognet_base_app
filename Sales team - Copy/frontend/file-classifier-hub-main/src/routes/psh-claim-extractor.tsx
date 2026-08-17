@@ -17,7 +17,7 @@ export const Route = createFileRoute("/psh-claim-extractor")({
 });
 
 // ─── Base-claim- app is mounted at /claim on the main backend (port 8000) ─────
-const PSH_BACKEND_URL = "http://localhost:8000";
+const PSH_BACKEND_URL = "";
 const PSH_CLAIM_PREFIX = "/claim";
 
 // ─── Field metadata matching EXPECTED_KEYS in claim_dual_extractor.py ────────
