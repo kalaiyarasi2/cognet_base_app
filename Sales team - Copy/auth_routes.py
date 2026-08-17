@@ -7,6 +7,7 @@ from typing import Optional, List, Union
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel
+from email_service import send_otp_email
 
 # ── Robust poc_db import ──────────────────────────────────────────────────────
 # The file-classification- sub-app pollutes sys.path with its own 'database'
@@ -41,6 +42,8 @@ class SSOCallbackRequest(BaseModel):
     code: Optional[str] = None
     email: Optional[str] = None
     provider: Optional[str] = "google"
+    code_verifier: Optional[str] = None
+    redirect_uri: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email: str
@@ -78,9 +81,26 @@ def get_current_user_from_token(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid session token.")
 
 import requests
+from fastapi.responses import RedirectResponse
 
 class ForgotPasswordRequest(BaseModel):
     email: str
+    otp_code: str
+    new_password: str
+
+class VerifyOtpRequest(BaseModel):
+    email: str
+    otp_code: str
+
+class RequestOtpRequest(BaseModel):
+    email: str
+
+class CheckEmailRequest(BaseModel):
+    email: str
+
+class SetupPasswordRequest(BaseModel):
+    email: str
+    otp_code: str
     new_password: str
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -100,17 +120,25 @@ async def sso_callback(req: SSOCallbackRequest, request: Request):
         client_id = os.getenv("MICROSOFT_CLIENT_ID", "")
         client_secret = os.getenv("MICROSOFT_CLIENT_SECRET", "")
         tenant_id = os.getenv("MICROSOFT_TENANT_ID", "")
-        redirect_uri = os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:5173/auth/callback")
+        redirect_uri = req.redirect_uri or os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:5173/auth/callback")
         
         token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
         data = {
             "client_id": client_id,
-            "client_secret": client_secret,
             "code": req.code,
             "redirect_uri": redirect_uri,
             "grant_type": "authorization_code",
             "scope": "openid profile email User.Read Files.ReadWrite.All Sites.ReadWrite.All offline_access",
         }
+        
+        # If we have a PKCE code_verifier, we MUST NOT send a client_secret (even if one is in .env).
+        # This prevents invalid client secret errors when a placeholder is present in .env.
+        if not req.code_verifier and client_secret and client_secret.strip() != "":
+            data["client_secret"] = client_secret
+            
+        if req.code_verifier:
+            data["code_verifier"] = req.code_verifier
+            
         try:
             res = requests.post(token_url, data=data, timeout=10)
             if res.status_code == 200:
@@ -120,11 +148,10 @@ async def sso_callback(req: SSOCallbackRequest, request: Request):
                 if id_token:
                     decoded = jwt.decode(id_token, options={"verify_signature": False})
                     target_email = decoded.get("email") or decoded.get("preferred_username") or decoded.get("upn")
+                else:
+                    print(f"[WARN] No id_token in Microsoft response: {tok_data}")
                 
                 # ── Inject the Graph access_token into the SharePoint agent ──
-                # This delegated token covers Sites.ReadWrite.All and Files.ReadWrite.All,
-                # giving access to private SharePoint group sites the user is a member of.
-                # Unlike client_credentials (app-only), delegated tokens work for private group sites.
                 graph_access_token = tok_data.get("access_token")
                 expires_in_sec = int(tok_data.get("expires_in", 3600))
                 if graph_access_token:
@@ -134,14 +161,20 @@ async def sso_callback(req: SSOCallbackRequest, request: Request):
                         print(f"[INFO] SharePoint agent updated with delegated Graph token for '{target_email}' (expires in {expires_in_sec}s)")
                     except Exception as sp_err:
                         print(f"[WARN] Could not inject token into SharePoint agent: {sp_err}")
+            else:
+                print(f"[ERROR] Microsoft Token Exchange Failed: {res.status_code} {res.text}")
+                raise HTTPException(status_code=401, detail=f"Microsoft SSO Failed: {res.json().get('error_description', 'Unknown error')}")
         except Exception as e:
+            if isinstance(e, HTTPException):
+                raise e
             print(f"[WARN] Microsoft OAuth token exchange failed: {e}")
+            raise HTTPException(status_code=401, detail="Microsoft OAuth token exchange failed due to a network or server error.")
             
     if not target_email and req.email:
         target_email = req.email.strip().lower()
         
     if not target_email:
-        target_email = "admin@local"
+        raise HTTPException(status_code=401, detail="Failed to extract email from Microsoft login. Please try again.")
     
     # 1. Strict DB Permission Check
     perm = poc_db.get_user_permission(target_email)
@@ -185,11 +218,173 @@ async def sso_callback(req: SSOCallbackRequest, request: Request):
         "user": user_payload
     }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Microsoft SSO GET Callback (server-side redirect flow)
+# Microsoft redirects here with ?code=... — we exchange it and redirect
+# the user back to the frontend with a JWT.
+# ─────────────────────────────────────────────────────────────────────────────
+_FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+
+@router.get("/auth/sso/callback")
+async def sso_get_callback(code: str = None, error: str = None, error_description: str = None):
+    if error:
+        return RedirectResponse(f"{_FRONTEND_ORIGIN}/auth/callback?error={error_description or error}")
+
+    if not code:
+        return RedirectResponse(f"{_FRONTEND_ORIGIN}/auth/callback?error=No+authorization+code+received")
+
+    client_id = os.getenv("MICROSOFT_CLIENT_ID", "")
+    client_secret = os.getenv("MICROSOFT_CLIENT_SECRET", "")
+    tenant_id = os.getenv("MICROSOFT_TENANT_ID", "")
+    redirect_uri = os.getenv("MICROSOFT_REDIRECT_URI", f"{_FRONTEND_ORIGIN}/api/auth/sso/callback")
+
+    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+    data = {
+        "client_id": client_id,
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+        "scope": "openid profile email User.Read Files.ReadWrite.All Sites.ReadWrite.All offline_access",
+    }
+    if client_secret and client_secret.strip():
+        data["client_secret"] = client_secret
+
+    try:
+        res = requests.post(token_url, data=data, timeout=10)
+        if res.status_code != 200:
+            print(f"[ERROR] Microsoft Token Exchange Failed (GET): {res.status_code} {res.text}")
+            err_desc = res.json().get("error_description", "Token exchange failed") if res.text else "Token exchange failed"
+            return RedirectResponse(f"{_FRONTEND_ORIGIN}/auth/callback?error={err_desc}")
+
+        tok_data = res.json()
+        id_token = tok_data.get("id_token")
+        target_email = None
+        target_name = None
+
+        if id_token:
+            decoded = jwt.decode(id_token, options={"verify_signature": False})
+            target_email = decoded.get("email") or decoded.get("preferred_username") or decoded.get("upn")
+            target_name = decoded.get("name", "")
+
+        graph_access_token = tok_data.get("access_token")
+        expires_in_sec = int(tok_data.get("expires_in", 3600))
+        if graph_access_token:
+            try:
+                from SharePoint_Agent.sharepoint_agent_module import sharepoint_agent
+                sharepoint_agent.set_delegated_token(graph_access_token, expires_in=expires_in_sec)
+                print(f"[INFO] SharePoint agent updated with delegated Graph token for '{target_email}' (expires in {expires_in_sec}s)")
+            except Exception as sp_err:
+                print(f"[WARN] Could not inject token into SharePoint agent: {sp_err}")
+
+    except Exception as e:
+        print(f"[ERROR] Microsoft OAuth GET token exchange failed: {e}")
+        return RedirectResponse(f"{_FRONTEND_ORIGIN}/auth/callback?error=Microsoft+OAuth+exchange+failed")
+
+    if not target_email:
+        return RedirectResponse(f"{_FRONTEND_ORIGIN}/auth/callback?error=Could+not+extract+email+from+Microsoft+login")
+
+    perm = poc_db.get_user_permission(target_email)
+    if not perm:
+        return RedirectResponse(f"{_FRONTEND_ORIGIN}/auth/callback?error=Access+Denied:+Account+not+granted+access")
+
+    if perm.get("access_status") == "REVOKED":
+        return RedirectResponse(f"{_FRONTEND_ORIGIN}/auth/callback?error=Access+Revoked:+Your+access+has+been+disabled")
+
+    modules = perm.get("allowed_modules", "ALL") or "ALL"
+    user_payload = {
+        "email": perm["email"],
+        "name": perm["full_name"],
+        "role": perm["role"],
+        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules,
+        "can_manage_tenants": perm["role"] == "ADMIN",
+        "can_manage_users": perm["role"] in ("ADMIN", "TENANT_ADMIN")
+    }
+    token = create_access_token(user_payload)
+
+    import urllib.parse
+    encoded_token = urllib.parse.quote(token)
+    encoded_email = urllib.parse.quote(target_email or "")
+    encoded_name = urllib.parse.quote(target_name or "")
+    encoded_role = urllib.parse.quote(user_payload["role"])
+    encoded_modules = urllib.parse.quote(",".join(user_payload["allowed_modules"]) if isinstance(user_payload["allowed_modules"], list) else str(user_payload["allowed_modules"]))
+
+    frontend_redirect = (
+        f"{_FRONTEND_ORIGIN}/auth/callback"
+        f"?sso_token={encoded_token}"
+        f"&email={encoded_email}"
+        f"&name={encoded_name}"
+        f"&role={encoded_role}"
+        f"&allowed_modules={encoded_modules}"
+    )
+    return RedirectResponse(frontend_redirect)
+
+@router.post("/auth/check-email")
+async def check_email(req: CheckEmailRequest):
+    """Check if email exists and if it's a first time login."""
+    clean_email = req.email.strip().lower()
+    perm = poc_db.get_user_permission(clean_email)
+    if not perm:
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Access Denied: The account '{clean_email}' has not been granted access by an Administrator."
+        )
+        
+    if not perm.get("password_hash"):
+        # First time setup
+        otp_code = poc_db.store_otp(clean_email, "setup")
+        send_otp_email(clean_email, otp_code, "account setup")
+        return {"status": "first_time_setup", "message": "OTP sent to your email for account setup."}
+    else:
+        return {"status": "existing_user"}
+
+@router.post("/auth/setup-password")
+async def setup_password(req: SetupPasswordRequest, request: Request):
+    """Verify OTP and set password for a first time user."""
+    clean_email = req.email.strip().lower()
+    perm = poc_db.get_user_permission(clean_email)
+    if not perm:
+        raise HTTPException(status_code=403, detail="Email not recognized.")
+        
+    if not poc_db.verify_otp(clean_email, req.otp_code, "setup"):
+        raise HTTPException(status_code=401, detail="Invalid or expired OTP.")
+        
+    # Save password
+    poc_db.update_user_password(clean_email, req.new_password)
+    
+    # Return JWT
+    modules = perm.get("allowed_modules", "ALL") or "ALL"
+    user_payload = {
+        "email": perm["email"],
+        "name": perm["full_name"],
+        "role": perm["role"],
+        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules,
+        "can_manage_tenants": perm["role"] == "ADMIN",
+        "can_manage_users": perm["role"] in ("ADMIN", "TENANT_ADMIN")
+    }
+    token = create_access_token(user_payload)
+    
+    try:
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.headers.get("X-Real-IP") or (request.client.host if request.client else "127.0.0.1")
+        user_agent = request.headers.get("User-Agent", "Browser")
+        session_db.record_session(perm["email"], perm.get("full_name", ""), perm.get("role", "USER"), client_ip, user_agent)
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "token": token,
+        "user": user_payload,
+        "message": "Account setup complete!"
+    }
+
 @router.post("/auth/login")
 async def direct_login(req: LoginRequest, request: Request):
     """Direct email + password login with DB permission verification."""
     clean_email = req.email.strip().lower()
     
+    if not req.password or not req.password.strip():
+        raise HTTPException(status_code=400, detail="Password is required.")
+        
     # Check DB permissions
     perm = poc_db.get_user_permission(clean_email)
     
@@ -199,14 +394,34 @@ async def direct_login(req: LoginRequest, request: Request):
             detail=f"Access Denied: The email '{clean_email}' is not authorized. Please ask an Admin for access."
         )
     
-    # Password Verification (if password supplied and password_hash is set)
-    if req.password and perm.get("password_hash"):
-        if not poc_db.verify_user_password(clean_email, req.password):
-            raise HTTPException(status_code=401, detail="Incorrect password. Please try again or use Forgot Password.")
-            
-    # Save password if supplied and not set yet
-    if req.password and not perm.get("password_hash"):
-        poc_db.update_user_password(clean_email, req.password)
+    # Password Verification (if password_hash is set)
+    if not perm.get("password_hash"):
+        raise HTTPException(status_code=400, detail="Account not setup. Please go back and enter your email first to complete setup.")
+        
+    if not poc_db.verify_user_password(clean_email, req.password):
+        raise HTTPException(status_code=401, detail="Incorrect password. Please try again or use Forgot Password.")
+        
+    # After password verification succeeds, send OTP
+    otp_code = poc_db.store_otp(clean_email, "login")
+    send_otp_email(clean_email, otp_code, "login")
+
+    return {
+        "status": "otp_required",
+        "email": clean_email,
+        "message": "Please enter the OTP sent to your email to continue."
+    }
+
+@router.post("/auth/verify-otp")
+async def verify_otp(req: VerifyOtpRequest, request: Request):
+    """Verify OTP and return final JWT."""
+    clean_email = req.email.strip().lower()
+    
+    if not poc_db.verify_otp(clean_email, req.otp_code, "login"):
+        raise HTTPException(status_code=401, detail="Invalid or expired OTP.")
+        
+    perm = poc_db.get_user_permission(clean_email)
+    if not perm:
+        raise HTTPException(status_code=403, detail="User not found or access revoked.")
         
     modules = perm.get("allowed_modules", "ALL") or "ALL"
     user_payload = {
@@ -248,14 +463,29 @@ async def revoke_session_endpoint(req: RevokeSessionRequest):
     success = session_db.revoke_session(req.session_id)
     return {"status": "ok" if success else "error"}
 
+@router.post("/auth/request-otp")
+async def request_otp(req: RequestOtpRequest):
+    """Request OTP for forgot password flow."""
+    clean_email = req.email.strip().lower()
+    perm = poc_db.get_user_permission(clean_email)
+    if not perm:
+        raise HTTPException(status_code=404, detail=f"No active account found for '{clean_email}'.")
+        
+    otp_code = poc_db.store_otp(clean_email, "reset")
+    send_otp_email(clean_email, otp_code, "reset password")
+    return {"status": "ok", "message": "OTP sent to your email."}
+
 @router.post("/auth/forgot-password")
 async def forgot_password(req: ForgotPasswordRequest):
-    """Reset or update user password in DB."""
+    """Reset or update user password in DB after OTP verification."""
     clean_email = req.email.strip().lower()
     perm = poc_db.get_user_permission(clean_email)
     
     if not perm:
         raise HTTPException(status_code=404, detail=f"No active account found for '{clean_email}'.")
+        
+    if not poc_db.verify_otp(clean_email, req.otp_code, "reset"):
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP.")
         
     success = poc_db.update_user_password(clean_email, req.new_password)
     if not success:

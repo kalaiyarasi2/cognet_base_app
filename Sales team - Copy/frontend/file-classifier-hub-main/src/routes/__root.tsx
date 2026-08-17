@@ -81,8 +81,8 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const pathname = router.state.location.pathname;
 
   useEffect(() => {
-    // Don't guard the login page itself
-    if (pathname === "/login") return;
+    // Don't guard the login page or the auth callback page
+    if (pathname === "/login" || pathname.startsWith("/auth/callback")) return;
     // If session is invalid, redirect
     if (!isAuthenticated || !checkAuth()) {
       router.navigate({ to: "/login" });
@@ -98,8 +98,8 @@ function Shell() {
   const router = useRouter();
   const pathname = router.state.location.pathname;
 
-  // On the login page, render only the outlet (no sidebar/header)
-  if (pathname === "/login") {
+  // On the login page or auth callback, render only the outlet (no sidebar/header)
+  if (pathname === "/login" || pathname.startsWith("/auth/callback")) {
     return <Outlet />;
   }
 

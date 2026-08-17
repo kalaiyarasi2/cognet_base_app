@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import random
 from datetime import datetime
 from pathlib import Path
 
@@ -226,6 +227,33 @@ def init_poc_tables():
 
 def _seed_initial_records(cursor, conn):
     pass
+
+# ── IN-MEMORY OTP STORE ──
+# Key: (email, purpose), Value: (otp_code, timestamp)
+_in_memory_otps = {}
+
+def store_otp(email: str, purpose: str) -> str:
+    otp_code = str(random.randint(100000, 999999))
+    _in_memory_otps[(email.lower(), purpose)] = (otp_code, datetime.now())
+    return otp_code
+
+def verify_otp(email: str, otp_code: str, purpose: str) -> bool:
+    key = (email.lower(), purpose)
+    if key not in _in_memory_otps:
+        return False
+        
+    stored_code, timestamp = _in_memory_otps[key]
+    
+    # Check if within 10 minutes (600 seconds)
+    if (datetime.now() - timestamp).total_seconds() > 600:
+        del _in_memory_otps[key]
+        return False
+        
+    if stored_code == otp_code:
+        del _in_memory_otps[key] # OTP is single-use
+        return True
+        
+    return False
 
 def log_universal(module: str, action: str, file_name: str, status: str, details: str = "", processed_by: str = "SYSTEM"):
     init_poc_tables()

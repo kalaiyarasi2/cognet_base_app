@@ -205,7 +205,12 @@ export const useAuth = create<AuthState>()(
         if (!token || !isAuthenticated) return false;
         try {
           // Decode JWT and check expiry without library (simple base64)
-          const payload = JSON.parse(atob(token.split(".")[1]));
+          let base64Url = token.split(".")[1];
+          let base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          let jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+          }).join(''));
+          const payload = JSON.parse(jsonPayload);
           if (payload.exp && Date.now() / 1000 > payload.exp) {
             set({ user: null, token: null, isAuthenticated: false });
             return false;

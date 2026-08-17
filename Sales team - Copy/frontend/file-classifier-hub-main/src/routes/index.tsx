@@ -74,16 +74,16 @@ function Dashboard() {
   const [selectedProvider, setSelectedProvider] = useState<"outlook" | "gmail">("outlook");
 
   const { data: config } = useQuery({
-    queryKey: ["config"], queryFn: api.config, retry: false, refetchInterval: 30000,
+    queryKey: ["config"], queryFn: () => api.config(), retry: false, refetchInterval: 30000,
   });
 
   const { data: health } = useQuery({
-    queryKey: ["health"], queryFn: api.health, retry: false, refetchInterval: 30000,
+    queryKey: ["health"], queryFn: () => api.health(), retry: false, refetchInterval: 30000,
   });
 
   const { data: autoStatus, isLoading: isAutoStatusLoading } = useQuery({
     queryKey: ["automation-status"],
-    queryFn: api.automationStatus,
+    queryFn: () => api.automationStatus(),
     refetchInterval: 3000,
   });
 

@@ -386,25 +386,53 @@ export const api = {
   },
 
   // ─── Auth & Admin Access Management ───────────────────────────────────────
-  /** Login with email & optional password (checked against app_permissions DB). Returns JWT + user. */
+  /** Check if email exists and if it needs first-time setup */
+  checkEmail: (email: string) =>
+    request<{ status: string; message?: string }>(
+      "/api/auth/check-email",
+      { method: "POST", body: JSON.stringify({ email }) }
+    ),
+
+  /** Verify OTP and set password for first-time setup */
+  setupPassword: (email: string, otp_code: string, new_password: string) =>
+    request<{ status: string; token: string; user: any; message: string }>(
+      "/api/auth/setup-password",
+      { method: "POST", body: JSON.stringify({ email, otp_code, new_password }) }
+    ),
+
+  /** Login with email & optional password (checked against app_permissions DB). Returns OTP required status. */
   authLogin: (email: string, password?: string) =>
-    request<{ status: string; token: string; user: { email: string; name: string; role: string; allowed_modules?: any; can_manage_tenants?: boolean; can_manage_users?: boolean } }>(
+    request<{ status: string; email?: string; message?: string; token?: string; user?: any }>(
       "/api/auth/login",
       { method: "POST", body: JSON.stringify({ email, password }) }
     ),
 
-  /** Forgot / Reset password */
-  forgotPassword: (email: string, new_password: string) =>
+  /** Verify OTP and get JWT Token */
+  verifyOtp: (email: string, otp_code: string) =>
+    request<{ status: string; token: string; user: { email: string; name: string; role: string; allowed_modules?: any; can_manage_tenants?: boolean; can_manage_users?: boolean } }>(
+      "/api/auth/verify-otp",
+      { method: "POST", body: JSON.stringify({ email, otp_code }) }
+    ),
+
+  /** Request OTP for Forgot Password */
+  requestOtp: (email: string) =>
+    request<{ status: string; message: string }>(
+      "/api/auth/request-otp",
+      { method: "POST", body: JSON.stringify({ email }) }
+    ),
+
+  /** Forgot / Reset password with OTP */
+  forgotPassword: (email: string, otp_code: string, new_password: string) =>
     request<{ status: string; message: string }>(
       "/api/auth/forgot-password",
-      { method: "POST", body: JSON.stringify({ email, new_password }) }
+      { method: "POST", body: JSON.stringify({ email, otp_code, new_password }) }
     ),
 
   /** SSO Callback exchange (code from Microsoft or direct email) */
-  ssoCallback: (code?: string, email?: string) =>
+  ssoCallback: (code?: string, email?: string, code_verifier?: string, redirect_uri?: string) =>
     request<{ status: string; token: string; user: { email: string; name: string; role: string; allowed_modules?: any; can_manage_tenants?: boolean; can_manage_users?: boolean } }>(
       "/api/auth/sso/callback",
-      { method: "POST", body: JSON.stringify({ code, email }) }
+      { method: "POST", body: JSON.stringify({ code, email, code_verifier, redirect_uri }) }
     ),
 
   /** Fetch current user from token */

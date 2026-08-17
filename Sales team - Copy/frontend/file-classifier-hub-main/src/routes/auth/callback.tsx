@@ -20,6 +20,26 @@ function AuthCallbackPage() {
       const err = params.get("error");
       const errDesc = params.get("error_description");
 
+      // ── Server-side redirect flow: backend already exchanged the code ──
+      const ssoToken = params.get("sso_token");
+      if (ssoToken) {
+        const email = params.get("email") || "";
+        const name = params.get("name") || "";
+        const role = params.get("role") || "USER";
+        const allowedModules = params.get("allowed_modules") || "ALL";
+        login(
+          {
+            email,
+            name,
+            role: role as "ADMIN" | "USER",
+            allowed_modules: allowedModules.includes(",") ? allowedModules.split(",") : allowedModules,
+          },
+          ssoToken
+        );
+        navigate({ to: "/" });
+        return;
+      }
+
       if (err) {
         setError(`Microsoft Sign-in error: ${errDesc || err}`);
         return;
@@ -31,7 +51,13 @@ function AuthCallbackPage() {
       }
 
       try {
-        const res = await api.ssoCallback(code);
+        const codeVerifier = sessionStorage.getItem("code_verifier") || undefined;
+        const redirectUri = window.location.origin + "/auth/callback";
+        const res = await api.ssoCallback(code, undefined, codeVerifier, redirectUri);
+        
+        // Clean up code_verifier
+        sessionStorage.removeItem("code_verifier");
+        
         login(
           {
             email: res.user.email,

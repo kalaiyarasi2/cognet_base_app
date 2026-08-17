@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Mail, Loader2, AlertTriangle, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, CheckCircle2, X } from "lucide-react";
+import { Mail, Loader2, AlertTriangle, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, CheckCircle2, X, ArrowRight } from "lucide-react";
 import { useAuth } from "@/lib/store";
 import { api } from "@/lib/api";
 import logoUrl from "../logo.png";
@@ -28,9 +28,16 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [showDemoAccounts, setShowDemoAccounts] = useState(false);
 
+  const [loginStep, setLoginStep] = useState<"email" | "password" | "setup" | "otp">("email");
+  const [loginOtp, setLoginOtp] = useState("");
+  const [setupPassword, setSetupPassword] = useState("");
+  const [setupConfirm, setSetupConfirm] = useState("");
+
   // Forgot password modal state
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
   const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotOtp, setForgotOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
@@ -42,30 +49,19 @@ function LoginPage() {
     }
   }, [isAuthenticated]);
 
-  async function handleLogin(loginEmail: string) {
-    const cleanEmail = loginEmail.trim().toLowerCase();
-    if (!cleanEmail) {
-      setError("Please enter your email address.");
-      return;
-    }
-    setLoading(true);
-    setError(null);
+  async function handleCheckEmail() {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) { setError("Please enter your email address."); return; }
+    setLoading(true); setError(null);
     try {
-      const res = await api.authLogin(cleanEmail, password || undefined);
-      login(
-        { 
-          email: res.user.email, 
-          name: res.user.name, 
-          role: res.user.role as "ADMIN" | "TENANT_ADMIN" | "USER",
-          allowed_modules: res.user.allowed_modules,
-          can_manage_tenants: res.user.can_manage_tenants,
-          can_manage_users: res.user.can_manage_users,
-        },
-        res.token
-      );
-      navigate({ to: "/" });
+      const res = await api.checkEmail(cleanEmail);
+      if (res.status === "first_time_setup") {
+        setLoginStep("setup");
+      } else {
+        setLoginStep("password");
+      }
     } catch (err: any) {
-      const msg: string = err?.message ?? "Authentication failed.";
+      const msg: string = err?.message ?? "Failed to verify email.";
       if (msg.includes("not authorized") || msg.includes("Access Denied")) {
         setError(`Access Denied: "${cleanEmail}" is not authorized. Please contact your Administrator.`);
       } else {
@@ -76,30 +72,120 @@ function LoginPage() {
     }
   }
 
-  function handleMicrosoftSSO() {
+  async function handleSetupAccount() {
+    if (!loginOtp.trim()) { setError("Please enter the OTP."); return; }
+    if (!setupPassword.trim() || setupPassword !== setupConfirm) { setError("Passwords do not match."); return; }
+    setLoading(true); setError(null);
+    try {
+      const res = await api.setupPassword(email.trim().toLowerCase(), loginOtp.trim(), setupPassword);
+      login({ ...res.user, role: res.user.role as any }, res.token);
+      navigate({ to: "/" });
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to setup account.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLogin() {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!password.trim()) { setError("Please enter your password."); return; }
+    setLoading(true); setError(null);
+    try {
+      const res = await api.authLogin(cleanEmail, password);
+      if (res.status === "otp_required") {
+        setLoginStep("otp");
+        return;
+      }
+      if (res.user && res.token) {
+        login({ ...res.user, role: res.user.role as any }, res.token);
+        navigate({ to: "/" });
+      }
+    } catch (err: any) {
+      setError(err?.message ?? "Authentication failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerifyOtp() {
+    if (!loginOtp.trim()) { setError("Please enter the OTP."); return; }
+    setLoading(true); setError(null);
+    try {
+      const res = await api.verifyOtp(email.trim().toLowerCase(), loginOtp.trim());
+      login({ ...res.user, role: res.user.role as any }, res.token);
+      navigate({ to: "/" });
+    } catch (err: any) {
+      setError(err?.message ?? "Invalid OTP.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function generateRandomString(length: number) {
+    let text = "";
+    const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    for (let i = 0; i < length; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+  }
+
+  async function generateCodeChallenge(codeVerifier: string) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(codeVerifier);
+    const digest = await window.crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  async function handleMicrosoftSSO() {
     const clientId = "c08eee76-3a6c-433f-8c54-b46f32e1634c";
     const tenantId = "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae";
-    const redirectUri = encodeURIComponent("http://localhost:5173/auth/callback");
+    const backendOrigin = "http://localhost:8000";
+    const redirectUri = encodeURIComponent(backendOrigin + "/api/auth/sso/callback");
     const scope = encodeURIComponent("openid profile email User.Read");
-    const msUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}`;
+
+    const msUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}&prompt=select_account`;
     window.location.href = msUrl;
   }
 
+  async function handleRequestForgotOtp() {
+    if (!forgotEmail.trim()) {
+      setForgotError("Please enter your email.");
+      return;
+    }
+    setForgotLoading(true);
+    setForgotError(null);
+    try {
+      const res = await api.requestOtp(forgotEmail.trim().toLowerCase());
+      setForgotSuccess(res.message);
+      setForgotStep(2);
+    } catch (e: any) {
+      setForgotError(e?.message ?? "Failed to send OTP.");
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
   async function handleResetPassword() {
-    if (!forgotEmail.trim() || !newPassword.trim()) {
-      setForgotError("Please enter both email and new password.");
+    if (!forgotOtp.trim() || !newPassword.trim()) {
+      setForgotError("Please enter both OTP and new password.");
       return;
     }
     setForgotLoading(true);
     setForgotError(null);
     setForgotSuccess(null);
     try {
-      const res = await api.forgotPassword(forgotEmail.trim().toLowerCase(), newPassword.trim());
+      const res = await api.forgotPassword(forgotEmail.trim().toLowerCase(), forgotOtp.trim(), newPassword.trim());
       setForgotSuccess(res.message);
       setTimeout(() => {
         setEmail(forgotEmail);
         setPassword(newPassword);
         setShowForgotModal(false);
+        setForgotStep(1);
+        setForgotOtp("");
+        setNewPassword("");
         setForgotSuccess(null);
       }, 2000);
     } catch (e: any) {
@@ -144,115 +230,71 @@ function LoginPage() {
           </div>
         )}
 
-        {/* Email Field */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-            Email Address
-          </label>
-          <input
-            id="login-email"
-            type="email"
-            value={email}
-            onChange={(e) => { setEmail(e.target.value); setError(null); }}
-            onKeyDown={(e) => e.key === "Enter" && handleLogin(email)}
-            placeholder="Enter your email"
-            autoFocus
-            autoComplete="email"
-            style={{
-              width: "100%", height: 42, padding: "0 14px",
-              border: "1.5px solid #e5e7eb", borderRadius: 8,
-              fontSize: 14, color: "#0f1117",
-              outline: "none", boxSizing: "border-box",
-              background: "#fff", transition: "border-color 0.15s",
-            }}
-            onFocus={(e) => e.target.style.borderColor = "#0057FF"}
-            onBlur={(e) => e.target.style.borderColor = "#e5e7eb"}
-          />
-        </div>
+        {/* Login Form Fields */}
+        {loginStep === "email" && (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Email Address</label>
+              <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(null); }} onKeyDown={(e) => e.key === "Enter" && handleCheckEmail()} placeholder="Enter your email" autoFocus autoComplete="email" style={{ width: "100%", height: 42, padding: "0 14px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#0f1117", outline: "none", boxSizing: "border-box", background: "#fff", transition: "border-color 0.15s" }} onFocus={(e) => e.target.style.borderColor = "#0057FF"} onBlur={(e) => e.target.style.borderColor = "#e5e7eb"} />
+            </div>
+            <button onClick={handleCheckEmail} disabled={loading || !email.trim()} style={{ width: "100%", height: 42, background: loading || !email.trim() ? "#93b4ff" : "#0057FF", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 600, cursor: loading || !email.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "background 0.15s", marginBottom: 16 }}>{loading ? <Loader2 size={16} className="animate-spin" /> : "Continue"} {!loading && <ArrowRight size={16} />}</button>
+          </>
+        )}
 
-        {/* Password Field */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-            Password
-          </label>
-          <div style={{ position: "relative" }}>
-            <input
-              id="login-password"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleLogin(email)}
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              style={{
-                width: "100%", height: 42, padding: "0 40px 0 14px",
-                border: "1.5px solid #e5e7eb", borderRadius: 8,
-                fontSize: 14, color: "#0f1117",
-                outline: "none", boxSizing: "border-box",
-                background: "#fff",
-              }}
-              onFocus={(e) => e.target.style.borderColor = "#0057FF"}
-              onBlur={(e) => e.target.style.borderColor = "#e5e7eb"}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              style={{
-                position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
-                background: "none", border: "none", cursor: "pointer", padding: 0,
-                color: "#9ca3af", display: "flex", alignItems: "center",
-              }}
-            >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
+        {loginStep === "password" && (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Email Address</label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 14px", height: 42, border: "1.5px solid #e5e7eb", borderRadius: 8, background: "#f9fafb", color: "#6b7280", fontSize: 14 }}>
+                <span>{email}</span>
+                <button onClick={() => setLoginStep("email")} style={{ background: "none", border: "none", color: "#0057FF", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Edit</button>
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Password</label>
+              <div style={{ position: "relative" }}>
+                <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="Enter your password" autoFocus autoComplete="current-password" style={{ width: "100%", height: 42, padding: "0 40px 0 14px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#0f1117", outline: "none", boxSizing: "border-box", background: "#fff" }} onFocus={(e) => e.target.style.borderColor = "#0057FF"} onBlur={(e) => e.target.style.borderColor = "#e5e7eb"} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#9ca3af", display: "flex", alignItems: "center" }}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} style={{ width: 15, height: 15, accentColor: "#0057FF" }} /><span style={{ fontSize: 13, color: "#374151" }}>Remember me</span></label>
+              <button type="button" onClick={() => { setForgotEmail(email); setShowForgotModal(true); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#0057FF", fontWeight: 500 }}>Forgot password?</button>
+            </div>
+            <button onClick={handleLogin} disabled={loading || !password.trim()} style={{ width: "100%", height: 42, background: loading || !password.trim() ? "#93b4ff" : "#0057FF", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 600, cursor: loading || !password.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "background 0.15s", marginBottom: 16 }}>{loading ? <Loader2 size={16} className="animate-spin" /> : "Sign In"} {!loading && <ArrowRight size={16} />}</button>
+          </>
+        )}
+
+        {loginStep === "setup" && (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f0fdf4", color: "#166534", padding: "10px 14px", borderRadius: 8, fontSize: 13, marginBottom: 16, border: "1px solid #bbf7d0" }}>
+                <CheckCircle2 size={16} /> <span>An OTP has been sent to <strong>{email}</strong>.</span>
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>6-Digit OTP Code</label>
+              <input type="text" value={loginOtp} onChange={(e) => { setLoginOtp(e.target.value.replace(/\D/g, '').slice(0,6)); setError(null); }} placeholder="Enter 6-digit code" autoFocus style={{ width: "100%", height: 42, padding: "0 14px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 16, color: "#0f1117", letterSpacing: "2px", outline: "none", boxSizing: "border-box", textAlign: "center", background: "#fff", transition: "border-color 0.15s" }} onFocus={(e) => e.target.style.borderColor = "#0057FF"} onBlur={(e) => e.target.style.borderColor = "#e5e7eb"} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Set New Password</label>
+              <input type="password" value={setupPassword} onChange={(e) => setSetupPassword(e.target.value)} placeholder="Choose a secure password" style={{ width: "100%", height: 42, padding: "0 14px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#0f1117", outline: "none", boxSizing: "border-box", background: "#fff" }} onFocus={(e) => e.target.style.borderColor = "#0057FF"} onBlur={(e) => e.target.style.borderColor = "#e5e7eb"} />
+            </div>
+            <div style={{ marginBottom: 22 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Confirm Password</label>
+              <input type="password" value={setupConfirm} onChange={(e) => setSetupConfirm(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSetupAccount()} placeholder="Re-enter your password" style={{ width: "100%", height: 42, padding: "0 14px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#0f1117", outline: "none", boxSizing: "border-box", background: "#fff" }} onFocus={(e) => e.target.style.borderColor = "#0057FF"} onBlur={(e) => e.target.style.borderColor = "#e5e7eb"} />
+            </div>
+            <button onClick={handleSetupAccount} disabled={loading || loginOtp.length < 6 || !setupPassword.trim() || !setupConfirm.trim()} style={{ width: "100%", height: 42, background: loading || loginOtp.length < 6 || !setupPassword.trim() || !setupConfirm.trim() ? "#93b4ff" : "#0057FF", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 600, cursor: loading || loginOtp.length < 6 || !setupPassword.trim() || !setupConfirm.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "background 0.15s", marginBottom: 16 }}>{loading ? <Loader2 size={16} className="animate-spin" /> : "Complete Setup & Sign In"} {!loading && <ArrowRight size={16} />}</button>
+          </>
+        )}
+
+        {loginStep === "otp" && (
+          <div style={{ marginBottom: 22 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>6-Digit OTP Code</label>
+            <input type="text" value={loginOtp} onChange={(e) => { setLoginOtp(e.target.value.replace(/\D/g, '').slice(0,6)); setError(null); }} onKeyDown={(e) => e.key === "Enter" && handleVerifyOtp()} placeholder="Enter 6-digit code" autoFocus style={{ width: "100%", height: 42, padding: "0 14px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 18, color: "#0f1117", letterSpacing: "4px", outline: "none", boxSizing: "border-box", textAlign: "center", background: "#fff", transition: "border-color 0.15s" }} onFocus={(e) => e.target.style.borderColor = "#0057FF"} onBlur={(e) => e.target.style.borderColor = "#e5e7eb"} />
+            <button onClick={handleVerifyOtp} disabled={loading || loginOtp.length < 6} style={{ width: "100%", height: 42, background: loading || loginOtp.length < 6 ? "#93b4ff" : "#0057FF", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 600, cursor: loading || loginOtp.length < 6 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "background 0.15s", marginTop: 22, marginBottom: 16 }}>{loading ? <Loader2 size={16} className="animate-spin" /> : "Verify & Continue"}</button>
           </div>
-        </div>
-
-        {/* Remember Me + Forgot Password */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              id="remember-me"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              style={{ width: 15, height: 15, accentColor: "#0057FF" }}
-            />
-            <span style={{ fontSize: 13, color: "#374151" }}>Remember me</span>
-          </label>
-          <button
-            type="button"
-            onClick={() => { setForgotEmail(email); setShowForgotModal(true); }}
-            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#0057FF", fontWeight: 500 }}
-          >
-            Forgot password?
-          </button>
-        </div>
-
-        {/* Sign In Button */}
-        <button
-          id="login-submit-btn"
-          onClick={() => handleLogin(email)}
-          disabled={loading || !email.trim()}
-          style={{
-            width: "100%", height: 42,
-            background: loading || !email.trim() ? "#93b4ff" : "#0057FF",
-            border: "none", borderRadius: 8,
-            color: "#fff", fontSize: 14, fontWeight: 600,
-            cursor: loading || !email.trim() ? "not-allowed" : "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            transition: "background 0.15s",
-            marginBottom: 16,
-          }}
-          onMouseEnter={(e) => { if (!loading && email.trim()) (e.target as HTMLElement).style.background = "#0047d9"; }}
-          onMouseLeave={(e) => { if (!loading && email.trim()) (e.target as HTMLElement).style.background = "#0057FF"; }}
-        >
-          {loading ? (
-            <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Signing in…</>
-          ) : (
-            "Sign In"
-          )}
-        </button>
+        )}
 
         {/* Divider */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
@@ -309,7 +351,7 @@ function LoginPage() {
                 <button
                   key={acc.email}
                   id={`demo-login-${acc.email.replace(/[@.]/g, "-")}`}
-                  onClick={() => { setEmail(acc.email); handleLogin(acc.email); }}
+                  onClick={() => { setEmail(acc.email); document.getElementById("login-password")?.focus(); }}
                   disabled={loading}
                   style={{
                     width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -475,49 +517,82 @@ function LoginPage() {
               </div>
             )}
 
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-                Work Email
-              </label>
-              <input
-                type="email"
-                value={forgotEmail}
-                onChange={(e) => setForgotEmail(e.target.value)}
-                placeholder="you@company.com"
-                style={{
-                  width: "100%", height: 38, padding: "0 12px", borderRadius: 8,
-                  border: "1.5px solid #e5e7eb", fontSize: 13, outline: "none", boxSizing: "border-box"
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-                New Password
-              </label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password"
-                style={{
-                  width: "100%", height: 38, padding: "0 12px", borderRadius: 8,
-                  border: "1.5px solid #e5e7eb", fontSize: 13, outline: "none", boxSizing: "border-box"
-                }}
-              />
-            </div>
-
-            <button
-              onClick={handleResetPassword}
-              disabled={forgotLoading || !forgotEmail.trim() || !newPassword.trim()}
-              style={{
-                width: "100%", height: 40, background: "#0057FF", border: "none", borderRadius: 8,
-                color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 8
-              }}
-            >
-              {forgotLoading ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : "Save New Password"}
-            </button>
+            {forgotStep === 1 ? (
+              <>
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                    Work Email
+                  </label>
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    style={{
+                      width: "100%", height: 38, padding: "0 12px", borderRadius: 8,
+                      border: "1.5px solid #e5e7eb", fontSize: 13, outline: "none", boxSizing: "border-box"
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={handleRequestForgotOtp}
+                  disabled={forgotLoading || !forgotEmail.trim()}
+                  style={{
+                    width: "100%", height: 38, background: forgotLoading || !forgotEmail.trim() ? "#9ca3af" : "#0057FF",
+                    color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    cursor: forgotLoading || !forgotEmail.trim() ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+                  }}
+                >
+                  {forgotLoading ? <Loader2 size={15} className="animate-spin" /> : "Send OTP"}
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                    OTP Code
+                  </label>
+                  <input
+                    type="text"
+                    value={forgotOtp}
+                    onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="6-digit code"
+                    style={{
+                      width: "100%", height: 38, padding: "0 12px", borderRadius: 8,
+                      border: "1.5px solid #e5e7eb", fontSize: 13, outline: "none", boxSizing: "border-box", letterSpacing: "2px"
+                    }}
+                  />
+                </div>
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    style={{
+                      width: "100%", height: 38, padding: "0 12px", borderRadius: 8,
+                      border: "1.5px solid #e5e7eb", fontSize: 13, outline: "none", boxSizing: "border-box"
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={handleResetPassword}
+                  disabled={forgotLoading || !forgotOtp.trim() || !newPassword.trim()}
+                  style={{
+                    width: "100%", height: 38, background: forgotLoading || !forgotOtp.trim() || !newPassword.trim() ? "#9ca3af" : "#0057FF",
+                    color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    cursor: forgotLoading || !forgotOtp.trim() || !newPassword.trim() ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+                  }}
+                >
+                  {forgotLoading ? <Loader2 size={15} className="animate-spin" /> : "Verify & Reset Password"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
