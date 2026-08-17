@@ -12,6 +12,7 @@ import re
 from openai import OpenAI
 from dotenv import load_dotenv
 from gpu_config import gpu_manager, gpu_concurrency_config
+from universal_trash import move_to_trash
 
 try:
     import rostaing_ocr
@@ -64,7 +65,7 @@ class SchemaOCRExtractor:
                 if temp_output.exists():
                     with open(temp_output, 'r', encoding='utf-8') as temp_f:
                         res_text = temp_f.read()
-                    temp_output.unlink()  # Clean up temp file
+                    move_to_trash(temp_output, module_name="backend")  # Clean up temp file
                     return res_text
                 else:
                     return ""

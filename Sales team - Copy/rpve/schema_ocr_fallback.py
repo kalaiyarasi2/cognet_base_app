@@ -18,6 +18,7 @@ Fallback chain (in order of preference):
 import sys
 import logging
 from pathlib import Path
+from universal_trash import move_to_trash
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,7 @@ def _extract_with_rostaing(pdf_path: str) -> str:
             raise AttributeError("rostaing_ocr has no ocr_extractor() method")
     finally:
         if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+            move_to_trash(tmp_path, module_name="rpve")
 
 
 # ---------------------------------------------------------------------------
@@ -265,4 +266,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()

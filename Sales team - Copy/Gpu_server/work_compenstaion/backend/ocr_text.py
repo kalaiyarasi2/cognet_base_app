@@ -14,6 +14,7 @@ import time
 import re
 import threading
 from dotenv import load_dotenv
+from universal_trash import move_to_trash
 
 # Load environment variables
 load_dotenv()
@@ -291,7 +292,7 @@ class OCRPDFExtractor:
                     if temp_output.exists():
                         with open(temp_output, 'r', encoding='utf-8') as f:
                             full_text = f.read()
-                        temp_output.unlink()
+                        move_to_trash(temp_output, module_name="backend")
                 elif hasattr(self.rostaing_engine, 'process_document'):
                     full_text = self.rostaing_engine.process_document(str(self.pdf_path))
                 

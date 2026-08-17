@@ -54,6 +54,7 @@ if sys.stdout.encoding != 'utf-8' or not getattr(sys.stdout, 'line_buffering', F
 # --- GLOBAL LOGGING FIX: Force Unbuffered Output ---
 # This ensures that even in Uvicorn/FastAPI request cycles, every print reaches the terminal immediately.
 import builtins
+from universal_trash import move_to_trash
 old_print = builtins.print
 def flushed_print(*args, **kwargs):
     kwargs.setdefault('flush', True)
@@ -2008,7 +2009,7 @@ Return ONLY the company name or UNKNOWN:"""
         
         try:
             if output_xlsx.exists():
-                output_xlsx.unlink(missing_ok=True)
+                move_to_trash(output_xlsx, module_name="Unified_PDF_Platform")
             
             result = await self._run_subprocess_async([sys.executable, str(script_to_use), str(pdf_path), str(output_xlsx)], 3600, request_id=request_id)
             

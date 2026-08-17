@@ -265,6 +265,7 @@ if OutlookAgentModule is not None:
     OutlookAgentModule.get_access_token = patched_get_access_token
 
 from file_classifier import extract as classifier_extract, load_categories_from_env, DocumentClassifier
+from universal_trash import move_to_trash
 # from unified_router import UnifiedRouter
 
 # Clean up sys.path to prevent namespace collisions (like config.py/utils.py)
@@ -689,7 +690,7 @@ def process_outlook_emails(
 
                 # Clean up temp inbox PDF
                 if temp_pdf_path.exists():
-                    temp_pdf_path.unlink()
+                    move_to_trash(temp_pdf_path, module_name="Sales team - Copy")
 
             # Mark email as read and add to processed
             if _mark_read:

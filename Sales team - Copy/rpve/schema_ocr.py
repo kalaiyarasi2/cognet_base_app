@@ -17,6 +17,7 @@ import json
 import re
 from openai import OpenAI
 from dotenv import load_dotenv
+from universal_trash import move_to_trash
 
 try:
     import rostaing_ocr
@@ -90,7 +91,7 @@ class SchemaOCRExtractor:
                 if temp_output.exists():
                     with open(temp_output, 'r', encoding='utf-8') as temp_f:
                         self.output_text = temp_f.read()
-                    temp_output.unlink()
+                    move_to_trash(temp_output, module_name="rpve")
                     return self.output_text
             raise
 

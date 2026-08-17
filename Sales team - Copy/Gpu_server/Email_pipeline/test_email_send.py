@@ -6,6 +6,7 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from tools import send_email_with_results
+from universal_trash import move_to_trash
 
 def test_send():
     recipient = "Saleemy@gmail.com"
@@ -27,7 +28,7 @@ def test_send():
         
     # Cleanup
     if os.path.exists(test_file):
-        os.remove(test_file)
+        move_to_trash(test_file, module_name="Email_pipeline")
 
 if __name__ == "__main__":
     test_send()

@@ -14,6 +14,7 @@ from datetime import datetime
 from auth_routes import get_current_user_from_token
 from fastapi import Depends
 from database.poc_db import save_workflow_project, get_workflow_project, list_workflow_projects, delete_workflow_project
+from universal_trash import move_to_trash
 
 router = APIRouter(prefix="/api/workflow", tags=["Workflow Engine (Co-Pilot)"])
 
@@ -524,7 +525,7 @@ async def run_workflow(
         for t_path, _, _ in temp_file_paths:
             if os.path.exists(t_path):
                 try:
-                    os.remove(t_path)
+                    move_to_trash(t_path, module_name="Sales team - Copy")
                 except:
                     pass
 

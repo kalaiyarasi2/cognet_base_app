@@ -64,6 +64,7 @@ if tess_path:
 
 # ── Monitoring DB (SQLite) ────────────────────────────────────────────────────
 import uuid as _uuid
+from universal_trash import move_to_trash
 try:
     import sys as _sys
     _sys.path.insert(0, str(CLASSIFIER_DIR))
@@ -963,7 +964,7 @@ def execute_flow(
 
         # Clean up temp PDF
         if temp_pdf_path.exists():
-            temp_pdf_path.unlink()
+            move_to_trash(temp_pdf_path, module_name="Sales team - Copy")
 
         processed_count += 1
 

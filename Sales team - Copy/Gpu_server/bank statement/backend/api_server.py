@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from statement_extractor import StatementExtractor
+from universal_trash import move_to_trash
 
 
 app = FastAPI(title="Bank Statement Extractor API")
@@ -75,7 +76,7 @@ async def extract_statements(files: List[UploadFile] = File(...)) -> List[Dict[s
         finally:
             if temp_path:
                 try:
-                    temp_path.unlink(missing_ok=True)
+                    move_to_trash(temp_path, module_name="backend")
                 except Exception:
                     pass
     

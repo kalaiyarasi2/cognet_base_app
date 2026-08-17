@@ -9,6 +9,7 @@ import urllib.parse
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from dotenv import load_dotenv
+from universal_trash import move_to_trash
 
 load_dotenv()
 
@@ -212,7 +213,7 @@ class SharePointAgent:
                             return True
                         else:
                             self.log(f"Stale session '{sf.name}' refresh rejected by Azure AD ({res.get('error_description') or res.get('error')}) — removing stale session file.")
-                            sf.unlink(missing_ok=True)
+                            move_to_trash(sf, module_name="SharePoint_Agent")
                 except Exception as ex:
                     self.log(f"Session file '{sf.name}' parse/refresh error: {ex}")
                     continue

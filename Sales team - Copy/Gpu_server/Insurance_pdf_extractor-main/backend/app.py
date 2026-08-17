@@ -14,6 +14,7 @@ from werkzeug.utils import secure_filename
 from dataclasses import asdict
 from dotenv import load_dotenv
 from pathlib import Path
+from universal_trash import move_to_trash
 
 load_dotenv()
 
@@ -183,7 +184,7 @@ def run_extraction_task(job_id, filepath, target_claim):
         # Clean up uploaded file
         try:
             if os.path.exists(filepath):
-                os.remove(filepath)
+                move_to_trash(filepath, module_name="backend")
         except:
             pass
 
@@ -300,7 +301,7 @@ def extract_batch():
             
             # Clean up
             try:
-                os.remove(filepath)
+                move_to_trash(filepath, module_name="backend")
             except:
                 pass
                 

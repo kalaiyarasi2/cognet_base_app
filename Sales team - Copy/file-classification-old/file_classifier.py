@@ -56,6 +56,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from universal_trash import move_to_trash
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 __all__ = [
@@ -981,7 +982,7 @@ class SchemaOCRExtractor:
                 if temp_output.exists():
                     with open(temp_output, "r", encoding="utf-8") as temp_f:
                         res_text = temp_f.read()
-                    temp_output.unlink()
+                    move_to_trash(temp_output, module_name="file-classification-old")
                     return res_text
                 else:
                     return ""
@@ -1545,7 +1546,7 @@ def extract_scanned(
                 ocr_extractor = SchemaOCRExtractor(tmp_img_path)
                 page_text = ocr_extractor.extract_layout_text(save_debug_output=False)
             finally:
-                tmp_img_path.unlink(missing_ok=True)
+                move_to_trash(tmp_img_path, module_name="file-classification-old")
 
             pages_text.append(page_text)
             _logger_scn.debug("[scanned] page %d: %d chars from OCR", i + 1, len(page_text))

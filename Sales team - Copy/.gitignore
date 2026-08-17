@@ -12,3 +12,7 @@ uploads/
 sharepoint_agent/__pycache_/
 client_secret.json
 converter.db
+scratch/
+storage/
+
+

@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 
 from fastapi import APIRouter, File, UploadFile, Query, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
+from universal_trash import move_to_trash
 
 # ── Environment ──────────────────────────────────────────────────────────────
 load_dotenv()
@@ -695,7 +696,7 @@ async def generate_claims_dashboard(
     finally:
         # Clean up the uploaded temp file
         try:
-            os.unlink(tmp_input.name)
+            move_to_trash(tmp_input.name, module_name="Unified_PDF_Platform")
         except Exception:
             pass
 
