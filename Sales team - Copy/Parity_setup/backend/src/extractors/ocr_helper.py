@@ -3,6 +3,7 @@ from PIL import Image
 import pdfplumber
 import os
 from dotenv import load_dotenv
+from universal_trash import move_to_trash
 
 load_dotenv()
 
@@ -47,7 +48,7 @@ def ocr_pdf_full(pdf_path: str, resolution: int = 300) -> str:
             with open(temp_out, "r", encoding="utf-8") as f:
                 text = f.read()
             try:
-                os.remove(temp_out)
+                move_to_trash(temp_out, module_name="extractors")
             except Exception as e_del:
                 print(f"    [OCR WARN] Could not delete temp file {temp_out}: {e_del}")
                 

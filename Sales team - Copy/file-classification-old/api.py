@@ -563,7 +563,7 @@ async def detect_pdf_type(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        tmp_path.unlink(missing_ok=True)
+        move_to_trash(tmp_path, module_name="file-classification-old")
 
     return DetectResponse(
         filename=file.filename or "upload.pdf",
@@ -625,7 +625,7 @@ async def extract_text(
         logger.error("Extraction failed for %s: %s", file.filename, exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        tmp_path.unlink(missing_ok=True)
+        move_to_trash(tmp_path, module_name="file-classification-old")
 
     return ExtractResponse(
         filename=file.filename or "upload.pdf",
@@ -1384,6 +1384,7 @@ import subprocess
 import json
 from onedrive_oauth import get_valid_token as od_get_token
 from google_oauth import get_credentials_from_cookie as google_get_creds
+from universal_trash import move_to_trash
 
 STATE_FILE = Path(__file__).parent / ".sessions" / "pipeline_process.json"
 
@@ -1509,7 +1510,7 @@ def stop_automation():
             logger.warning("Error reading state file to stop process: %s", e)
             
         try:
-            STATE_FILE.unlink(missing_ok=True)
+            move_to_trash(STATE_FILE, module_name="file-classification-old")
         except Exception:
             pass
             

@@ -44,6 +44,7 @@ if sys.stderr.encoding != 'utf-8':
 from tools import get_new_unread_pdf_emails, get_attachments, download_pdf, mark_as_read, DOWNLOAD_DIR, is_rate_limited, seconds_until_ok, send_email_with_results
 from extraction_model import ExtractionModel
 from tracker import get_processed_ids, mark_processed, summary as tracker_summary
+from universal_trash import move_to_trash
 
 load_dotenv()
 
@@ -207,7 +208,7 @@ def save_and_cleanup(results: list[dict], pdf_paths: list[str], cleanup: bool = 
     if cleanup:
         for path in pdf_paths:
             try:
-                os.remove(path)
+                move_to_trash(path, module_name="Email_pipeline")
             except OSError:
                 pass
         log.info("[CLEANUP] Cleaned %d PDF(s) from downloads/", len(pdf_paths))

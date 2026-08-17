@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
+from universal_trash import move_to_trash
 
 app = FastAPI(title="Renewal Intellect API")
 
@@ -241,7 +242,7 @@ async def delete_job(job_id: str):
     for path in (invoice_path, census_path, out_census_path, rates_json_path, log_path):
         try:
             if path.exists():
-                path.unlink()
+                move_to_trash(path, module_name="Renewal_process")
         except Exception:
             pass
             

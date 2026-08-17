@@ -244,7 +244,21 @@ async def unified_lifespan(a: FastAPI):
     except Exception as e:
         print(f"[WARN] Failed to start RPVE worker threads: {e}")
 
+    # ── Universal Trash Cleanup Service ──
+    print("[INIT] Starting Universal Trash background service...")
+    cleanup_task = None
+    try:
+        from universal_trash import start_cleanup_service
+        cleanup_task = start_cleanup_service()
+        print("[INIT] Universal Trash cleanup service started successfully.")
+    except Exception as e:
+        print(f"[WARN] Failed to start Universal Trash cleanup service: {e}")
+
     yield
+
+    # Cancel cleanup task on shutdown if it exists
+    if cleanup_task:
+        cleanup_task.cancel()
 
 
 # Thin FastAPI wrapper — only owns the lifespan and the CORS outer middleware.

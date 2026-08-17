@@ -33,6 +33,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.exceptions import RefreshError
+from universal_trash import move_to_trash
 
 # ── Scopes ─────────────────────────────────────────────────────────────────────
 # readonly is enough for searching + downloading — change if you also want to label/delete
@@ -65,7 +66,7 @@ def get_gmail_service():
             except RefreshError:
                 print(f"[AUTH] Token refresh failed. Removing {TOKEN_FILE} to re-authenticate.")
                 if os.path.exists(TOKEN_FILE):
-                    os.remove(TOKEN_FILE)
+                    move_to_trash(TOKEN_FILE, module_name="Email_pipeline")
                 creds = None
 
         if not creds:

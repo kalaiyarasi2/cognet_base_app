@@ -38,6 +38,7 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 from openpyxl import load_workbook
 from dotenv import load_dotenv
+from universal_trash import move_to_trash
 
 # ──────────────────────────────────────────────
 # Load environment variables
@@ -449,7 +450,7 @@ def extract_layout_preserving_text(pdf_path: Path, page_index: int, image) -> Tu
             page_text = result.render()
         finally:
             try:
-                os.unlink(tmp_path)
+                move_to_trash(tmp_path, module_name="Renewal_process")
             except Exception:
                 pass
 

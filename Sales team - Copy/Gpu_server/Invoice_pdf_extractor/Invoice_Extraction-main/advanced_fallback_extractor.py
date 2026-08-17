@@ -189,7 +189,7 @@ except Exception as e:
         except Exception as e:
             logger.error(f"PaddleOCR execution failed: {e}")
         finally:
-            if os.path.exists(script_path): os.remove(script_path)
+            if os.path.exists(script_path): move_to_trash(script_path, module_name="Invoice_Extraction-main")
         return ""
 
     def _run_surya_subprocess(self) -> str:
@@ -210,6 +210,7 @@ import fitz
 import io
 import traceback
 from PIL import Image
+from universal_trash import move_to_trash
 try:
     # Surya 0.17.x API compatibility
     from surya.recognition import RecognitionPredictor
@@ -263,7 +264,7 @@ except Exception as e:
         except Exception as e:
             logger.error(f"Surya execution failed: {e}")
         finally:
-            if os.path.exists(script_path): os.remove(script_path)
+            if os.path.exists(script_path): move_to_trash(script_path, module_name="Invoice_Extraction-main")
         return ""
 
 # For testing
