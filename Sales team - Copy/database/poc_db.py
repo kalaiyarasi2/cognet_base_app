@@ -221,6 +221,32 @@ def init_poc_tables():
         except Exception:
             pass
 
+        # 11. Payroll Extractor History
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS payroll_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            original_file_name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            summary TEXT,
+            error_message TEXT,
+            created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 12. File Classification History
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS classification_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            file_name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            category TEXT,
+            error_message TEXT,
+            created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
         conn.commit()
         _seed_initial_records(cursor, conn)
         conn.close()
@@ -311,6 +337,28 @@ def log_rpve_run(flow_id: str, file_names: str, status: str, insurer: str = "", 
         conn.commit()
         conn.close()
     log_universal("RPVE", "Ingestion Flow Verification", file_names, status, f"Insurer: {insurer}, Value: {total_value}" if insurer else error_message, processed_by=processed_by)
+
+def log_payroll_run(task_id: str, original_file_name: str, status: str, summary: str = "", error_message: str = "", processed_by: str = "SYSTEM"):
+    init_poc_tables()
+    for conn in get_connections():
+        conn.execute(
+            "INSERT INTO payroll_history (task_id, original_file_name, status, summary, error_message) VALUES (?, ?, ?, ?, ?)",
+            (task_id, original_file_name, status, summary, error_message)
+        )
+        conn.commit()
+        conn.close()
+    log_universal("PAYROLL_EXTRACTOR", "Payroll Register Extraction", original_file_name, status, summary or error_message, processed_by=processed_by)
+
+def log_classification_run(task_id: str, file_name: str, status: str, category: str = "", error_message: str = "", processed_by: str = "SYSTEM"):
+    init_poc_tables()
+    for conn in get_connections():
+        conn.execute(
+            "INSERT INTO classification_history (task_id, file_name, status, category, error_message) VALUES (?, ?, ?, ?, ?)",
+            (task_id, file_name, status, category, error_message)
+        )
+        conn.commit()
+        conn.close()
+    log_universal("CLASSIFICATION", "Document Semantic Classification", file_name, status, category or error_message, processed_by=processed_by)
 
 def get_universal_logs(limit: int = 100):
     init_poc_tables()

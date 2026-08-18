@@ -504,6 +504,20 @@ HDHP (High Deductible Health Plan) DETECTION:
                 time.sleep(delay)
         
         result = completion.choices[0].message.parsed
+        
+        try:
+            # Try to add workspace root to path if needed to import core
+            import sys
+            from pathlib import Path
+            workspace_root = str(Path(__file__).resolve().parent.parent.parent.parent.parent)
+            if workspace_root not in sys.path:
+                sys.path.insert(0, workspace_root)
+            
+            from core.universal_token_monitor import track_usage
+            if hasattr(completion, 'usage') and completion.usage:
+                track_usage("PARITY_SETUP", "gpt-4o-2024-08-06", completion.usage.prompt_tokens, completion.usage.completion_tokens, "parity_extraction")
+        except Exception as track_err:
+            print(f"  [WARN] Failed to track token usage: {track_err}")
 
         # Normalize plan name and pharmacy tiers using text-backed rules
         result.plan_information.plan_name = self._extract_plan_name_from_text(

@@ -98,7 +98,7 @@ if OutlookAgentModule is not None:
     import requests
     from typing import Optional
     
-    def patched_get_access_token(self, refresh_token: Optional[str] = None) -> str:
+    def patched_get_access_token(self, refresh_token: Optional[str] = None, allow_device_flow: bool = True) -> str:
         authority = f"https://login.microsoftonline.com/{self.azure_tenant_id}"
         scopes = [
             "https://graph.microsoft.com/Mail.Read",
@@ -193,6 +193,8 @@ if OutlookAgentModule is not None:
             raise RuntimeError(f"Token refresh failed: {result.get('error_description')}")
 
         # 3. Manual Device Code Flow with client secret support
+        if not allow_device_flow:
+            raise RuntimeError("No valid token found and device-code flow is disabled in background mode.")
         logger.info("No cached token; initiating device-code flow with client secret...")
         
         device_code_url = f"https://login.microsoftonline.com/{self.azure_tenant_id}/oauth2/v2.0/devicecode"

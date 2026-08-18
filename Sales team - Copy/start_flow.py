@@ -130,7 +130,7 @@ if OutlookAgentModule is not None:
     import requests
     from typing import Optional
     
-    def patched_get_access_token(self, refresh_token: Optional[str] = None) -> str:
+    def patched_get_access_token(self, refresh_token: Optional[str] = None, allow_device_flow: bool = True) -> str:
         authority = f"https://login.microsoftonline.com/{self.azure_tenant_id}"
         scopes = [
             "https://graph.microsoft.com/Mail.Read",
@@ -227,6 +227,8 @@ if OutlookAgentModule is not None:
             raise RuntimeError(f"Token refresh failed: {result.get('error_description')}")
 
         # 3. Manual Device Code Flow with client secret support
+        if not allow_device_flow:
+            raise RuntimeError("No valid token found and device-code flow is disabled in background mode.")
         logger.info("No cached token; initiating device-code flow with client secret...")
         
         device_code_url = f"https://login.microsoftonline.com/{self.azure_tenant_id}/oauth2/v2.0/devicecode"
@@ -339,6 +341,39 @@ def get_outlook_agent(user_email: str | None = None) -> OutlookAgentModule | Non
         return None
 
 
+def get_active_refresh_token(user_email: str | None = None) -> str | None:
+    import glob
+    import json
+    import os
+    import jwt
+
+    sessions_dir = '.sessions'
+    if not os.path.exists(sessions_dir):
+        sessions_dir = os.path.join('file-classification-', '.sessions')
+        if not os.path.exists(sessions_dir):
+            return None
+
+    session_files = glob.glob(os.path.join(sessions_dir, 'onedrive_*.json'))
+    session_files.sort(key=os.path.getmtime, reverse=True)
+
+    for s_file in session_files:
+        try:
+            with open(s_file, 'r') as f:
+                data = json.load(f)
+                token = data.get('access_token')
+                refresh = data.get('refresh_token')
+                
+                if user_email and token:
+                    decoded = jwt.decode(token, options={'verify_signature': False})
+                    token_email = decoded.get('upn') or decoded.get('unique_name') or decoded.get('email')
+                    if token_email and token_email.lower() == user_email.lower():
+                        return refresh
+                elif refresh:
+                    return refresh
+        except Exception:
+            pass
+    return None
+
 def fetch_outlook_attachments(dest_folder: Path, mark_read: bool = True, user_email: str | None = None) -> tuple[list[Path], str]:
     """Fetches unread Outlook attachments and saves them locally."""
     agent = get_outlook_agent(user_email=user_email)
@@ -350,7 +385,8 @@ def fetch_outlook_attachments(dest_folder: Path, mark_read: bool = True, user_em
     token = ""
 
     try:
-        token = agent.get_access_token()
+        refresh_token = get_active_refresh_token(user_email)
+        token = agent.get_access_token(refresh_token=refresh_token, allow_device_flow=False)
         from outlook_agent_module import _mark_read, _load_processed_ids, _save_processed_ids
 
         processed_ids_file = agent.processed_ids_file
@@ -682,7 +718,7 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
             logger.error("[ROUTING] UnifiedRouter fallback failed: %s", e, exc_info=True)
             return {"error": f"UnifiedRouter fallback failed: {str(e)}"}
 
-def upload_to_onedrive_cloud(token: str, category: str, filename: str, file_path: Path, user_email: str = None, bundle: str = None):
+def upload_to_onedrive_cloud(category: str, filename: str, file_path: Path, user_email: str = None, bundle: str = None):
     import requests
     import os
     import re
@@ -709,6 +745,18 @@ def upload_to_onedrive_cloud(token: str, category: str, filename: str, file_path
     elif filename.endswith(".xlsx"):
         content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         
+    agent = get_outlook_agent(user_email)
+    if not agent:
+        logger.error("[CLOUD STORE] Cannot upload: Failed to initialize OutlookAgentModule.")
+        return
+        
+    refresh_token = get_active_refresh_token(user_email)
+    try:
+        token = agent.get_access_token(refresh_token=refresh_token, allow_device_flow=False)
+    except Exception as e:
+        logger.error("[CLOUD STORE] Failed to get valid token for upload: %s", e)
+        return
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": content_type
@@ -831,7 +879,7 @@ def execute_flow(
         shutil.copy2(temp_pdf_path, dest_pdf_path)
         logger.info("[STORE] PDF saved locally to: %s", dest_pdf_path)
         if outlook_token and provider == "outlook":
-            upload_to_onedrive_cloud(outlook_token, category, filename, temp_pdf_path, user_email=user_email, bundle=filename_stem)
+            upload_to_onedrive_cloud(category, filename, temp_pdf_path, user_email=user_email, bundle=filename_stem)
 
         # ── DB: log file classification ───────────────────────────────────
         if _mdb_ok:
@@ -892,7 +940,7 @@ def execute_flow(
                 shutil.copy2(excel_out, excel_dest)
                 logger.info("[STORE] Excel output saved locally to: %s", excel_dest)
                 if outlook_token and provider == "outlook":
-                    upload_to_onedrive_cloud(outlook_token, category, f"{filename_stem}_extracted.xlsx", Path(excel_out), user_email=user_email, bundle=filename_stem)
+                    upload_to_onedrive_cloud(category, f"{filename_stem}_extracted.xlsx", Path(excel_out), user_email=user_email, bundle=filename_stem)
 
             # JSON
             json_out = extract_result.get("json")
@@ -901,7 +949,7 @@ def execute_flow(
                 shutil.copy2(json_out, json_dest)
                 logger.info("[STORE] JSON output saved locally to: %s", json_dest)
                 if outlook_token and provider == "outlook":
-                    upload_to_onedrive_cloud(outlook_token, category, f"{filename_stem}_extracted.json", Path(json_out), user_email=user_email, bundle=filename_stem)
+                    upload_to_onedrive_cloud(category, f"{filename_stem}_extracted.json", Path(json_out), user_email=user_email, bundle=filename_stem)
 
             # TXT Log
             txt_dest = dest_dir / f"{filename_stem}_text.txt"

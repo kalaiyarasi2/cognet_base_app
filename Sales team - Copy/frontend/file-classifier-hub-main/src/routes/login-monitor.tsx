@@ -53,8 +53,14 @@ export function LoginMonitorPage() {
     }
   }
 
-  const activeSessions = sessions.filter((s) => s.status === "ACTIVE");
-  const filtered = sessions.filter(
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const recentSessions = sessions.filter((s) => {
+    if (!s.last_active) return true;
+    return new Date(s.last_active) >= oneDayAgo;
+  });
+
+  const activeSessions = recentSessions.filter((s) => s.status === "ACTIVE");
+  const filtered = recentSessions.filter(
     (s) =>
       !search ||
       s.user_email.toLowerCase().includes(search.toLowerCase()) ||
@@ -62,7 +68,7 @@ export function LoginMonitorPage() {
       s.ip_address.includes(search)
   );
 
-  const uniqueIPs = new Set(sessions.map((s) => s.ip_address)).size;
+  const uniqueIPs = new Set(recentSessions.map((s) => s.ip_address)).size;
 
   return (
     <div className="space-y-6">
@@ -94,8 +100,8 @@ export function LoginMonitorPage() {
           accent="success"
         />
         <StatCard
-          label="Total Logins Recorded"
-          value={sessions.length}
+          label="Total Logins Recorded (24h)"
+          value={recentSessions.length}
           icon={Users}
           hint="Stored in user_sessions.db"
         />

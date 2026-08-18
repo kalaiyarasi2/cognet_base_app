@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/store";
 
 export const Route = createFileRoute("/psh-claim-extractor")({
   component: PshClaimExtractorPage,
@@ -77,6 +78,7 @@ function PshClaimExtractorPage() {
   const [selectedPage, setSelectedPage] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef                = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
 
   // ── File handlers ─────────────────────────────────────────────────────────
   const handleFile = (f: File) => {
@@ -134,6 +136,9 @@ function PshClaimExtractorPage() {
 
       const res = await fetch(`${PSH_BACKEND_URL}${PSH_CLAIM_PREFIX}/api/extract-claim-pdf`, {
         method: "POST",
+        headers: {
+          "X-Processed-By": user?.email || "SYSTEM"
+        },
         body: formData,
       });
 

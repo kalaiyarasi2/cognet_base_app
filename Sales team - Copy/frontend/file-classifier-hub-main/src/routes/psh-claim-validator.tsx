@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/store";
 
 export const Route = createFileRoute("/psh-claim-validator")({
   component: PshClaimValidatorPage,
@@ -75,6 +76,7 @@ function PshClaimValidatorPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
 
   // ── File handlers ─────────────────────────────────────────────────────────
   const handleFile = (f: File) => {
@@ -124,6 +126,9 @@ function PshClaimValidatorPage() {
       setStageIdx(1);
       const res = await fetch(`${PSH_BACKEND_URL}${PSH_CLAIM_PREFIX}/api/extract-screenshot`, {
         method: "POST",
+        headers: {
+          "X-Processed-By": user?.email || "SYSTEM"
+        },
         body: formData,
       });
       setStageIdx(2);

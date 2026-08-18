@@ -88,7 +88,7 @@ export function useTenant() {
 
   function isModuleEnabled(routeOrCode: string): boolean {
     const isExplicitTenantView = urlParams.has("tenant") || urlParams.has("tenant_code") || urlParams.get("view") === "tenant";
-    const isAdmin = !!user?.can_manage_tenants && !isExplicitTenantView;
+    const isAdmin = (!!user?.can_manage_tenants || user?.role === "ADMIN") && !isExplicitTenantView;
     if (isAdmin) return true;
 
     // Extract user allowed modules list if specified

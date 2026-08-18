@@ -135,8 +135,8 @@ function LoginPage() {
   async function handleMicrosoftSSO() {
     const clientId = "c08eee76-3a6c-433f-8c54-b46f32e1634c";
     const tenantId = "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae";
-    const backendOrigin = "http://localhost:8000";
-    const redirectUri = encodeURIComponent(backendOrigin + "/api/auth/sso/callback");
+    const frontendOrigin = window.location.origin;
+    const redirectUri = encodeURIComponent(frontendOrigin + "/auth/callback");
     const scope = encodeURIComponent("openid profile email User.Read");
 
     const msUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}&prompt=select_account`;

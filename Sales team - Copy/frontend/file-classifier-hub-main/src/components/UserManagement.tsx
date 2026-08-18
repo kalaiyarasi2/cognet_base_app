@@ -212,8 +212,8 @@ export function UserManagement() {
       e.department.toLowerCase().includes(searchEmployees.toLowerCase())
   );
 
-  const canInvite = !!adminUser?.can_manage_users;
-  const isGlobalAdmin = !!adminUser?.can_manage_tenants;
+  const canInvite = !!adminUser?.can_manage_users || adminUser?.role === "ADMIN" || adminUser?.role === "TENANT_ADMIN";
+  const isGlobalAdmin = !!adminUser?.can_manage_tenants || adminUser?.role === "ADMIN";
 
   const adminModulesRaw = adminUser?.allowed_modules;
   let adminAllowedList: string[] = [];

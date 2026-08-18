@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).parent.resolve()
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from dotenv import load_dotenv
 
@@ -873,7 +873,7 @@ async def health_check():
 
 @app.post("/process-pdf")
 @app.post("/api/process-pdf")
-async def process_pdf_endpoint(file: UploadFile = File(...)):
+async def process_pdf_endpoint(request: Request, file: UploadFile = File(...)):
     """
     Upload a single PDF, process it through the extraction & LLM pipeline,
     and return the final processed JSON directly.
@@ -924,7 +924,8 @@ async def process_pdf_endpoint(file: UploadFile = File(...)):
 
         try:
             from database import poc_db
-            poc_db.log_resourcing_run(file.filename, "SUCCESS", pdf_path.stem, f"{pdf_path.stem}.json")
+            processed_by = request.headers.get("X-Processed-By") or request.query_params.get("processed_by") or "SYSTEM"
+            poc_db.log_resourcing_run(file.filename, "SUCCESS", pdf_path.stem, f"{pdf_path.stem}.json", processed_by=processed_by)
             print(f"[DB] Logged Resourcing Edge run for {file.filename} to converter.db", flush=True)
         except Exception as db_err:
             print(f"[WARN] Failed to log Resourcing Edge run to DB: {db_err}", flush=True)

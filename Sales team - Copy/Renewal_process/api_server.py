@@ -7,7 +7,7 @@ import shutil
 import asyncio
 import time
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -74,8 +74,18 @@ async def get_output_file(filename: str):
 # }
 jobs = {}
 
-def run_pipeline_sync(job_id: str, command: list, out_census_path: Path, log_path: Path):
+def run_pipeline_sync(job_id: str, command: list, out_census_path: Path, log_path: Path, invoice_name: str, census_name: str, processed_by: str = "SYSTEM"):
     jobs[job_id]["status"] = "processing"
+    
+    # Try to import DB logger
+    try:
+        import sys
+        workspace_root = str(BASE_DIR.parent.parent)
+        if workspace_root not in sys.path:
+            sys.path.insert(0, workspace_root)
+        from database.poc_db import log_universal
+    except ImportError:
+        log_universal = None
     
     try:
         log_path.parent.mkdir(exist_ok=True)
@@ -113,11 +123,17 @@ def run_pipeline_sync(job_id: str, command: list, out_census_path: Path, log_pat
             jobs[job_id]["download_url"] = f"http://localhost:8000/output/{out_census_path.name}"
             jobs[job_id]["rates_json_url"] = f"http://localhost:8000/output/extracted_rates_{job_id}.json"
             print(f"Job {job_id} completed successfully.", flush=True)
+            
+            if log_universal:
+                log_universal("RENEWAL_PROCESS", "Census Roster Rate Audit", f"{census_name} & {invoice_name}", "SUCCESS", f"http://localhost:8000/output/{out_census_path.name}", processed_by=processed_by)
         else:
             jobs[job_id]["status"] = "failed"
             jobs[job_id]["completed_at"] = time.time()
             jobs[job_id]["error"] = f"Pipeline process exited with returncode {process.returncode}."
             print(f"Job {job_id} failed with returncode {process.returncode}.", flush=True)
+            
+            if log_universal:
+                log_universal("RENEWAL_PROCESS", "Census Roster Rate Audit", f"{census_name} & {invoice_name}", "FAILED", f"Pipeline process exited with returncode {process.returncode}.", processed_by=processed_by)
             
     except Exception as e:
         import traceback
@@ -133,9 +149,16 @@ def run_pipeline_sync(job_id: str, command: list, out_census_path: Path, log_pat
                 f.write(f"\n[ERROR] {err_msg}")
         except Exception:
             pass
+            
+        if log_universal:
+            try:
+                log_universal("RENEWAL_PROCESS", "Census Roster Rate Audit", f"{census_name} & {invoice_name}", "FAILED", str(e), processed_by=processed_by)
+            except Exception:
+                pass
 
 @app.post("/api/process")
 async def process_renewal(
+    request: Request,
     invoice: UploadFile = File(...),
     census: UploadFile = File(...)
 ):
@@ -196,8 +219,10 @@ async def process_renewal(
             "logs": ""
         }
         
+        processed_by = request.headers.get("X-Processed-By") or "SYSTEM"
+        
         # Start worker task in a background thread to prevent Blocking IOError & Windows loop limits
-        asyncio.create_task(asyncio.to_thread(run_pipeline_sync, job_id, command, out_census_path, log_path))
+        asyncio.create_task(asyncio.to_thread(run_pipeline_sync, job_id, command, out_census_path, log_path, invoice.filename, census.filename, processed_by))
         
         # Return job info immediately (without full logs)
         return JSONResponse({k: v for k, v in jobs[job_id].items() if k != "logs"})

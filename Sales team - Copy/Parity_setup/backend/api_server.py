@@ -5,7 +5,7 @@ Exposes the extraction pipeline as a REST API for the frontend
 import sys
 sys.stdout.reconfigure(encoding='utf-8')
 from typing import Optional
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Request
 from pydantic import BaseModel
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,12 +90,13 @@ async def list_jobs():
 
 @app.post("/extract")
 @app.post("/api/extract")
-async def extract_file(file: UploadFile = File(...), processed_by: Optional[str] = Form(None)):
+async def extract_file(request: Request, file: UploadFile = File(...), processed_by: Optional[str] = Form(None)):
     """
     Upload SBC document (PDF, DOCX, image) and start extraction
     """
+    actual_processed_by = request.headers.get("X-Processed-By") or processed_by or "SYSTEM"
     print(f"\n" + "="*60)
-    print(f"[NEW UPLOAD] RECEIVED: {file.filename} (Processed By: {processed_by or 'SYSTEM'})")
+    print(f"[NEW UPLOAD] RECEIVED: {file.filename} (Processed By: {actual_processed_by})")
     print("="*60)
     logger.info(f"Incoming Extraction Request: {file.filename}")
 
@@ -141,7 +142,7 @@ async def extract_file(file: UploadFile = File(...), processed_by: Optional[str]
     # Run extraction
     print(f"  [Setup] Initializing task ID: {task_id}")
     try:
-        results = await run_extraction(task_id, upload_path, file.filename, processed_by=processed_by or "SYSTEM")
+        results = await run_extraction(task_id, upload_path, file.filename, processed_by=actual_processed_by)
         TASKS[task_id]["status"] = "completed"
         TASKS[task_id]["progress"] = 100
         TASKS[task_id]["results"] = results
@@ -435,6 +436,7 @@ async def batch_extract(files: list[UploadFile] = File(...)):
             print(f"🚀 BATCH UPLOAD: Processing '{file.filename}'")
             print("="*60)
 
+            # Note: We aren't capturing request here for batch processing header yet.
             extraction_result = await run_extraction(task_id, upload_path, file.filename)
             results.append({
                 "fileName": file.filename,

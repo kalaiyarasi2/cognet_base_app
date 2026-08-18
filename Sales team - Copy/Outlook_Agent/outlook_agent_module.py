@@ -681,7 +681,7 @@ class OutlookAgentModule:
     # -----------------------------------------------------------------------
     # Authentication
     # -----------------------------------------------------------------------
-    def get_access_token(self, refresh_token: Optional[str] = None) -> str:
+    def get_access_token(self, refresh_token: Optional[str] = None, allow_device_flow: bool = True) -> str:
         """
         Obtain a valid MS Graph access token.
 
@@ -724,6 +724,8 @@ class OutlookAgentModule:
             result = app.acquire_token_silent(_MS_GRAPH_SCOPES, account=accounts[0])
 
         if not result:
+            if not allow_device_flow:
+                raise RuntimeError("No valid token found and device-code flow is disabled in background mode.")
             logger.info("No cached token; initiating device-code flow...")
             flow   = app.initiate_device_flow(scopes=_MS_GRAPH_SCOPES)
             print(f"\n{flow['message']}\n")
