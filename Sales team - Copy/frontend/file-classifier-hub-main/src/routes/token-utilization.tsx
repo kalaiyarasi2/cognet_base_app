@@ -17,7 +17,7 @@ export const Route = createFileRoute("/token-utilization")({
   component: TokenUtilizationPage,
 });
 
-export function TokenUtilizationPage() {
+function TokenUtilizationPage() {
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
 

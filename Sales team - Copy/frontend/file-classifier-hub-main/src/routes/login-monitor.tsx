@@ -17,7 +17,7 @@ export const Route = createFileRoute("/login-monitor")({
   component: LoginMonitorPage,
 });
 
-export function LoginMonitorPage() {
+function LoginMonitorPage() {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<UserSessionRecord[]>([]);
   const [loading, setLoading] = useState(true);

@@ -34,7 +34,7 @@ const STAGES = [
   { id: "summary", label: "Renewal Summary", desc: "Generating updated census roster" },
 ];
 
-export function RenewalProcessPage() {
+function RenewalProcessPage() {
   const [censusFile, setCensusFile] = useState<File | null>(null);
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);

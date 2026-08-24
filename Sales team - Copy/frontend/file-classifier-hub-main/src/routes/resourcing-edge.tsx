@@ -52,7 +52,7 @@ function formatDate(iso: string | null) {
   }
 }
 
-export function ResourcingEdgePage() {
+function ResourcingEdgePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [stageIdx, setStageIdx] = useState(0);

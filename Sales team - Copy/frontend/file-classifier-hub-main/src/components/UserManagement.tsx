@@ -155,6 +155,8 @@ export function UserManagement() {
     { id: "LOSS_RUN", label: "Insurance (Loss Run)" },
     { id: "INVOICE", label: "Invoice" },
     { id: "PAYROLL", label: "Payroll Extractor" },
+    { id: "PSH_CLAIM_VALIDATOR", label: "PSH-UI Claim Validator" },
+    { id: "PSH_CLAIM_EXTRACTOR", label: "PSH-UI Claim Extractor" },
     { id: "BANK_STATEMENT", label: "Bank Statement" },
     { id: "VENDOR_INVOICE", label: "Vendor Invoice" },
     { id: "EXTRACTION", label: "Text Extraction" },

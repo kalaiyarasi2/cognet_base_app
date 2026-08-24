@@ -143,7 +143,7 @@ let nodeIdCounter = 10;
 const getNextId = () => `node-${++nodeIdCounter}`;
 
 /* ── Component ──────────────────────────────────────────────── */
-export function CoPilotPage() {
+function CoPilotPage() {
   const [nodes, setNodes] = useState<Node[]>(defaultNodes);
   const [edges, setEdges] = useState<Edge[]>(defaultEdges);
   const [isRunning, setIsRunning] = useState(false);

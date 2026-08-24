@@ -34,7 +34,7 @@ const STAGES = [
   { id: "template", label: "Template Injection", desc: "Mapping to SBC schema" },
 ];
 
-export function ParitySetupPage() {
+function ParitySetupPage() {
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isMerging, setIsMerging] = useState(false);

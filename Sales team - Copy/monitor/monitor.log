@@ -1759,3 +1759,99 @@ NotImplementedError
 2026-08-06 12:51:57,570 - rpve.worker - INFO - Started worker thread: rpve-worker-0
 2026-08-06 12:51:57,571 - rpve.worker - INFO - Started worker thread: rpve-worker-1
 2026-08-06 12:51:57,573 - rpve.worker - INFO - Started worker thread: rpve-worker-2
+2026-08-18 12:33:29,813 - monitor_db - INFO - Database initialized successfully
+2026-08-18 12:33:29,912 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-18 12:33:30,374 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-18 12:33:33,293 - monitor_db - INFO - Database initialized successfully
+2026-08-18 12:33:33,385 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-18 12:33:33,786 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-18 12:33:34,891 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-18 12:33:35,044 - rpve.worker - INFO - Started worker thread: rpve-worker-0
+2026-08-18 12:33:35,044 - rpve.worker - INFO - Started worker thread: rpve-worker-1
+2026-08-18 12:33:35,044 - rpve.worker - INFO - Started worker thread: rpve-worker-2
+2026-08-18 12:33:35,044 - universal_trash - INFO - Universal Trash background cleanup service started. Interval: 24h, Retention: 7d
+2026-08-18 12:33:35,044 - universal_trash - INFO - Universal Trash Cleanup Started
+2026-08-18 12:33:35,044 - universal_trash - INFO - Files Scanned: 0
+2026-08-18 12:33:35,049 - universal_trash - INFO - Files Deleted: 0
+2026-08-18 12:33:35,049 - universal_trash - INFO - Files Skipped: 0
+2026-08-18 12:33:35,049 - universal_trash - INFO - Cleanup Completed
+2026-08-24 11:58:28,655 - monitor_db - INFO - Database initialized successfully
+2026-08-24 11:58:28,819 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 11:58:36,217 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 11:58:40,666 - monitor_db - INFO - Database initialized successfully
+2026-08-24 11:58:40,720 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 11:58:40,959 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 11:58:41,861 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 11:58:42,117 - rpve.worker - INFO - Started worker thread: rpve-worker-0
+2026-08-24 11:58:42,118 - rpve.worker - INFO - Started worker thread: rpve-worker-1
+2026-08-24 11:58:42,120 - rpve.worker - INFO - Started worker thread: rpve-worker-2
+2026-08-24 11:58:42,121 - universal_trash - INFO - Universal Trash background cleanup service started. Interval: 24h, Retention: 7d
+2026-08-24 11:58:42,121 - universal_trash - INFO - Universal Trash Cleanup Started
+2026-08-24 11:58:42,122 - universal_trash - INFO - Files Scanned: 0
+2026-08-24 11:58:42,123 - universal_trash - INFO - Files Deleted: 0
+2026-08-24 11:58:42,123 - universal_trash - INFO - Files Skipped: 0
+2026-08-24 11:58:42,123 - universal_trash - INFO - Cleanup Completed
+2026-08-24 12:12:46,193 - monitor_db - INFO - Database initialized successfully
+2026-08-24 12:12:46,258 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 12:12:46,547 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:12:49,781 - monitor_db - INFO - Database initialized successfully
+2026-08-24 12:12:49,835 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 12:12:50,067 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:12:51,009 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:12:51,260 - rpve.worker - INFO - Started worker thread: rpve-worker-0
+2026-08-24 12:12:51,261 - rpve.worker - INFO - Started worker thread: rpve-worker-1
+2026-08-24 12:12:51,262 - rpve.worker - INFO - Started worker thread: rpve-worker-2
+2026-08-24 12:12:51,262 - universal_trash - INFO - Universal Trash background cleanup service started. Interval: 24h, Retention: 7d
+2026-08-24 12:12:51,263 - universal_trash - INFO - Universal Trash Cleanup Started
+2026-08-24 12:12:51,264 - universal_trash - INFO - Files Scanned: 0
+2026-08-24 12:12:51,264 - universal_trash - INFO - Files Deleted: 0
+2026-08-24 12:12:51,264 - universal_trash - INFO - Files Skipped: 0
+2026-08-24 12:12:51,265 - universal_trash - INFO - Cleanup Completed
+2026-08-24 12:24:19,387 - monitor_db - INFO - Database initialized successfully
+2026-08-24 12:24:19,450 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 12:24:19,802 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:24:22,866 - monitor_db - INFO - Database initialized successfully
+2026-08-24 12:24:22,931 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 12:24:23,159 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:24:24,169 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:24:24,424 - rpve.worker - INFO - Started worker thread: rpve-worker-0
+2026-08-24 12:24:24,424 - rpve.worker - INFO - Started worker thread: rpve-worker-1
+2026-08-24 12:24:24,425 - rpve.worker - INFO - Started worker thread: rpve-worker-2
+2026-08-24 12:24:24,426 - universal_trash - INFO - Universal Trash background cleanup service started. Interval: 24h, Retention: 7d
+2026-08-24 12:24:24,427 - universal_trash - INFO - Universal Trash Cleanup Started
+2026-08-24 12:24:24,428 - universal_trash - INFO - Files Scanned: 0
+2026-08-24 12:24:24,429 - universal_trash - INFO - Files Deleted: 0
+2026-08-24 12:24:24,429 - universal_trash - INFO - Files Skipped: 0
+2026-08-24 12:24:24,430 - universal_trash - INFO - Cleanup Completed
+2026-08-24 12:30:28,365 - monitor_db - INFO - Database initialized successfully
+2026-08-24 12:30:28,421 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 12:30:28,780 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:30:31,705 - monitor_db - INFO - Database initialized successfully
+2026-08-24 12:30:31,756 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 12:30:31,978 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:30:32,890 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:30:33,227 - rpve.worker - INFO - Started worker thread: rpve-worker-0
+2026-08-24 12:30:33,228 - rpve.worker - INFO - Started worker thread: rpve-worker-1
+2026-08-24 12:30:33,228 - rpve.worker - INFO - Started worker thread: rpve-worker-2
+2026-08-24 12:30:33,229 - universal_trash - INFO - Universal Trash background cleanup service started. Interval: 24h, Retention: 7d
+2026-08-24 12:30:33,230 - universal_trash - INFO - Universal Trash Cleanup Started
+2026-08-24 12:30:33,232 - universal_trash - INFO - Files Scanned: 0
+2026-08-24 12:30:33,232 - universal_trash - INFO - Files Deleted: 0
+2026-08-24 12:30:33,233 - universal_trash - INFO - Files Skipped: 0
+2026-08-24 12:30:33,233 - universal_trash - INFO - Cleanup Completed
+2026-08-24 12:33:19,946 - monitor_db - INFO - Database initialized successfully
+2026-08-24 12:33:19,998 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 12:33:20,270 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:33:23,182 - monitor_db - INFO - Database initialized successfully
+2026-08-24 12:33:23,238 - GPUConfigManager - INFO - Loaded hardware profile from cache: CPU (Default Fallback)
+2026-08-24 12:33:23,454 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:33:24,578 - monitor_middleware - INFO - Monitoring middleware added to FastAPI application
+2026-08-24 12:33:24,765 - rpve.worker - INFO - Started worker thread: rpve-worker-0
+2026-08-24 12:33:24,765 - rpve.worker - INFO - Started worker thread: rpve-worker-1
+2026-08-24 12:33:24,766 - rpve.worker - INFO - Started worker thread: rpve-worker-2
+2026-08-24 12:33:24,767 - universal_trash - INFO - Universal Trash background cleanup service started. Interval: 24h, Retention: 7d
+2026-08-24 12:33:24,767 - universal_trash - INFO - Universal Trash Cleanup Started
+2026-08-24 12:33:24,768 - universal_trash - INFO - Files Scanned: 0
+2026-08-24 12:33:24,768 - universal_trash - INFO - Files Deleted: 0
+2026-08-24 12:33:24,769 - universal_trash - INFO - Files Skipped: 0
+2026-08-24 12:33:24,769 - universal_trash - INFO - Cleanup Completed

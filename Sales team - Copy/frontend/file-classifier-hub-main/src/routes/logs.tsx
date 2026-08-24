@@ -15,7 +15,7 @@ import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/logs")({ component: LogsPage });
 
-export function LogsPage() {
+function LogsPage() {
   const logs = useApp((s) => s.logs);
   const clear = useApp((s) => s.clearLogs);
   const [search, setSearch] = useState("");

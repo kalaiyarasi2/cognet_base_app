@@ -43,7 +43,7 @@ const STEPPER_STAGES = [
   { label: "Complete", subtext: "Extraction completed successfully." },
 ];
 
-export function RpvePage() {
+function RpvePage() {
   const [queue, setQueue] = useState<FlowQueueItem[]>([]);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
