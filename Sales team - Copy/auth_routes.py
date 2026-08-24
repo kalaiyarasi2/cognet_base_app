@@ -5,9 +5,9 @@ import jwt
 from datetime import datetime, timedelta
 from typing import Optional, List, Union
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends, Header, Request
+from fastapi import APIRouter, HTTPException, Depends, Header, Request, BackgroundTasks
 from pydantic import BaseModel
-from email_service import send_otp_email
+from email_service import send_otp_email, send_access_granted_email
 
 # ── Robust poc_db import ──────────────────────────────────────────────────────
 # The file-classification- sub-app pollutes sys.path with its own 'database'
@@ -514,7 +514,7 @@ async def list_admin_users(user: dict = Depends(get_current_user_from_token)):
     }
 
 @router.post("/admin/grant-access")
-async def admin_grant_access(req: GrantAccessRequest, user: dict = Depends(get_current_user_from_token)):
+async def admin_grant_access(req: GrantAccessRequest, background_tasks: BackgroundTasks, user: dict = Depends(get_current_user_from_token)):
     """Admin grants access to a user manually or from the company employee directory."""
     admin_email = user.get("email", "admin@local")
     admin_role = user.get("role", "USER")
@@ -534,6 +534,17 @@ async def admin_grant_access(req: GrantAccessRequest, user: dict = Depends(get_c
         source=req.source,
         granted_by=admin_email,
         allowed_modules=modules_val or "ALL"
+    )
+    
+    frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+    login_url = f"{frontend_origin}/login"
+    
+    background_tasks.add_task(
+        send_access_granted_email,
+        req.email,
+        req.full_name,
+        admin_email,
+        login_url
     )
     
     return {

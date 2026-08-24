@@ -876,10 +876,12 @@ def execute_flow(
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         dest_pdf_path = dest_dir / filename
+        # Always save locally
         shutil.copy2(temp_pdf_path, dest_pdf_path)
         logger.info("[STORE] PDF saved locally to: %s", dest_pdf_path)
+
         if outlook_token and provider == "outlook":
-            upload_to_onedrive_cloud(category, filename, temp_pdf_path, user_email=user_email, bundle=filename_stem)
+            upload_to_onedrive_cloud(category, filename, dest_pdf_path, user_email=user_email, bundle=filename_stem)
 
         # ── DB: log file classification ───────────────────────────────────
         if _mdb_ok:
@@ -937,19 +939,23 @@ def execute_flow(
             excel_out = extract_result.get("excel")
             if excel_out and os.path.exists(excel_out):
                 excel_dest = dest_dir / f"{filename_stem}_extracted.xlsx"
+                # Always save locally
                 shutil.copy2(excel_out, excel_dest)
                 logger.info("[STORE] Excel output saved locally to: %s", excel_dest)
+
                 if outlook_token and provider == "outlook":
-                    upload_to_onedrive_cloud(category, f"{filename_stem}_extracted.xlsx", Path(excel_out), user_email=user_email, bundle=filename_stem)
+                    upload_to_onedrive_cloud(category, f"{filename_stem}_extracted.xlsx", excel_dest, user_email=user_email, bundle=filename_stem)
 
             # JSON
             json_out = extract_result.get("json")
             if json_out and os.path.exists(json_out):
                 json_dest = dest_dir / f"{filename_stem}_extracted.json"
+                # Always save locally
                 shutil.copy2(json_out, json_dest)
                 logger.info("[STORE] JSON output saved locally to: %s", json_dest)
+
                 if outlook_token and provider == "outlook":
-                    upload_to_onedrive_cloud(category, f"{filename_stem}_extracted.json", Path(json_out), user_email=user_email, bundle=filename_stem)
+                    upload_to_onedrive_cloud(category, f"{filename_stem}_extracted.json", json_dest, user_email=user_email, bundle=filename_stem)
 
             # TXT Log
             txt_dest = dest_dir / f"{filename_stem}_text.txt"
