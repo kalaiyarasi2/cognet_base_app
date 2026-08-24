@@ -103,11 +103,11 @@ def send_access_granted_email(recipient_email: str, recipient_name: str, granted
       <body style="font-family: Arial, sans-serif; color: #333;">
         <div style="max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 8px;">
           <h2 style="color: #0057FF; margin-top: 0;">Access Granted</h2>
-          <p>Hello {{recipient_name or 'User'}},</p>
-          <p>You have been granted access to the workspace by <strong>{{granted_by}}</strong>.</p>
+          <p>Hello {recipient_name or 'User'},</p>
+          <p>You have been granted access to the workspace by <strong>{granted_by}</strong>.</p>
           <p>You can access the project using the following link:</p>
           <div style="margin: 20px 0;">
-            <a href="{{login_url}}" style="background-color: #0057FF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Go to Project</a>
+            <a href="{login_url}" style="background-color: #0057FF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Go to Project</a>
           </div>
           <p style="font-size: 13px; color: #6b7280;">If you have any questions, please contact your administrator.</p>
         </div>
