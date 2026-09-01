@@ -38,6 +38,9 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 from openpyxl import load_workbook
 from dotenv import load_dotenv
+
+# Ensure we can import from the root directory (for universal_trash)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from universal_trash import move_to_trash
 
 # ──────────────────────────────────────────────

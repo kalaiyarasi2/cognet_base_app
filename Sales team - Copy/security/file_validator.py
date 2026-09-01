@@ -5,7 +5,7 @@ from typing import Dict, Any, Tuple, Optional
 
 # Default allowed extensions for CogNet document processing
 DEFAULT_ALLOWED_EXTENSIONS = {
-    ".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".xlsx", ".xls", ".csv", ".docx", ".doc", ".txt", ".msg", ".eml"
+    ".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".xlsx", ".xls", ".csv", ".docx", ".doc", ".txt", ".msg", ".eml", ".json", ".xml"
 }
 
 # Maximum file size allowed by default (50 MB)

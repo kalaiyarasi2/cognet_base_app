@@ -195,7 +195,7 @@ function PshClaimExtractorPage() {
     <>
       <PageHeader
         icon={FileText}
-        title="PSH-UI Claim Extractor"
+        title="UI Claim Extractor"
         description="Upload an Unemployment Claim PDF document. GPT Vision & Dual Engine extract structured claim data page-by-page."
         actions={
           result ? (
@@ -212,7 +212,7 @@ function PshClaimExtractorPage() {
       />
 
       <div className="p-6 max-w-7xl mx-auto">
-        {/* ── 2-Column Split Layout matching PSH-UI Claim Validator ───────────── */}
+        {/* ── 2-Column Split Layout matching UI Claim Validator ───────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
           {/* ── LEFT COLUMN: Persistent Upload & Progress Controls ───────────── */}
@@ -431,7 +431,7 @@ function PshClaimExtractorPage() {
                     )}
                   </div>
 
-                  {/* ── TAB 1: Extracted Fields Table matching PSH-UI Claim Validator layout ──── */}
+                  {/* ── TAB 1: Extracted Fields Table matching UI Claim Validator layout ──── */}
                   <TabsContent value="table" className="mt-4">
                     <div className="border rounded-lg overflow-hidden">
                       <table className="w-full text-left text-xs">

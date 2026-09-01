@@ -82,8 +82,8 @@ function Dashboard() {
   });
 
   const { data: autoStatus, isLoading: isAutoStatusLoading } = useQuery({
-    queryKey: ["automation-status"],
-    queryFn: () => api.automationStatus(),
+    queryKey: ["automation-status", user?.email],
+    queryFn: () => api.automationStatus(user?.email),
     refetchInterval: 3000,
   });
 
@@ -110,7 +110,7 @@ function Dashboard() {
   }, [autoStatus?.running, autoStatus?.active_provider]);
 
   const startMutation = useMutation({
-    mutationFn: api.automationStart,
+    mutationFn: (provider: "outlook" | "gmail") => api.automationStart(provider, user?.email),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["automation-status"] });
       toast.success("Background email automation started!");
@@ -129,7 +129,7 @@ function Dashboard() {
   });
 
   const stopMutation = useMutation({
-    mutationFn: api.automationStop,
+    mutationFn: () => api.automationStop(user?.email),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["automation-status"] });
       toast.success("Background email automation stopped.");

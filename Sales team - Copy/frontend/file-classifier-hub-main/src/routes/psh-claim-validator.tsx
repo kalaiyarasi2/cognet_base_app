@@ -176,7 +176,7 @@ function PshClaimValidatorPage() {
     <>
       <PageHeader
         icon={ClipboardCheck}
-        title="PSH-UI Claim Validator"
+        title="UI Claim Validator"
         description="Upload a dual-panel claim screenshot. GPT Vision extracts PDF & OCR fields and validates them field-by-field."
         actions={
           result ? (
