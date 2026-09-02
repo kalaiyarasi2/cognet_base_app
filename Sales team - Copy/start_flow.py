@@ -139,9 +139,34 @@ if OutlookAgentModule is not None:
             "https://graph.microsoft.com/User.Read",
         ]
         
-        # 1. Simple Cache Check
         simple_cache_name = f"ms_simple_cache_{self.sanitized_user_email}.json" if getattr(self, "sanitized_user_email", None) else "ms_simple_cache.json"
         simple_cache_path = os.path.join(os.path.dirname(self.token_cache_path), simple_cache_name)
+
+        # --- DYNAMIC DASHBOARD SYNC OVERRIDE ---
+        # If a dashboard session exists and is newer than the simple cache, 
+        # delete the stale simple cache to force a fresh sync!
+        sessions_dir = WORKSPACE_DIR / ".sessions"
+        if sessions_dir.exists() and os.path.exists(simple_cache_path):
+            import glob
+            session_files = []
+            if getattr(self, "sanitized_user_email", None):
+                user_session = sessions_dir / f"onedrive_{self.sanitized_user_email}.json"
+                if user_session.exists():
+                    session_files.append(str(user_session))
+            if not session_files:
+                session_files = glob.glob(str(sessions_dir / "onedrive_*.json"))
+                session_files.sort(key=os.path.getmtime, reverse=True)
+            if session_files:
+                latest_session = session_files[0]
+                if os.path.getmtime(latest_session) > os.path.getmtime(simple_cache_path):
+                    logger.info("Newer dashboard session detected. Discarding stale simple cache.")
+                    try:
+                        os.remove(simple_cache_path)
+                    except OSError:
+                        pass
+        # ---------------------------------------
+
+        # 1. Simple Cache Check
         if os.path.exists(simple_cache_path):
             try:
                 import json
@@ -342,10 +367,17 @@ def get_outlook_agent(user_email: str | None = None) -> OutlookAgentModule | Non
 
 
 def get_active_refresh_token(user_email: str | None = None) -> str | None:
+    """Get the most recent OneDrive/Outlook refresh token from dashboard sessions.
+    
+    NOTE: We intentionally do NOT filter by user_email here, because the
+    dashboard login (e.g. kalaiyarasig@cognethro.com) may have connected a
+    DIFFERENT Microsoft account (e.g. drivesupport@cognethro.com). We always
+    pick the most recently updated session file — that is the account the
+    user last connected on the dashboard.
+    """
     import glob
     import json
     import os
-    import jwt
 
     sessions_dir = '.sessions'
     if not os.path.exists(sessions_dir):
@@ -360,15 +392,18 @@ def get_active_refresh_token(user_email: str | None = None) -> str | None:
         try:
             with open(s_file, 'r') as f:
                 data = json.load(f)
-                token = data.get('access_token')
                 refresh = data.get('refresh_token')
-                
-                if user_email and token:
-                    decoded = jwt.decode(token, options={'verify_signature': False})
-                    token_email = decoded.get('upn') or decoded.get('unique_name') or decoded.get('email')
-                    if token_email and token_email.lower() == user_email.lower():
-                        return refresh
-                elif refresh:
+                if refresh:
+                    # Log which Microsoft account this token belongs to
+                    try:
+                        import jwt
+                        access_tok = data.get('access_token', '')
+                        if access_tok:
+                            decoded = jwt.decode(access_tok, options={'verify_signature': False})
+                            ms_email = decoded.get('upn') or decoded.get('unique_name') or 'unknown'
+                            logger.info("[AUTH] Using dashboard session for Microsoft account: %s (requested by: %s)", ms_email, user_email or 'default')
+                    except Exception:
+                        pass
                     return refresh
         except Exception:
             pass
@@ -392,7 +427,10 @@ def fetch_outlook_attachments(dest_folder: Path, mark_read: bool = True, user_em
         processed_ids_file = agent.processed_ids_file
         processed_ids = _load_processed_ids(processed_ids_file) if _load_processed_ids else set()
 
-        emails = agent.fetch_unread_emails()
+        # Pass refresh_token so fetch_unread_emails uses the SAME Microsoft
+        # account we just authenticated with, instead of falling back to a
+        # potentially stale MSAL device-code cache.
+        emails = agent.fetch_unread_emails(refresh_token=refresh_token)
         if not emails:
             logger.info("[OUTLOOK] No unread emails found.")
             return [], token
