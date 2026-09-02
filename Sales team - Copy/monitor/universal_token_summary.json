@@ -1,8 +1,8 @@
 {
-  "last_updated": "2026-09-01 11:49:40 UTC",
-  "grand_total_cost_usd": 1.55478615,
-  "grand_total_tokens": 385363,
-  "grand_total_calls": 159,
+  "last_updated": "2026-09-02 10:46:07 UTC",
+  "grand_total_cost_usd": 1.60535365,
+  "grand_total_tokens": 402119,
+  "grand_total_calls": 175,
   "pocs": {
     "gpu-none": {
       "total_files_processed": 9,
@@ -723,14 +723,14 @@
     },
     "file-classification": {
       "total_files_processed": 1,
-      "total_llm_calls": 35,
-      "total_tokens": 77336,
-      "total_cost_usd": 0.2314325,
+      "total_llm_calls": 43,
+      "total_tokens": 94092,
+      "total_cost_usd": 0.282,
       "files": {
         "unknown": {
-          "total_llm_calls": 35,
-          "total_tokens": 77336,
-          "total_cost_usd": 0.2314325,
+          "total_llm_calls": 43,
+          "total_tokens": 94092,
+          "total_cost_usd": 0.282,
           "calls_breakdown": [
             {
               "step": "document_classification",
@@ -1081,6 +1081,86 @@
               "cost_usd": 0.005615,
               "formatted_cost": "$0.005615",
               "timestamp": "2026-09-01 11:49:40 UTC"
+            },
+            {
+              "step": "document_classification",
+              "model": "gpt-4o",
+              "prompt_tokens": 2681,
+              "completion_tokens": 142,
+              "total_tokens": 2823,
+              "cost_usd": 0.0081225,
+              "formatted_cost": "$0.008122",
+              "timestamp": "2026-09-01 16:20:17 UTC"
+            },
+            {
+              "step": "document_classification",
+              "model": "gpt-4o",
+              "prompt_tokens": 2347,
+              "completion_tokens": 142,
+              "total_tokens": 2489,
+              "cost_usd": 0.0072875,
+              "formatted_cost": "$0.007287",
+              "timestamp": "2026-09-01 16:20:23 UTC"
+            },
+            {
+              "step": "document_classification",
+              "model": "gpt-4o",
+              "prompt_tokens": 1748,
+              "completion_tokens": 134,
+              "total_tokens": 1882,
+              "cost_usd": 0.00571,
+              "formatted_cost": "$0.005710",
+              "timestamp": "2026-09-01 16:20:28 UTC"
+            },
+            {
+              "step": "document_classification",
+              "model": "gpt-4o",
+              "prompt_tokens": 1877,
+              "completion_tokens": 144,
+              "total_tokens": 2021,
+              "cost_usd": 0.0061325,
+              "formatted_cost": "$0.006132",
+              "timestamp": "2026-09-01 16:20:35 UTC"
+            },
+            {
+              "step": "document_classification",
+              "model": "gpt-4o",
+              "prompt_tokens": 2042,
+              "completion_tokens": 146,
+              "total_tokens": 2188,
+              "cost_usd": 0.006565,
+              "formatted_cost": "$0.006565",
+              "timestamp": "2026-09-01 16:20:41 UTC"
+            },
+            {
+              "step": "document_classification",
+              "model": "gpt-4o",
+              "prompt_tokens": 1174,
+              "completion_tokens": 133,
+              "total_tokens": 1307,
+              "cost_usd": 0.004265,
+              "formatted_cost": "$0.004265",
+              "timestamp": "2026-09-01 16:20:47 UTC"
+            },
+            {
+              "step": "document_classification",
+              "model": "gpt-4o",
+              "prompt_tokens": 1461,
+              "completion_tokens": 157,
+              "total_tokens": 1618,
+              "cost_usd": 0.0052225,
+              "formatted_cost": "$0.005222",
+              "timestamp": "2026-09-02 10:25:50 UTC"
+            },
+            {
+              "step": "document_classification",
+              "model": "gpt-4o",
+              "prompt_tokens": 2269,
+              "completion_tokens": 159,
+              "total_tokens": 2428,
+              "cost_usd": 0.0072625,
+              "formatted_cost": "$0.007262",
+              "timestamp": "2026-09-02 10:46:07 UTC"
             }
           ]
         }
@@ -2047,6 +2127,206 @@
               "cost_usd": 0.0,
               "formatted_cost": "$0.000000",
               "timestamp": "2026-09-01 11:49:40 UTC"
+            }
+          ]
+        }
+      }
+    },
+    "2681": {
+      "total_files_processed": 1,
+      "total_llm_calls": 1,
+      "total_tokens": 0,
+      "total_cost_usd": 0.0,
+      "files": {
+        "142": {
+          "total_llm_calls": 1,
+          "total_tokens": 0,
+          "total_cost_usd": 0.0,
+          "calls_breakdown": [
+            {
+              "step": "classification_llm",
+              "model": "gpt-4o",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "total_tokens": 0,
+              "cost_usd": 0.0,
+              "formatted_cost": "$0.000000",
+              "timestamp": "2026-09-01 16:20:17 UTC"
+            }
+          ]
+        }
+      }
+    },
+    "2347": {
+      "total_files_processed": 1,
+      "total_llm_calls": 1,
+      "total_tokens": 0,
+      "total_cost_usd": 0.0,
+      "files": {
+        "142": {
+          "total_llm_calls": 1,
+          "total_tokens": 0,
+          "total_cost_usd": 0.0,
+          "calls_breakdown": [
+            {
+              "step": "classification_llm",
+              "model": "gpt-4o",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "total_tokens": 0,
+              "cost_usd": 0.0,
+              "formatted_cost": "$0.000000",
+              "timestamp": "2026-09-01 16:20:23 UTC"
+            }
+          ]
+        }
+      }
+    },
+    "1748": {
+      "total_files_processed": 1,
+      "total_llm_calls": 1,
+      "total_tokens": 0,
+      "total_cost_usd": 0.0,
+      "files": {
+        "134": {
+          "total_llm_calls": 1,
+          "total_tokens": 0,
+          "total_cost_usd": 0.0,
+          "calls_breakdown": [
+            {
+              "step": "classification_llm",
+              "model": "gpt-4o",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "total_tokens": 0,
+              "cost_usd": 0.0,
+              "formatted_cost": "$0.000000",
+              "timestamp": "2026-09-01 16:20:28 UTC"
+            }
+          ]
+        }
+      }
+    },
+    "1877": {
+      "total_files_processed": 1,
+      "total_llm_calls": 1,
+      "total_tokens": 0,
+      "total_cost_usd": 0.0,
+      "files": {
+        "144": {
+          "total_llm_calls": 1,
+          "total_tokens": 0,
+          "total_cost_usd": 0.0,
+          "calls_breakdown": [
+            {
+              "step": "classification_llm",
+              "model": "gpt-4o",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "total_tokens": 0,
+              "cost_usd": 0.0,
+              "formatted_cost": "$0.000000",
+              "timestamp": "2026-09-01 16:20:35 UTC"
+            }
+          ]
+        }
+      }
+    },
+    "2042": {
+      "total_files_processed": 1,
+      "total_llm_calls": 1,
+      "total_tokens": 0,
+      "total_cost_usd": 0.0,
+      "files": {
+        "146": {
+          "total_llm_calls": 1,
+          "total_tokens": 0,
+          "total_cost_usd": 0.0,
+          "calls_breakdown": [
+            {
+              "step": "classification_llm",
+              "model": "gpt-4o",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "total_tokens": 0,
+              "cost_usd": 0.0,
+              "formatted_cost": "$0.000000",
+              "timestamp": "2026-09-01 16:20:41 UTC"
+            }
+          ]
+        }
+      }
+    },
+    "1174": {
+      "total_files_processed": 1,
+      "total_llm_calls": 1,
+      "total_tokens": 0,
+      "total_cost_usd": 0.0,
+      "files": {
+        "133": {
+          "total_llm_calls": 1,
+          "total_tokens": 0,
+          "total_cost_usd": 0.0,
+          "calls_breakdown": [
+            {
+              "step": "classification_llm",
+              "model": "gpt-4o",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "total_tokens": 0,
+              "cost_usd": 0.0,
+              "formatted_cost": "$0.000000",
+              "timestamp": "2026-09-01 16:20:47 UTC"
+            }
+          ]
+        }
+      }
+    },
+    "1461": {
+      "total_files_processed": 1,
+      "total_llm_calls": 1,
+      "total_tokens": 0,
+      "total_cost_usd": 0.0,
+      "files": {
+        "157": {
+          "total_llm_calls": 1,
+          "total_tokens": 0,
+          "total_cost_usd": 0.0,
+          "calls_breakdown": [
+            {
+              "step": "classification_llm",
+              "model": "gpt-4o",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "total_tokens": 0,
+              "cost_usd": 0.0,
+              "formatted_cost": "$0.000000",
+              "timestamp": "2026-09-02 10:25:50 UTC"
+            }
+          ]
+        }
+      }
+    },
+    "2269": {
+      "total_files_processed": 1,
+      "total_llm_calls": 1,
+      "total_tokens": 0,
+      "total_cost_usd": 0.0,
+      "files": {
+        "159": {
+          "total_llm_calls": 1,
+          "total_tokens": 0,
+          "total_cost_usd": 0.0,
+          "calls_breakdown": [
+            {
+              "step": "classification_llm",
+              "model": "gpt-4o",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "total_tokens": 0,
+              "cost_usd": 0.0,
+              "formatted_cost": "$0.000000",
+              "timestamp": "2026-09-02 10:46:07 UTC"
             }
           ]
         }
