@@ -44,7 +44,7 @@ const groups: NavGroup[] = [
     items: [
       { label: "Bank Statement", to: "/drive-gpu?pipeline=BANK_STATEMENT", icon: CreditCard, moduleCode: "BANK_STATEMENT" },
       { label: "Vendor Invoice", to: "/drive-gpu?pipeline=VENDOR_INVOICE", icon: ReceiptText, moduleCode: "VENDOR_INVOICE" },
-      { label: "Invoice to Excel", to: "/invoice-to-excel", icon: FileSpreadsheet, moduleCode: "ASTRYA_INVOICE" },
+      { label: "Invoice to Excel Extractor", to: "/invoice-to-excel", icon: FileSpreadsheet, moduleCode: "ASTRYA_INVOICE" },
     ],
   },
   {

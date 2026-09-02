@@ -36,12 +36,10 @@ const ALL_MODULES = [
   { code: "INVOICE", name: "Benefit Invoice Extraction", desc: "Benefit Invoice Processing (Payroll)" },
   { code: "RPVE", name: "Invoice to Census", desc: "Data Retrieval Ingestion Verification (Payroll)" },
   { code: "SBC", name: "SBC plan summary", desc: "Summary of Benefits & Coverage (Payroll)" },
-  { code: "RE", name: "Resourcing Edge", desc: "Employee Roster Rate & Benefits (Payroll)" },
-  
   // Finance Category
   { code: "BANK_STATEMENT", name: "Bank Statement", desc: "Financial Bank Statement Parsing (Finance)" },
   { code: "VENDOR_INVOICE", name: "Vendor Invoice", desc: "Vendor Invoice Verification (Finance)" },
-  { code: "ASTRYA_INVOICE", name: "Invoice to Excel", desc: "Astrya Invoice Data Extraction (Finance)" },
+  { code: "ASTRYA_INVOICE", name: "Invoice to Excel Extractor", desc: "Astrya Invoice Data Extraction (Finance)" },
 
   // Tools & Core Engines
   { code: "EXTRACTION", name: "Text Extraction", desc: "Document Text Extraction Engine" },

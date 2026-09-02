@@ -132,7 +132,7 @@ function InvoiceToExcelPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 h-full flex flex-col">
       <PageHeader
-        title="Astrya Invoice to Excel"
+        title="Invoice to Excel Extractor"
         description="Extract fields directly from vendor payment report PDFs using Vision AI."
         icon={FileSpreadsheet}
       />
