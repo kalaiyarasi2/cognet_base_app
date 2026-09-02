@@ -29,18 +29,19 @@ interface TenantRecord {
 
 const ALL_MODULES = [
   // Sales Category
-  { code: "ACCORD", name: "Accord (Worker Compensation)", desc: "Worker Compensation PDF Processing (Sales)" },
-  { code: "LOSS_RUN", name: "Loss Run (Insurance PDF Extractor)", desc: "Insurance Claims & Plan Comparison (Sales)" },
+  { code: "ACCORD", name: "Accord 130", desc: "Worker Compensation PDF Processing (Sales)" },
+  { code: "LOSS_RUN", name: "Loss Run", desc: "Insurance Claims & Plan Comparison (Sales)" },
   
   // Payroll Category
-  { code: "INVOICE", name: "Invoice Extractor", desc: "Benefit Invoice Processing (Payroll)" },
-  { code: "RPVE", name: "RPVE Engine", desc: "Data Retrieval Ingestion Verification (Payroll)" },
-  { code: "SBC", name: "SBC Parity Intellect", desc: "Summary of Benefits & Coverage (Payroll)" },
-  { code: "RE", name: "Resourcing Edge (RE)", desc: "Employee Roster Rate & Benefits (Payroll)" },
+  { code: "INVOICE", name: "Benefit Invoice Extraction", desc: "Benefit Invoice Processing (Payroll)" },
+  { code: "RPVE", name: "Invoice to Census", desc: "Data Retrieval Ingestion Verification (Payroll)" },
+  { code: "SBC", name: "SBC plan summary", desc: "Summary of Benefits & Coverage (Payroll)" },
+  { code: "RE", name: "Resourcing Edge", desc: "Employee Roster Rate & Benefits (Payroll)" },
   
   // Finance Category
-  { code: "BANK_STATEMENT", name: "Bank Statement Extractor", desc: "Financial Bank Statement Parsing (Finance)" },
-  { code: "VENDOR_INVOICE", name: "Vendor Invoice Extractor", desc: "Vendor Invoice Verification (Finance)" },
+  { code: "BANK_STATEMENT", name: "Bank Statement", desc: "Financial Bank Statement Parsing (Finance)" },
+  { code: "VENDOR_INVOICE", name: "Vendor Invoice", desc: "Vendor Invoice Verification (Finance)" },
+  { code: "ASTRYA_INVOICE", name: "Invoice to Excel", desc: "Astrya Invoice Data Extraction (Finance)" },
 
   // Tools & Core Engines
   { code: "EXTRACTION", name: "Text Extraction", desc: "Document Text Extraction Engine" },
@@ -364,7 +365,7 @@ function TenantManagementPage() {
                       <Layers className="w-3.5 h-3.5 text-blue-500" /> 1. Enable System Modules (Automation)
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {ALL_MODULES.filter(m => ["ACCORD", "LOSS_RUN", "INVOICE", "RPVE", "SBC", "RE", "BANK_STATEMENT", "VENDOR_INVOICE"].includes(m.code)).map((mod) => {
+                      {ALL_MODULES.filter(m => ["ACCORD", "LOSS_RUN", "INVOICE", "RPVE", "SBC", "RE", "BANK_STATEMENT", "VENDOR_INVOICE", "ASTRYA_INVOICE"].includes(m.code)).map((mod) => {
                         const isChecked = selectedModules.includes(mod.code);
                         return (
                           <div

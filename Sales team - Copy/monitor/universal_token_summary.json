@@ -1,14 +1,14 @@
 {
-  "last_updated": "2026-09-01 11:49:40 UTC",
-  "grand_total_cost_usd": 1.55478615,
-  "grand_total_tokens": 385363,
-  "grand_total_calls": 159,
+  "last_updated": "2026-09-02 12:20:09 UTC",
+  "grand_total_cost_usd": 1.55495025,
+  "grand_total_tokens": 386415,
+  "grand_total_calls": 161,
   "pocs": {
     "gpu-none": {
-      "total_files_processed": 9,
-      "total_llm_calls": 15,
-      "total_tokens": 29934,
-      "total_cost_usd": 0.06570365,
+      "total_files_processed": 10,
+      "total_llm_calls": 17,
+      "total_tokens": 30986,
+      "total_cost_usd": 0.06586775,
       "files": {
         "APL-MGSI-April 26 1.pdf": {
           "total_llm_calls": 2,
@@ -122,9 +122,9 @@
           ]
         },
         "BerkleyNet 24-25 2.pdf": {
-          "total_llm_calls": 1,
-          "total_tokens": 528,
-          "total_cost_usd": 8.37e-05,
+          "total_llm_calls": 2,
+          "total_tokens": 1056,
+          "total_cost_usd": 0.0001674,
           "calls_breakdown": [
             {
               "step": "gpu_ai_pipeline",
@@ -135,6 +135,16 @@
               "cost_usd": 8.37e-05,
               "formatted_cost": "$0.000084",
               "timestamp": "2026-08-31 09:55:16 UTC"
+            },
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o-mini",
+              "prompt_tokens": 518,
+              "completion_tokens": 10,
+              "total_tokens": 528,
+              "cost_usd": 8.37e-05,
+              "formatted_cost": "$0.000084",
+              "timestamp": "2026-09-02 12:20:09 UTC"
             }
           ]
         },
@@ -220,6 +230,23 @@
               "cost_usd": 0.00018015,
               "formatted_cost": "$0.000180",
               "timestamp": "2026-09-01 06:00:43 UTC"
+            }
+          ]
+        },
+        "CMC_Astrya Invoice 1260077613.pdf": {
+          "total_llm_calls": 1,
+          "total_tokens": 524,
+          "total_cost_usd": 8.04e-05,
+          "calls_breakdown": [
+            {
+              "step": "gpu_ai_pipeline",
+              "model": "gpt-4o-mini",
+              "prompt_tokens": 520,
+              "completion_tokens": 4,
+              "total_tokens": 524,
+              "cost_usd": 8.04e-05,
+              "formatted_cost": "$0.000080",
+              "timestamp": "2026-09-02 12:06:53 UTC"
             }
           ]
         }

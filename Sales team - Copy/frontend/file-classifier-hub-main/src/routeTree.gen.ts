@@ -29,6 +29,7 @@ import { Route as OnedriveRouteImport } from './routes/onedrive'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as LoginMonitorRouteImport } from './routes/login-monitor'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as InvoiceToExcelRouteImport } from './routes/invoice-to-excel'
 import { Route as InvoiceRouteImport } from './routes/invoice'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as ExtractionRouteImport } from './routes/extraction'
@@ -144,6 +145,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InvoiceToExcelRoute = InvoiceToExcelRouteImport.update({
+  id: '/invoice-to-excel',
+  path: '/invoice-to-excel',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InvoiceRoute = InvoiceRouteImport.update({
   id: '/invoice',
   path: '/invoice',
@@ -229,6 +235,7 @@ export interface FileRoutesByFullPath {
   '/extraction': typeof ExtractionRoute
   '/health': typeof HealthRoute
   '/invoice': typeof InvoiceRoute
+  '/invoice-to-excel': typeof InvoiceToExcelRoute
   '/login': typeof LoginRoute
   '/login-monitor': typeof LoginMonitorRoute
   '/logs': typeof LogsRoute
@@ -265,6 +272,7 @@ export interface FileRoutesByTo {
   '/extraction': typeof ExtractionRoute
   '/health': typeof HealthRoute
   '/invoice': typeof InvoiceRoute
+  '/invoice-to-excel': typeof InvoiceToExcelRoute
   '/login': typeof LoginRoute
   '/login-monitor': typeof LoginMonitorRoute
   '/logs': typeof LogsRoute
@@ -302,6 +310,7 @@ export interface FileRoutesById {
   '/extraction': typeof ExtractionRoute
   '/health': typeof HealthRoute
   '/invoice': typeof InvoiceRoute
+  '/invoice-to-excel': typeof InvoiceToExcelRoute
   '/login': typeof LoginRoute
   '/login-monitor': typeof LoginMonitorRoute
   '/logs': typeof LogsRoute
@@ -340,6 +349,7 @@ export interface FileRouteTypes {
     | '/extraction'
     | '/health'
     | '/invoice'
+    | '/invoice-to-excel'
     | '/login'
     | '/login-monitor'
     | '/logs'
@@ -376,6 +386,7 @@ export interface FileRouteTypes {
     | '/extraction'
     | '/health'
     | '/invoice'
+    | '/invoice-to-excel'
     | '/login'
     | '/login-monitor'
     | '/logs'
@@ -412,6 +423,7 @@ export interface FileRouteTypes {
     | '/extraction'
     | '/health'
     | '/invoice'
+    | '/invoice-to-excel'
     | '/login'
     | '/login-monitor'
     | '/logs'
@@ -449,6 +461,7 @@ export interface RootRouteChildren {
   ExtractionRoute: typeof ExtractionRoute
   HealthRoute: typeof HealthRoute
   InvoiceRoute: typeof InvoiceRoute
+  InvoiceToExcelRoute: typeof InvoiceToExcelRoute
   LoginRoute: typeof LoginRoute
   LoginMonitorRoute: typeof LoginMonitorRoute
   LogsRoute: typeof LogsRoute
@@ -614,6 +627,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/invoice-to-excel': {
+      id: '/invoice-to-excel'
+      path: '/invoice-to-excel'
+      fullPath: '/invoice-to-excel'
+      preLoaderRoute: typeof InvoiceToExcelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/invoice': {
       id: '/invoice'
       path: '/invoice'
@@ -729,6 +749,7 @@ const rootRouteChildren: RootRouteChildren = {
   ExtractionRoute: ExtractionRoute,
   HealthRoute: HealthRoute,
   InvoiceRoute: InvoiceRoute,
+  InvoiceToExcelRoute: InvoiceToExcelRoute,
   LoginRoute: LoginRoute,
   LoginMonitorRoute: LoginMonitorRoute,
   LogsRoute: LogsRoute,
