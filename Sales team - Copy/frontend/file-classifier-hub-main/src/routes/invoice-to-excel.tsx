@@ -4,6 +4,7 @@ import {
   FileSpreadsheet, UploadCloud, File, Loader2, X, Download, 
   FileText, CheckCircle2, ChevronRight, AlertCircle, Copy
 } from "lucide-react";
+import { useAuth } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel } from "@/components/Panel";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ interface Batch {
 }
 
 function InvoiceToExcelPage() {
+  const { user } = useAuth();
   const [batches, setBatches] = useState<Batch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   
@@ -82,9 +84,13 @@ function InvoiceToExcelPage() {
     });
 
     try {
-      const response = await fetch("http://localhost:5000/api/upload", {
+      const { getBackendUrl } = await import("@/lib/api");
+      const response = await fetch(`${getBackendUrl()}/api/invoice-excel/upload`, {
         method: "POST",
         body: formData,
+        headers: {
+          "X-Processed-By": user?.email || "SYSTEM"
+        }
       });
 
       if (response.ok) {
