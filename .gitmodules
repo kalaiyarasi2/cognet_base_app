@@ -24,3 +24,6 @@
 [submodule "Sales team - Copy/Parity_setup"]
 	path = Sales team - Copy/Parity_setup
 	url = https://github.com/jawagarnathst-tech/Parity_setup
+[submodule "Sales team - Copy/rpve"]
+	path = Sales team - Copy/rpve
+	url = https://github.com/althafcoder/rpve
