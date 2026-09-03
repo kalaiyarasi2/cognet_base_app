@@ -12,3 +12,15 @@
 [submodule "Sales team - Copy/Gpu_server"]
 	path = Sales team - Copy/Gpu_server
 	url = https://github.com/kalaiyarasi2/Gpu_server.git
+[submodule "Sales team - Copy/base-claim-"]
+	path = Sales team - Copy/base-claim-
+	url = https://github.com/kalaiyarasi2/base-claim-
+[submodule "Sales team - Copy/Invoice-to-excel-2026"]
+	path = Sales team - Copy/Invoice-to-excel-2026
+	url = https://github.com/althafcoder/Invoice-to-excel-2026
+[submodule "Sales team - Copy/Renewal_process"]
+	path = Sales team - Copy/Renewal_process
+	url = https://github.com/althafcoder/Renewal_process
+[submodule "Sales team - Copy/Parity_setup"]
+	path = Sales team - Copy/Parity_setup
+	url = https://github.com/jawagarnathst-tech/Parity_setup
