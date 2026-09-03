@@ -9,3 +9,6 @@
 [submodule "Sales team - Copy/file-classification-"]
 	path = Sales team - Copy/file-classification-
 	url = https://github.com/kalaiyarasi2/file-classification-.git
+[submodule "Sales team - Copy/Gpu_server"]
+	path = Sales team - Copy/Gpu_server
+	url = https://github.com/kalaiyarasi2/Gpu_server.git
