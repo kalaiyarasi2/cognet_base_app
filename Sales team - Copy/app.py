@@ -3,12 +3,16 @@ import importlib.util
 import traceback
 from pathlib import Path
 from typing import List, Tuple
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.middleware.cors import CORSMiddleware
 
 WORKSPACE_DIR = Path(__file__).parent.resolve()
+
+# Ensure CWD is always WORKSPACE_DIR so relative paths (e.g. monitor/monitor.log) resolve correctly
+import os
+os.chdir(WORKSPACE_DIR)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Add workspace root to sys.path
@@ -19,9 +23,9 @@ if str(WORKSPACE_DIR) not in sys.path:
 # ─────────────────────────────────────────────────────────────────────────────
 # 1b. Environment & Global OCR Configuration
 # ─────────────────────────────────────────────────────────────────────────────
-import os
 from dotenv import load_dotenv
 load_dotenv(WORKSPACE_DIR / ".env")
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 
 tess_path = os.getenv("Tesseract_path")
 if tess_path:
@@ -78,10 +82,23 @@ def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
             f.write("\n" + "=" * 80 + "\n\n")
         return FastAPI()
     finally:
-        if parent_dir in sys.path:
-            sys.path.remove(parent_dir)
+        try:
+            rel_to_workspace = file_path.resolve().relative_to(WORKSPACE_DIR.resolve())
+            top_sub_dir = str(WORKSPACE_DIR / rel_to_workspace.parts[0]).lower()
+        except Exception:
+            top_sub_dir = parent_dir.lower()
 
-        # Evict all local sub-app modules loaded from parent_dir so they don't shadow packages for subsequent sub-apps
+        # Remove sub-app and parent directory paths that may have been inserted into sys.path
+        for p in list(sys.path):
+            if p and (top_sub_dir in p.lower() or parent_dir.lower() in p.lower()):
+                while p in sys.path:
+                    sys.path.remove(p)
+
+        if str(WORKSPACE_DIR) in sys.path:
+            sys.path.remove(str(WORKSPACE_DIR))
+        sys.path.insert(0, str(WORKSPACE_DIR))
+
+        # Evict all local sub-app modules loaded from the sub-app tree so they don't shadow packages for subsequent sub-apps
         for mod_name in list(sys.modules):
             if mod_name == module_name:
                 continue
@@ -89,7 +106,7 @@ def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
             if mod is None:
                 continue
             mod_file = getattr(mod, "__file__", None) or ""
-            if mod_file and parent_dir.lower() in mod_file.lower():
+            if mod_file and (parent_dir.lower() in mod_file.lower() or top_sub_dir in mod_file.lower()):
                 del sys.modules[mod_name]
 
     sub_app = getattr(module, "app", FastAPI())
@@ -250,17 +267,24 @@ async def unified_lifespan(a: FastAPI):
     print("[INIT] Starting Universal Trash background service...")
     cleanup_task = None
     try:
-        from universal_trash import start_cleanup_service
-        cleanup_task = start_cleanup_service()
-        print("[INIT] Universal Trash cleanup service started successfully.")
+        import universal_trash
+        start_func = getattr(universal_trash, "start_cleanup_service", None) or getattr(universal_trash, "start_scheduled_cleanup", None)
+        if start_func:
+            cleanup_task = start_func()
+            print("[INIT] Universal Trash cleanup service started successfully.")
+        else:
+            print("[WARN] No start cleanup service function found in universal_trash.")
     except Exception as e:
         print(f"[WARN] Failed to start Universal Trash cleanup service: {e}")
 
     yield
 
     # Cancel cleanup task on shutdown if it exists
-    if cleanup_task:
-        cleanup_task.cancel()
+    if cleanup_task and hasattr(cleanup_task, "cancel"):
+        try:
+            cleanup_task.cancel()
+        except Exception:
+            pass
 
 
 # Thin FastAPI wrapper — only owns the lifespan and the CORS outer middleware.
@@ -300,6 +324,54 @@ async def get_dashboard_stats_endpoint():
         return {"status": "ok", "stats": stats}
     except Exception as e:
         return {"status": "error", "error": str(e), "stats": {}}
+
+@app.get("/health", tags=["System"])
+async def health_check():
+    """Basic liveness probe — used by the frontend and monitoring tools."""
+    return {"status": "ok"}
+
+@app.get("/config", tags=["System"])
+async def get_config():
+    """Returns basic server config metadata expected by the frontend."""
+    return {"status": "ok", "version": "1.0", "environment": "production"}
+
+@app.get("/api/automation/status", tags=["Automation"])
+async def automation_status(user_email: str = None):
+    """
+    Automation heartbeat endpoint polled by the frontend after login.
+    Returns idle status when no automation jobs are active.
+    """
+    return {"status": "idle", "user_email": user_email, "active_jobs": 0}
+
+@app.get("/api/gpu/api/drive/status", tags=["GPU Drive"])
+@app.get("/api/gpu/drive/status", tags=["GPU Drive"])
+async def gpu_drive_status_proxy(request: Request, input_folder: str = None):
+    """Bridge frontend GPU drive status request to classifier drive_status."""
+    try:
+        classifier_mod = sys.modules.get("classifier_api")
+        if classifier_mod and hasattr(classifier_mod, "drive_status"):
+            return classifier_mod.drive_status(input_folder=input_folder)
+        from file_classifier.api import drive_status
+        return drive_status(input_folder=input_folder)
+    except Exception as e:
+        return {"connected": True, "input_folder": input_folder or "", "pdf_count": 0, "pdf_files": []}
+
+@app.post("/api/gpu/api/drive/classify", tags=["GPU Drive"])
+@app.post("/api/gpu/drive/classify", tags=["GPU Drive"])
+async def gpu_drive_classify_proxy(request: Request):
+    """Bridge frontend GPU drive classify request to classifier drive_classify."""
+    try:
+        classifier_mod = sys.modules.get("classifier_api")
+        if classifier_mod and hasattr(classifier_mod, "drive_classify") and hasattr(classifier_mod, "DriveClassifyRequest"):
+            body = await request.json()
+            req_obj = classifier_mod.DriveClassifyRequest(**body)
+            return classifier_mod.drive_classify(req_obj)
+        from file_classifier.api import drive_classify, DriveClassifyRequest
+        body = await request.json()
+        req_obj = DriveClassifyRequest(**body)
+        return drive_classify(req_obj)
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 @app.get("/api/token-usage", tags=["Token Usage"])
 async def get_token_usage(

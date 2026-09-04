@@ -1,18 +1,21 @@
-__pycache_/
-database/__pycache_/
-file-classification-/__pycache_/
-file-classification-old/__pycache_/
+__pycache__/
+database/__pycache__/
+file-classification-/__pycache__/
+file-classification-old/__pycache__/
 logs/
-outlook_Agent/__pycache_/
+outlook_Agent/__pycache__/
 output/
 outputs/
 venv/
 .env
 uploads/
-sharepoint_agent/__pycache_/
+sharepoint_agent/__pycache__/
 client_secret.json
 converter.db
 scratch/
 storage/
 
 monitor/universal_token_summary.json
+monitor/monitor.log
+monitor/*.log
+config/

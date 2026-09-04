@@ -37,8 +37,9 @@ temp_*/
 # Extra non-project directories
 multiple agent/
 audit_logs/
-config/
 monitor/monitor.log
+Sales team - Copy/monitor/monitor.log
+Sales team - Copy/monitor/*.log
 converter.db-shm
 converter.db-wal
 Sales team - Copy/extracted_text/valid_dummy_audit.txt

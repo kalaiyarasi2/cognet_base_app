@@ -140,3 +140,45 @@ class SecurityGatewayService:
                 "metadata": metadata,
                 "timestamp": timestamp
             }
+
+
+class Status:
+    CLEAN = "CLEAN"
+    REJECTED = "REJECTED"
+    INFECTED = "INFECTED"
+    ERROR = "ERROR"
+
+
+class SecurityResult:
+    def __init__(self, status: str, file_path: Optional[str] = None, hash: Optional[str] = None, reason: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+        self.status = status
+        self.file_path = file_path
+        self.hash = hash
+        self.reason = reason
+        self.details = details or {}
+
+
+class SecurityGateway(SecurityGatewayService):
+    """Compatibility adapter for POCs expecting the SecurityGateway.process(file_path) signature."""
+    def process(self, file_path: str, request_id: Optional[str] = None) -> SecurityResult:
+        if not os.path.exists(file_path):
+            return SecurityResult(status=Status.ERROR, reason=f"File not found: {file_path}")
+        with open(file_path, "rb") as f:
+            content = f.read()
+        filename = os.path.basename(file_path)
+        res = self.process_incoming_file(content, filename, module_name="gpu_server")
+        
+        st = Status.CLEAN if res.get("is_allowed") else (
+            Status.INFECTED if res.get("scan_status") == ScanStatus.INFECTED.value else (
+                Status.ERROR if res.get("scan_status") == ScanStatus.ERROR.value else Status.REJECTED
+            )
+        )
+        clean_path = res.get("clean_file_path") or file_path
+        return SecurityResult(
+            status=st,
+            file_path=clean_path,
+            hash=res.get("metadata", {}).get("sha256"),
+            reason=res.get("message"),
+            details=res
+        )
+
