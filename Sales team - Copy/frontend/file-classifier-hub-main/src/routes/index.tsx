@@ -165,13 +165,23 @@ function Dashboard() {
     const result: { name: string; value: number }[] = [];
     const dbCategories = dbStats?.categoriesFound || stats.categoriesFound;
     
+    const LABEL_MAP: Record<string, string> = {
+      "RESOURCING_EDGE": "Client 1",
+      "RESOURCING EDGE": "Client 1",
+      "RESOURCING-EDGE": "Client 1",
+      "CLIENT 1": "Client 1",
+      "CLIENT_1": "Client 1",
+      "RE": "Client 1",
+    };
+
     const keys = Object.keys(dbCategories);
     if (keys.length > 0) {
       for (const k of keys) {
-        result.push({ name: k, value: dbCategories[k] });
+        const displayName = LABEL_MAP[k] || LABEL_MAP[k.toUpperCase()] || k;
+        result.push({ name: displayName, value: dbCategories[k] });
       }
     } else {
-      const fallback = ["PARITY_SETUP", "RENEWAL_PROCESS", "RESOURCING_EDGE", "RPVE", "CONVERTER"];
+      const fallback = ["PARITY_SETUP", "RENEWAL_PROCESS", "Client 1", "RPVE", "CONVERTER"];
       for (const f of fallback) {
         result.push({ name: f, value: 1 });
       }

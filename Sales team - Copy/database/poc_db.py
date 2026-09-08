@@ -325,7 +325,7 @@ def log_resourcing_run(pdf_filename: str, status: str, plan_names: str = "", out
         )
         conn.commit()
         conn.close()
-    log_universal("RESOURCING_EDGE", "Insurance Plan Schema Parse", pdf_filename, status, plan_names or error_message, processed_by=processed_by)
+    log_universal("CLIENT 1", "Insurance Plan Schema Parse", pdf_filename, status, plan_names or error_message, processed_by=processed_by)
 
 def log_rpve_run(flow_id: str, file_names: str, status: str, insurer: str = "", total_value: str = "", error_message: str = "", processed_by: str = "SYSTEM"):
     init_poc_tables()
@@ -389,9 +389,13 @@ def get_dashboard_stats():
         # 3. Category distribution (by module)
         cursor.execute("SELECT module, COUNT(*) as cnt FROM universal_history GROUP BY module")
         cat_rows = cursor.fetchall()
-        categories_found = {row["module"]: row["cnt"] for row in cat_rows}
+        raw_categories = {row["module"]: row["cnt"] for row in cat_rows}
+        categories_found = {}
+        for mod, cnt in raw_categories.items():
+            normalized_mod = "CLIENT 1" if mod in ("RESOURCING_EDGE", "RESOURCING EDGE", "RESOURCING-EDGE") else mod
+            categories_found[normalized_mod] = categories_found.get(normalized_mod, 0) + cnt
 
-        standard_modules = ["PARITY_SETUP", "RENEWAL_PROCESS", "RESOURCING_EDGE", "RPVE", "CONVERTER"]
+        standard_modules = ["PARITY_SETUP", "RENEWAL_PROCESS", "CLIENT 1", "RPVE", "CONVERTER"]
         for mod in standard_modules:
             if mod not in categories_found:
                 categories_found[mod] = 0
