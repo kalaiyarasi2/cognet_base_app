@@ -180,6 +180,7 @@ converter_app  = load_sub_app("converter_api",  WORKSPACE_DIR / "File-Convertor"
 payroll_app    = load_sub_app("payroll_api",    WORKSPACE_DIR / "Payroll_extractor" / "api_server.py")
 claim_app      = load_sub_app("claim_api",      WORKSPACE_DIR / "base-claim-" / "app.py")
 invoice_excel_app = load_sub_app("invoice_excel_api", WORKSPACE_DIR / "Invoice-to-excel-2026" / "Invoice-to-excel-2026" / "app_fastapi.py")
+summary_app    = load_sub_app("summary_api",    WORKSPACE_DIR / "summary & chatbot" / "app.py")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Build the unified ASGI app via PrefixDispatcher
@@ -205,6 +206,7 @@ _dispatcher = PrefixDispatcher(
         ("/api/gpu",        gpu_app),
         ("/api/payroll",    payroll_app),
         ("/api/invoice-excel", invoice_excel_app),
+        ("/api/summary",    summary_app),
         ("/claim",          claim_app),
     ],
     default=classifier_app,

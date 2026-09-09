@@ -493,16 +493,17 @@ export function UserManagement() {
         )}
       </section>
 
-      {/* ─── Employee Directory ─── */}
-      <section className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
-          <h3 className="text-[13px] font-semibold flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-blue-500" />
-            Company Employee Directory
-            <span className="text-[10px] font-normal text-muted-foreground ml-1">
-              ({employees.length} employees)
-            </span>
-          </h3>
+      {/* ─── Employee Directory (Global Admin only) ─── */}
+      {(isGlobalAdmin || employees.length > 0) && (
+        <section className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
+            <h3 className="text-[13px] font-semibold flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-500" />
+              Company Employee Directory
+              <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                ({employees.length} employees)
+              </span>
+            </h3>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
             <input
@@ -586,6 +587,7 @@ export function UserManagement() {
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

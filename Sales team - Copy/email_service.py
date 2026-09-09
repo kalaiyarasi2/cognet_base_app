@@ -190,3 +190,132 @@ def send_access_granted_email(recipient_email: str, recipient_name: str, granted
     except Exception as e:
         print(f"[ACCESS EMAIL] Failed to send email via SMTP to {recipient_email}. Error: {e}")
         print(f"[ACCESS EMAIL] MOCKING EMAIL TO {recipient_email}")
+
+def send_tenant_welcome_email(
+    recipient_email: str,
+    tenant_name: str,
+    tenant_code: str,
+    otp_code: str,
+    login_url: str = "http://localhost:5173/login"
+):
+    html_content = f"""
+    <html>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; background-color: #f8fafc; margin: 0; padding: 24px;">
+        <div style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+          <div style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); padding: 28px 32px; text-align: left;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">Drive360 Enterprise</h1>
+            <p style="color: #e0f2fe; margin: 6px 0 0 0; font-size: 14px;">Tenant Workspace Onboarding</p>
+          </div>
+          
+          <div style="padding: 32px;">
+            <h2 style="color: #0f172a; margin-top: 0; font-size: 18px; font-weight: 600;">Welcome, Tenant Administrator!</h2>
+            <p style="color: #475569; font-size: 14px; line-height: 1.6;">
+              A new organization workspace has been created for <strong>{tenant_name}</strong> on the Drive360 platform.
+            </p>
+            
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 18px 0;">
+              <div style="font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase;">Organization Identifier</div>
+              <div style="font-size: 15px; color: #0f172a; font-weight: 700; margin-top: 2px; font-family: monospace;">Tenant Code: {tenant_code}</div>
+            </div>
+
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; text-align: center; margin: 24px 0;">
+              <span style="font-size: 12px; font-weight: 600; color: #166534; text-transform: uppercase; letter-spacing: 1px;">Your First-Time Setup Verification Code</span>
+              <div style="font-size: 34px; font-weight: 800; letter-spacing: 6px; color: #15803d; margin-top: 8px; font-family: monospace;">
+                {otp_code}
+              </div>
+              <span style="font-size: 12px; color: #166534; margin-top: 6px; display: block;">Valid for 15 minutes</span>
+            </div>
+
+            <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+              To complete your account setup, open the link below, verify with this code, and set your new admin password.
+            </p>
+
+            <div style="text-align: center; margin: 28px 0 10px 0;">
+              <a href="{login_url}" style="background-color: #0284c7; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">
+                Access Your Workspace
+              </a>
+            </div>
+          </div>
+          
+          <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 32px; text-align: center;">
+            <p style="font-size: 12px; color: #94a3b8; margin: 0;">
+              If you did not request this workspace, please contact your system administrator.
+            </p>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+
+    # 1. Try Microsoft Graph API
+    client_id = os.getenv("MICROSOFT_CLIENT_ID")
+    client_secret = os.getenv("MICROSOFT_CLIENT_SECRET")
+    tenant_id = os.getenv("MICROSOFT_TENANT_ID")
+    sender_email = os.getenv("SENDER_EMAIL")
+
+    if all([client_id, client_secret, tenant_id, sender_email]):
+        try:
+            import msal
+            authority = f"https://login.microsoftonline.com/{tenant_id}"
+            app = msal.ConfidentialClientApplication(
+                client_id, authority=authority, client_credential=client_secret
+            )
+            result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+            
+            if "access_token" in result:
+                endpoint = f"https://graph.microsoft.com/v1.0/users/{sender_email}/sendMail"
+                email_msg = {
+                    "message": {
+                        "subject": f"Welcome to Drive360 - Workspace Setup for {tenant_name} (OTP: {otp_code})",
+                        "body": {
+                            "contentType": "HTML",
+                            "content": html_content
+                        },
+                        "toRecipients": [
+                            {"emailAddress": {"address": recipient_email}}
+                        ]
+                    },
+                    "saveToSentItems": "false"
+                }
+                headers = {
+                    "Authorization": f"Bearer {result['access_token']}",
+                    "Content-Type": "application/json"
+                }
+                response = requests.post(endpoint, headers=headers, json=email_msg)
+                if response.status_code in (200, 202):
+                    print(f"[TENANT ONBOARDING] Successfully sent welcome email & OTP to {recipient_email} via MS Graph.")
+                    return
+                else:
+                    print(f"[TENANT ONBOARDING] MS Graph failed with status {response.status_code}: {response.text}")
+            else:
+                print(f"[TENANT ONBOARDING] Failed to acquire token for MS Graph: {result.get('error')}")
+        except Exception as e:
+            print(f"[TENANT ONBOARDING] MS Graph Exception: {e}")
+
+    # 2. Fallback to SMTP
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = os.getenv("SMTP_PORT")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+
+    if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
+        print(f"[TENANT ONBOARDING] No SMTP/Graph config found. MOCKING EMAIL TO {recipient_email}: OTP is {otp_code}")
+        return
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Welcome to Drive360 - Workspace Setup for {tenant_name} (OTP: {otp_code})"
+        msg["From"] = smtp_user
+        msg["To"] = recipient_email
+        msg.attach(MIMEText(html_content, "html"))
+
+        with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, recipient_email, msg.as_string())
+            
+        print(f"[TENANT ONBOARDING] Successfully sent welcome email & OTP to {recipient_email} via SMTP.")
+    except Exception as e:
+        print(f"[TENANT ONBOARDING] Failed to send email via SMTP to {recipient_email}. Error: {e}")
+        print(f"[TENANT ONBOARDING] MOCKING EMAIL TO {recipient_email}: OTP is {otp_code}")
+

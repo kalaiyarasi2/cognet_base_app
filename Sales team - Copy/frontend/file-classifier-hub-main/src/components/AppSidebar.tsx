@@ -37,6 +37,7 @@ const groups: NavGroup[] = [
       { label: "Payroll Register Extraction", to: "/payroll-extractor", icon: FileSpreadsheet, moduleCode: "PAYROLL" },
       { label: "UI Claim Validator", to: "/psh-claim-validator", icon: ClipboardCheck, moduleCode: "PSH_CLAIM_VALIDATOR" },
       { label: "UI Claim Extractor", to: "/psh-claim-extractor", icon: ClipboardCheck, moduleCode: "PSH_CLAIM_EXTRACTOR" },
+      { label: "SOP Summarizer", to: "/sop-summary", icon: FileText, moduleCode: "SOP_SUMMARY" },
     ],
   },
   {

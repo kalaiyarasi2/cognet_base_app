@@ -27,3 +27,7 @@
 [submodule "Sales team - Copy/rpve"]
 	path = Sales team - Copy/rpve
 	url = https://github.com/althafcoder/rpve
+
+[submodule "Sales team - Copy/summary & chatbot"]
+	path = Sales team - Copy/summary & chatbot
+	url = https://github.com/kalaiyarasi2/summary.git

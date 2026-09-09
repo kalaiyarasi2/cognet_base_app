@@ -36,6 +36,7 @@ const ALL_MODULES = [
   { code: "INVOICE", name: "Benefit Invoice Extraction", desc: "Benefit Invoice Processing (Payroll)" },
   { code: "RPVE", name: "Invoice to Census", desc: "Data Retrieval Ingestion Verification (Payroll)" },
   { code: "SBC", name: "SBC plan summary", desc: "Summary of Benefits & Coverage (Payroll)" },
+  { code: "SOP_SUMMARY", name: "SOP Summarizer", desc: "AI SOP Document Summarizer & Executive Reporting" },
   // Finance Category
   { code: "BANK_STATEMENT", name: "Bank Statement", desc: "Financial Bank Statement Parsing (Finance)" },
   { code: "VENDOR_INVOICE", name: "Vendor Invoice", desc: "Vendor Invoice Verification (Finance)" },
@@ -363,7 +364,7 @@ function TenantManagementPage() {
                       <Layers className="w-3.5 h-3.5 text-blue-500" /> 1. Enable System Modules (Automation)
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {ALL_MODULES.filter(m => ["ACCORD", "LOSS_RUN", "INVOICE", "RPVE", "SBC", "RE", "BANK_STATEMENT", "VENDOR_INVOICE", "ASTRYA_INVOICE"].includes(m.code)).map((mod) => {
+                      {ALL_MODULES.filter(m => ["ACCORD", "LOSS_RUN", "INVOICE", "RPVE", "SBC", "RE", "BANK_STATEMENT", "VENDOR_INVOICE", "ASTRYA_INVOICE", "SOP_SUMMARY"].includes(m.code)).map((mod) => {
                         const isChecked = selectedModules.includes(mod.code);
                         return (
                           <div

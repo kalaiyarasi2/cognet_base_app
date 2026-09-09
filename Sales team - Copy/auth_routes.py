@@ -7,7 +7,7 @@ from typing import Optional, List, Union
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, Header, Request, BackgroundTasks
 from pydantic import BaseModel
-from email_service import send_otp_email, send_access_granted_email
+from email_service import send_otp_email, send_access_granted_email, send_tenant_welcome_email
 
 # ── Robust poc_db import ──────────────────────────────────────────────────────
 # The file-classification- sub-app pollutes sys.path with its own 'database'
@@ -68,10 +68,41 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+def build_user_payload(perm: dict) -> dict:
+    """Standardized user payload for JWT tokens and frontend user objects."""
+    modules = perm.get("allowed_modules", "ALL") or "ALL"
+    role = perm.get("role", "USER")
+    email = perm.get("email", "")
+    
+    tenant_code = perm.get("tenant_code")
+    if not tenant_code or tenant_code == "GLOBAL":
+        if role == "TENANT_ADMIN":
+            tenant_code = poc_db.get_tenant_for_user(email) or "GLOBAL"
+        else:
+            tenant_code = "GLOBAL"
+            
+    return {
+        "email": email,
+        "name": perm.get("full_name", email.split("@")[0].capitalize()),
+        "role": role,
+        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules,
+        "tenant_code": tenant_code,
+        "can_manage_tenants": role == "ADMIN",
+        "can_manage_users": role in ("ADMIN", "TENANT_ADMIN")
+    }
+
 def get_current_user_from_token(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         # Default fallback for unauthenticated requests in dev mode
-        return {"email": "admin@local", "name": "Super Administrator", "role": "ADMIN", "allowed_modules": "ALL", "can_manage_tenants": True, "can_manage_users": True}
+        return {
+            "email": "admin@local",
+            "name": "Super Administrator",
+            "role": "ADMIN",
+            "allowed_modules": "ALL",
+            "tenant_code": "GLOBAL",
+            "can_manage_tenants": True,
+            "can_manage_users": True
+        }
     
     token = authorization.split(" ")[1]
     try:
@@ -192,15 +223,7 @@ async def sso_callback(req: SSOCallbackRequest, request: Request):
         )
     
     # 2. Issue JWT Token
-    modules = perm.get("allowed_modules", "ALL") or "ALL"
-    user_payload = {
-        "email": perm["email"],
-        "name": perm["full_name"],
-        "role": perm["role"],
-        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules,
-        "can_manage_tenants": perm["role"] == "ADMIN",
-        "can_manage_users": perm["role"] in ("ADMIN", "TENANT_ADMIN")
-    }
+    user_payload = build_user_payload(perm)
     token = create_access_token(user_payload)
     
     # Record User Session & IP in user_sessions.db
@@ -290,15 +313,7 @@ async def sso_get_callback(code: str = None, error: str = None, error_descriptio
     if perm.get("access_status") == "REVOKED":
         return RedirectResponse(f"{_FRONTEND_ORIGIN}/auth/callback?error=Access+Revoked:+Your+access+has+been+disabled")
 
-    modules = perm.get("allowed_modules", "ALL") or "ALL"
-    user_payload = {
-        "email": perm["email"],
-        "name": perm["full_name"],
-        "role": perm["role"],
-        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules,
-        "can_manage_tenants": perm["role"] == "ADMIN",
-        "can_manage_users": perm["role"] in ("ADMIN", "TENANT_ADMIN")
-    }
+    user_payload = build_user_payload(perm)
     token = create_access_token(user_payload)
 
     import urllib.parse
@@ -352,15 +367,7 @@ async def setup_password(req: SetupPasswordRequest, request: Request):
     poc_db.update_user_password(clean_email, req.new_password)
     
     # Return JWT
-    modules = perm.get("allowed_modules", "ALL") or "ALL"
-    user_payload = {
-        "email": perm["email"],
-        "name": perm["full_name"],
-        "role": perm["role"],
-        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules,
-        "can_manage_tenants": perm["role"] == "ADMIN",
-        "can_manage_users": perm["role"] in ("ADMIN", "TENANT_ADMIN")
-    }
+    user_payload = build_user_payload(perm)
     token = create_access_token(user_payload)
     
     try:
@@ -423,15 +430,7 @@ async def verify_otp(req: VerifyOtpRequest, request: Request):
     if not perm:
         raise HTTPException(status_code=403, detail="User not found or access revoked.")
         
-    modules = perm.get("allowed_modules", "ALL") or "ALL"
-    user_payload = {
-        "email": perm["email"],
-        "name": perm["full_name"],
-        "role": perm["role"],
-        "allowed_modules": modules.split(",") if isinstance(modules, str) and modules != "ALL" else modules,
-        "can_manage_tenants": perm["role"] == "ADMIN",
-        "can_manage_users": perm["role"] in ("ADMIN", "TENANT_ADMIN")
-    }
+    user_payload = build_user_payload(perm)
     token = create_access_token(user_payload)
     
     # Record User Session & IP in user_sessions.db
@@ -502,9 +501,17 @@ async def get_me(user: dict = Depends(get_current_user_from_token)):
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/admin/users")
 async def list_admin_users(user: dict = Depends(get_current_user_from_token)):
-    """Fetch granted permissions list and company employee directory."""
-    permissions = poc_db.list_all_permissions()
-    employees = poc_db.list_company_employees()
+    """Fetch granted permissions list and company employee directory (isolated by tenant for TENANT_ADMIN)."""
+    admin_role = user.get("role", "USER")
+    admin_email = user.get("email", "")
+    tenant_code = user.get("tenant_code") or (poc_db.get_tenant_for_user(admin_email) if admin_role == "TENANT_ADMIN" else "GLOBAL")
+    
+    if admin_role == "TENANT_ADMIN":
+        permissions = poc_db.list_all_permissions(tenant_code=tenant_code, admin_email=admin_email)
+        employees = poc_db.list_company_employees(tenant_code=tenant_code)
+    else:
+        permissions = poc_db.list_all_permissions()
+        employees = poc_db.list_company_employees()
     
     return {
         "status": "ok",
@@ -518,11 +525,11 @@ async def admin_grant_access(req: GrantAccessRequest, background_tasks: Backgrou
     """Admin grants access to a user manually or from the company employee directory."""
     admin_email = user.get("email", "admin@local")
     admin_role = user.get("role", "USER")
+    tenant_code = user.get("tenant_code") or (poc_db.get_tenant_for_user(admin_email) if admin_role == "TENANT_ADMIN" else "GLOBAL")
     
     if admin_role == "TENANT_ADMIN" and req.role == "ADMIN":
         raise HTTPException(status_code=403, detail="Tenant admins cannot create global ADMIN accounts.")
 
-    
     modules_val = req.allowed_modules
     if isinstance(modules_val, list):
         modules_val = ",".join(modules_val)
@@ -533,7 +540,8 @@ async def admin_grant_access(req: GrantAccessRequest, background_tasks: Backgrou
         role=req.role,
         source=req.source,
         granted_by=admin_email,
-        allowed_modules=modules_val or "ALL"
+        allowed_modules=modules_val or "ALL",
+        tenant_code=tenant_code or "GLOBAL"
     )
     
     frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
@@ -619,16 +627,30 @@ async def create_tenant_endpoint(req: CreateTenantRequest):
             raise HTTPException(status_code=500, detail="Failed to create tenant in database.")
             
         if req.email:
+            clean_email = req.email.strip().lower()
             poc_db.grant_user_access(
-                email=req.email,
+                email=clean_email,
                 full_name=f"{req.tenant_name} Admin",
                 role="TENANT_ADMIN",
                 source="MANUAL",
                 granted_by="admin@local",
-                allowed_modules=req.enabled_modules or "ALL"
+                allowed_modules=req.enabled_modules or "ALL",
+                tenant_code=req.tenant_code
             )
+
+            # Generate onboarding setup OTP and send welcome email
+            try:
+                otp_code = poc_db.store_otp(clean_email, "setup")
+                send_tenant_welcome_email(
+                    recipient_email=clean_email,
+                    tenant_name=req.tenant_name,
+                    tenant_code=req.tenant_code,
+                    otp_code=otp_code
+                )
+            except Exception as mail_err:
+                print(f"[WARN] Failed to send tenant onboarding email to {clean_email}: {mail_err}")
             
-        return {"status": "ok", "message": f"Tenant '{req.tenant_code}' created successfully."}
+        return {"status": "ok", "message": f"Tenant '{req.tenant_code}' created successfully. Setup OTP sent to {req.email}."}
     except HTTPException as he:
         raise he
     except Exception as e:

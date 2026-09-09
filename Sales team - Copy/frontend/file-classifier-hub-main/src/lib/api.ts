@@ -385,6 +385,29 @@ export const api = {
     });
   },
 
+  // --- SOP Summarizer & Chatbot ---
+  summarizeSop: (file: File, returnZip = false) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{
+      status: string;
+      session_id: string;
+      filename: string;
+      summary: any;
+      files_available: Record<string, boolean>;
+      download_urls: Record<string, string>;
+    }>(`/api/summary/summarize?return_zip=${returnZip}`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+  chatWithSop: (body: { session_id?: string; question: string; context?: string; history?: Array<{ role: string; content: string }> }) => {
+    return request<{ answer: string; session_id?: string }>("/api/summary/chat", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
   // ─── Auth & Admin Access Management ───────────────────────────────────────
   /** Check if email exists and if it needs first-time setup */
   checkEmail: (email: string) =>

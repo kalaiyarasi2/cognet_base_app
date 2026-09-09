@@ -3,6 +3,7 @@ import os
 import random
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, List, Dict, Any, Union
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -138,6 +139,24 @@ def init_poc_tables():
             cursor.execute("ALTER TABLE app_permissions ADD COLUMN password_hash TEXT")
         except Exception:
             pass
+
+        # Migration: Add tenant_code column if table already exists
+        try:
+            cursor.execute("ALTER TABLE app_permissions ADD COLUMN tenant_code TEXT DEFAULT 'GLOBAL'")
+        except Exception:
+            pass
+
+        # Backfill existing tenants' admins with their tenant_code
+        try:
+            cursor.execute("""
+                UPDATE app_permissions 
+                SET tenant_code = (
+                    SELECT tenant_code FROM tenants WHERE LOWER(tenants.email) = LOWER(app_permissions.email) LIMIT 1
+                )
+                WHERE LOWER(email) IN (SELECT LOWER(email) FROM tenants)
+            """)
+        except Exception:
+            pass
             
         # Migration: Recreate table if old CHECK constraint limits role to just 'ADMIN', 'USER'
         try:
@@ -156,10 +175,11 @@ def init_poc_tables():
                     granted_by TEXT NOT NULL,
                     allowed_modules TEXT DEFAULT 'ALL',
                     granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    password_hash TEXT
+                    password_hash TEXT,
+                    tenant_code TEXT DEFAULT 'GLOBAL'
                 );
                 """)
-                cursor.execute("INSERT INTO app_permissions (id, email, full_name, role, access_status, source, granted_by, allowed_modules, granted_at, password_hash) SELECT id, email, full_name, role, access_status, source, granted_by, allowed_modules, granted_at, password_hash FROM app_permissions_old")
+                cursor.execute("INSERT INTO app_permissions (id, email, full_name, role, access_status, source, granted_by, allowed_modules, granted_at, password_hash, tenant_code) SELECT id, email, full_name, role, access_status, source, granted_by, allowed_modules, granted_at, password_hash, COALESCE(tenant_code, 'GLOBAL') FROM app_permissions_old")
                 cursor.execute("DROP TABLE app_permissions_old")
         except Exception as e:
             print(f"[WARN] Failed to migrate app_permissions table constraint: {e}")
@@ -461,28 +481,52 @@ def get_user_permission(email: str):
             conn.close()
     return None
 
-def grant_user_access(email: str, full_name: str, role: str, source: str = "MANUAL", granted_by: str = "admin@local", allowed_modules: str = "ALL"):
-    """Grant or update user access in the app_permissions DB."""
+def get_tenant_for_user(email: str) -> Optional[str]:
+    """Retrieve tenant_code for a user from permissions or tenants table."""
+    init_poc_tables()
+    clean_email = email.strip().lower()
+    for conn in get_connections():
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT tenant_code FROM app_permissions WHERE LOWER(email) = LOWER(?)", (clean_email,))
+            row = cursor.fetchone()
+            if row and row["tenant_code"] and row["tenant_code"] != "GLOBAL":
+                return row["tenant_code"]
+            
+            cursor.execute("SELECT tenant_code FROM tenants WHERE LOWER(email) = LOWER(?)", (clean_email,))
+            t_row = cursor.fetchone()
+            if t_row and t_row["tenant_code"]:
+                return t_row["tenant_code"]
+        except Exception:
+            pass
+        finally:
+            conn.close()
+    return None
+
+def grant_user_access(email: str, full_name: str, role: str, source: str = "MANUAL", granted_by: str = "admin@local", allowed_modules: str = "ALL", tenant_code: str = "GLOBAL"):
+    """Grant or update user access in the app_permissions DB with tenant_code."""
     init_poc_tables()
     clean_email = email.strip().lower()
     clean_name = full_name.strip() if full_name else clean_email.split('@')[0].capitalize()
     role_upper = role.upper() if role.upper() in ("ADMIN", "TENANT_ADMIN", "USER") else "USER"
     modules_str = allowed_modules if isinstance(allowed_modules, str) else ",".join(allowed_modules) if allowed_modules else "ALL"
+    t_code = tenant_code or "GLOBAL"
     
     for conn in get_connections():
         try:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO app_permissions (email, full_name, role, access_status, source, granted_by, allowed_modules)
-                VALUES (?, ?, ?, 'GRANTED', ?, ?, ?)
+                INSERT INTO app_permissions (email, full_name, role, access_status, source, granted_by, allowed_modules, tenant_code)
+                VALUES (?, ?, ?, 'GRANTED', ?, ?, ?, ?)
                 ON CONFLICT(email) DO UPDATE SET 
                     access_status = 'GRANTED',
                     role = excluded.role,
                     full_name = excluded.full_name,
                     granted_by = excluded.granted_by,
                     allowed_modules = excluded.allowed_modules,
+                    tenant_code = CASE WHEN excluded.tenant_code IS NOT NULL AND excluded.tenant_code != 'GLOBAL' THEN excluded.tenant_code ELSE app_permissions.tenant_code END,
                     granted_at = datetime('now')
-            """, (clean_email, clean_name, role_upper, source, granted_by, modules_str))
+            """, (clean_email, clean_name, role_upper, source, granted_by, modules_str, t_code))
             conn.commit()
         except Exception as e:
             print(f"[WARN] Error granting user access for {clean_email}: {e}")
@@ -564,13 +608,22 @@ def update_user_password(email: str, new_password: str) -> bool:
             conn.close()
     return False
 
-def list_all_permissions():
-    """List all user permissions."""
+def list_all_permissions(tenant_code: Optional[str] = None, admin_email: Optional[str] = None):
+    """List user permissions, isolated by tenant_code if provided."""
     init_poc_tables()
     for conn in get_connections():
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM app_permissions ORDER BY id DESC")
+            if tenant_code and tenant_code != "GLOBAL":
+                cursor.execute("""
+                    SELECT * FROM app_permissions 
+                    WHERE tenant_code = ? 
+                       OR LOWER(email) = LOWER(?) 
+                       OR LOWER(granted_by) = LOWER(?)
+                    ORDER BY id DESC
+                """, (tenant_code, admin_email or "", admin_email or ""))
+            else:
+                cursor.execute("SELECT * FROM app_permissions ORDER BY id DESC")
             rows = cursor.fetchall()
             return [dict(r) for r in rows]
         except Exception:
@@ -579,9 +632,12 @@ def list_all_permissions():
             conn.close()
     return []
 
-def list_company_employees():
-    """List all company employees from existing company DB."""
+def list_company_employees(tenant_code: Optional[str] = None):
+    """List company employees. Returns empty if tenant is isolated/scoped."""
     init_poc_tables()
+    if tenant_code and tenant_code != "GLOBAL":
+        return []
+        
     for conn in get_connections():
         try:
             cursor = conn.cursor()

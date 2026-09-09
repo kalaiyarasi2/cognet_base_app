@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
 import { Route as TokenUtilizationRouteImport } from './routes/token-utilization'
 import { Route as TenantsRouteImport } from './routes/tenants'
+import { Route as SopSummaryRouteImport } from './routes/sop-summary'
 import { Route as SharepointRouteImport } from './routes/sharepoint'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RpveRouteImport } from './routes/rpve'
@@ -58,6 +59,11 @@ const TokenUtilizationRoute = TokenUtilizationRouteImport.update({
 const TenantsRoute = TenantsRouteImport.update({
   id: '/tenants',
   path: '/tenants',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SopSummaryRoute = SopSummaryRouteImport.update({
+  id: '/sop-summary',
+  path: '/sop-summary',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SharepointRoute = SharepointRouteImport.update({
@@ -253,6 +259,7 @@ export interface FileRoutesByFullPath {
   '/rpve': typeof RpveRoute
   '/settings': typeof SettingsRoute
   '/sharepoint': typeof SharepointRoute
+  '/sop-summary': typeof SopSummaryRoute
   '/tenants': typeof TenantsRoute
   '/token-utilization': typeof TokenUtilizationRoute
   '/upload': typeof UploadRoute
@@ -290,6 +297,7 @@ export interface FileRoutesByTo {
   '/rpve': typeof RpveRoute
   '/settings': typeof SettingsRoute
   '/sharepoint': typeof SharepointRoute
+  '/sop-summary': typeof SopSummaryRoute
   '/tenants': typeof TenantsRoute
   '/token-utilization': typeof TokenUtilizationRoute
   '/upload': typeof UploadRoute
@@ -328,6 +336,7 @@ export interface FileRoutesById {
   '/rpve': typeof RpveRoute
   '/settings': typeof SettingsRoute
   '/sharepoint': typeof SharepointRoute
+  '/sop-summary': typeof SopSummaryRoute
   '/tenants': typeof TenantsRoute
   '/token-utilization': typeof TokenUtilizationRoute
   '/upload': typeof UploadRoute
@@ -367,6 +376,7 @@ export interface FileRouteTypes {
     | '/rpve'
     | '/settings'
     | '/sharepoint'
+    | '/sop-summary'
     | '/tenants'
     | '/token-utilization'
     | '/upload'
@@ -404,6 +414,7 @@ export interface FileRouteTypes {
     | '/rpve'
     | '/settings'
     | '/sharepoint'
+    | '/sop-summary'
     | '/tenants'
     | '/token-utilization'
     | '/upload'
@@ -441,6 +452,7 @@ export interface FileRouteTypes {
     | '/rpve'
     | '/settings'
     | '/sharepoint'
+    | '/sop-summary'
     | '/tenants'
     | '/token-utilization'
     | '/upload'
@@ -479,6 +491,7 @@ export interface RootRouteChildren {
   RpveRoute: typeof RpveRoute
   SettingsRoute: typeof SettingsRoute
   SharepointRoute: typeof SharepointRoute
+  SopSummaryRoute: typeof SopSummaryRoute
   TenantsRoute: typeof TenantsRoute
   TokenUtilizationRoute: typeof TokenUtilizationRoute
   UploadRoute: typeof UploadRoute
@@ -506,6 +519,13 @@ declare module '@tanstack/react-router' {
       path: '/tenants'
       fullPath: '/tenants'
       preLoaderRoute: typeof TenantsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sop-summary': {
+      id: '/sop-summary'
+      path: '/sop-summary'
+      fullPath: '/sop-summary'
+      preLoaderRoute: typeof SopSummaryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sharepoint': {
@@ -767,6 +787,7 @@ const rootRouteChildren: RootRouteChildren = {
   RpveRoute: RpveRoute,
   SettingsRoute: SettingsRoute,
   SharepointRoute: SharepointRoute,
+  SopSummaryRoute: SopSummaryRoute,
   TenantsRoute: TenantsRoute,
   TokenUtilizationRoute: TokenUtilizationRoute,
   UploadRoute: UploadRoute,
