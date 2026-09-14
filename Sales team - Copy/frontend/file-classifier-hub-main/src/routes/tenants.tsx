@@ -192,6 +192,7 @@ function TenantManagementPage() {
       const data = await res.json();
       if (res.ok && data.status === "ok") {
         toast.success(`Tenant '${tenant.tenant_code}' deleted successfully.`);
+        setTenants((prev) => prev.filter((t) => t.tenant_code !== tenant.tenant_code && t.tenant_id !== tenant.tenant_id));
         fetchTenants();
       } else {
         toast.error(data.detail || "Failed to delete tenant.");

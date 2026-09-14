@@ -71,6 +71,10 @@ class SecurityGatewayMiddleware(BaseHTTPMiddleware):
             for upload_file in upload_files:
                 filename = upload_file.filename or "upload.tmp"
                 content = await upload_file.read()
+                try:
+                    await upload_file.seek(0)
+                except Exception:
+                    pass
                 
                 # Determine module name from URL path
                 module_name = path.strip("/").replace("/", "_") or "general_upload"

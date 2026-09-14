@@ -602,7 +602,37 @@ class UpdateTenantRequest(BaseModel):
 
 @router.get("/admin/tenants")
 async def list_tenants_endpoint():
-    """List all tenant organizations."""
+    """List all tenant organizations, auto-syncing with config/tenants on disk."""
+    import json
+    from pathlib import Path
+    
+    tenants_dir = Path(__file__).parent.resolve() / "config" / "tenants"
+    if tenants_dir.exists():
+        for t_folder in tenants_dir.iterdir():
+            if t_folder.is_dir() and not t_folder.name.startswith("."):
+                t_code = t_folder.name.upper()
+                existing = poc_db.get_tenant(t_code)
+                if not existing:
+                    t_name = t_folder.name.replace("_", " ").title()
+                    tenant_json_path = t_folder / "tenant.json"
+                    if tenant_json_path.exists():
+                        try:
+                            with open(tenant_json_path, "r", encoding="utf-8") as f:
+                                t_data = json.load(f)
+                                t_name = t_data.get("tenant_name", t_name)
+                        except Exception:
+                            pass
+                    try:
+                        poc_db.create_tenant(
+                            tenant_code=t_code,
+                            tenant_name=t_name,
+                            email=f"admin@{t_folder.name.lower()}.com",
+                            active=True,
+                            enabled_modules=["ACCORD", "LOSS_RUN", "INVOICE", "SBC"]
+                        )
+                    except Exception:
+                        pass
+
     tenants = poc_db.list_tenants()
     return {"status": "ok", "tenants": tenants}
 
@@ -674,11 +704,32 @@ async def update_tenant_endpoint(tenant_code: str, req: UpdateTenantRequest):
 
 @router.delete("/admin/tenants/{tenant_code}")
 async def delete_tenant_endpoint(tenant_code: str):
-    """Delete a tenant record."""
-    success = poc_db.delete_tenant(tenant_code)
-    if not success:
-        raise HTTPException(status_code=404, detail=f"Tenant '{tenant_code}' not found.")
-    return {"status": "ok", "message": f"Tenant '{tenant_code}' deleted successfully."}
+    """Delete a tenant record and remove its config on disk."""
+    import shutil
+    from pathlib import Path
+    
+    clean_code = tenant_code.strip().upper()
+    target_clean = clean_code.replace("-", "_").replace(" ", "_")
+    
+    # 1. Remove tenant config folder from disk if it exists
+    tenants_dir = Path(__file__).parent.resolve() / "config" / "tenants"
+    if tenants_dir.exists():
+        for t_folder in list(tenants_dir.iterdir()):
+            if t_folder.is_dir():
+                t_folder_clean = t_folder.name.upper().replace("-", "_").replace(" ", "_")
+                if t_folder_clean == target_clean:
+                    try:
+                        shutil.rmtree(t_folder, ignore_errors=True)
+                    except Exception:
+                        pass
+    
+    # 2. Remove from database
+    success = poc_db.delete_tenant(clean_code)
+    # Also attempt with normalized target_clean if different
+    if not success and target_clean != clean_code:
+        poc_db.delete_tenant(target_clean)
+
+    return {"status": "ok", "message": f"Tenant '{clean_code}' deleted successfully."}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tenant Module Access Endpoint (used by useTenant.ts frontend hook)

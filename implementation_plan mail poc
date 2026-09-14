@@ -1,0 +1,394 @@
+# In-Depth Implementation Plan: Mail Automation POC Partner Integration
+
+## 1. Executive Summary & Objective
+
+This project automates the intake and processing of insurance submissions received via a designated corporate mailbox. 
+
+When a broker or client emails insurance documents (ACORD applications, Loss Run statements) to a standard mailbox:
+1. Our system detects the unread email and downloads the attachments.
+2. It captures key tracking metadata: **Sender**, **Modifier** (the processing identity), **Timestamp**, and **Subject**.
+3. It classifies the documents and runs GPU-based extraction to generate **ACORD PDF + JSON** and **Loss Run PDF + JSON**.
+4. It sends all extracted files and structured JSONs directly to **Selva Sir's team's backend API endpoint** (defined by their Swagger documentation).
+5. It logs the audit status in SQLite and marks the email as processed.
+
+This is deployed as an **isolated, dedicated flow** (`partner_mail_flow.py`) that will not interfere with any existing general features or dashboards in your workspace.
+
+---
+
+## 2. Complete End-to-End System Architecture
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Broker as Broker / Client Email
+    participant Inbox as Monitored Mailbox (M365 / Graph API)
+    participant Flow as partner_mail_flow.py (Orchestrator)
+    participant Extractor as AI Classifier & GPU Extractor
+    participant Adapter as partner_adapter.py (API Client)
+    participant PartnerAPI as Selva Sir's Team Endpoint (Swagger)
+    participant DB as converter.db (SQLite Audit Log)
+
+    Broker->>Inbox: Sends email with ACORD & Loss Run PDFs
+    Flow->>Inbox: Polls unread emails (every 60s)
+    Inbox-->>Flow: Returns unread email + attachments + headers
+    Flow->>Flow: Extracts Sender, Modifier, Subject, Message ID
+    Flow->>Extractor: Sends downloaded PDF attachments
+    Extractor-->>Flow: Returns ACORD.pdf, ACORD.json, LossRun.pdf, LossRun.json
+    Flow->>Adapter: Passes Metadata + Files + JSONs
+    Adapter->>PartnerAPI: POST /intake/endpoint (Multipart Files + JSON Payload)
+    PartnerAPI-->>Adapter: HTTP 200 OK (Transaction ID / Status)
+    Adapter-->>Flow: Success response
+    Flow->>Inbox: Marks email as READ
+    Flow->>DB: Records SUCCESS in universal_history table
+```
+
+---
+
+## 3. Data Contract & Payload Mapping
+
+### Data Gathered by Our Pipeline
+| Item # | Data Field / Asset | Source in Our Flow | Format |
+|---|---|---|---|
+| **1** | `sender` | Email header `From: <email>` | String (e.g. `broker@agency.com`) |
+| **2** | `modifier` | Authenticated system/mailbox user | String (e.g. `intake@cognethro.com`) |
+| **3** | `email_metadata` | Subject, Message ID, Received Date | Dictionary / JSON object |
+| **4** | `acord_document` | Downloaded & classified ACORD PDF | Binary File (`.pdf`) |
+| **5** | `acord_data` | Extracted ACORD fields (policy, insured, coverages) | JSON (`acord_extracted.json`) |
+| **6** | `loss_run_document`| Downloaded & classified Loss Run PDF | Binary File (`.pdf`) |
+| **7** | `loss_run_data` | Extracted claims table & loss history | JSON (`loss_run_extracted.json`) |
+
+---
+
+## 4. In-Depth Step-by-Step Implementation
+
+### **Phase 1: Environment Configuration (`.env`)**
+
+Add the dedicated configuration variables into `Sales team - Copy/.env`:
+
+```env
+# ===================================================================
+# DEDICATED PARTNER POC CONFIGURATION
+# ===================================================================
+
+# 1. Mailbox to Monitor (Our Internal Microsoft 365 Account)
+PARTNER_POC_MONITOR_EMAIL=intake@cognethro.com
+PARTNER_POC_POLL_INTERVAL=60
+
+# 2. Partner API Details (Extracted from Selva Sir's Team's Swagger)
+# If Swagger URL is: http://192.168.1.50:8000/docs
+# Then BASE_URL is: http://192.168.1.50:8000
+PARTNER_API_BASE_URL=http://192.168.1.50:8000
+
+# 3. Optional Authentication Key (Only if their endpoint requires it; leave blank if open)
+PARTNER_API_KEY=
+PARTNER_TIMEOUT_SECONDS=90
+```
+
+---
+
+### **Phase 2: Building the Dedicated Adapter (`partner_adapter.py`)**
+
+The adapter is responsible for reading your local files and sending them to the partner's endpoint formatted exactly as specified in their Swagger.
+
+#### [NEW] [partner_adapter.py](file:///c:/Users/Intern/cognet%20full%20app/Sales%20team%20-%20Copy/partner_adapter.py)
+
+```python
+import os
+import json
+import logging
+import httpx
+from pathlib import Path
+from typing import Dict, Any, Optional
+
+logger = logging.getLogger("PartnerAdapter")
+
+class PartnerAdapterClient:
+    """
+    Client adapter that connects our extraction outputs with Selva Sir's team's API.
+    """
+    def __init__(self, base_url: str = None, api_key: str = None):
+        self.base_url = (base_url or os.getenv("PARTNER_API_BASE_URL", "")).rstrip("/")
+        self.api_key = api_key or os.getenv("PARTNER_API_KEY", "")
+        self.timeout = float(os.getenv("PARTNER_TIMEOUT_SECONDS", 90.0))
+
+    def _get_headers(self) -> Dict[str, str]:
+        headers = {"Accept": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    async def submit_payload(
+        self,
+        sender_email: str,
+        modifier_name: str,
+        email_metadata: Dict[str, Any],
+        acord_json_path: Optional[str] = None,
+        acord_file_path: Optional[str] = None,
+        loss_run_json_path: Optional[str] = None,
+        loss_run_file_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Gathers:
+          1. Metadata (Sender, Modifier, Subject)
+          2. ACORD File & JSON
+          3. Loss Run File & JSON
+        And executes an HTTP POST to the partner endpoint.
+        """
+        if not self.base_url:
+            raise ValueError("PARTNER_API_BASE_URL is not configured in .env")
+
+        # Load ACORD JSON
+        acord_data = {}
+        if acord_json_path and os.path.exists(acord_json_path):
+            with open(acord_json_path, "r", encoding="utf-8") as f:
+                acord_data = json.load(f)
+
+        # Load Loss Run JSON
+        loss_run_data = {}
+        if loss_run_json_path and os.path.exists(loss_run_json_path):
+            with open(loss_run_json_path, "r", encoding="utf-8") as f:
+                loss_run_data = json.load(f)
+
+        # Construct JSON Metadata
+        payload = {
+            "submission_metadata": {
+                "sender": sender_email,
+                "modifier": modifier_name,
+                "subject": email_metadata.get("subject", ""),
+                "message_id": email_metadata.get("message_id", ""),
+                "received_at": email_metadata.get("received_at", ""),
+            },
+            "acord_json": acord_data,
+            "loss_run_json": loss_run_data,
+        }
+
+        # Prepare File Attachments for multipart/form-data
+        files = []
+        file_handles = []
+        try:
+            if acord_file_path and os.path.exists(acord_file_path):
+                fh1 = open(acord_file_path, "rb")
+                file_handles.append(fh1)
+                files.append(("acord_file", (Path(acord_file_path).name, fh1, "application/pdf")))
+
+            if loss_run_file_path and os.path.exists(loss_run_file_path):
+                fh2 = open(loss_run_file_path, "rb")
+                file_handles.append(fh2)
+                files.append(("loss_run_file", (Path(loss_run_file_path).name, fh2, "application/pdf")))
+
+            # Endpoint path from Swagger
+            endpoint_url = f"{self.base_url}/api/v1/insurance/submit"
+
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                if files:
+                    response = await client.post(
+                        endpoint_url,
+                        headers=self._get_headers(),
+                        data={"data": json.dumps(payload)},
+                        files=files
+                    )
+                else:
+                    response = await client.post(
+                        endpoint_url,
+                        headers={**self._get_headers(), "Content-Type": "application/json"},
+                        json=payload
+                    )
+
+                response.raise_for_status()
+                return response.json()
+
+        finally:
+            for fh in file_handles:
+                try:
+                    fh.close()
+                except Exception:
+                    pass
+```
+
+---
+
+### **Phase 3: Building the Dedicated Pipeline Runner (`partner_mail_flow.py`)**
+
+#### [NEW] [partner_mail_flow.py](file:///c:/Users/Intern/cognet%20full%20app/Sales%20team%20-%20Copy/partner_mail_flow.py)
+
+```python
+import os
+import sys
+import time
+import json
+import base64
+import asyncio
+import logging
+from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("PartnerMailFlow")
+
+WORKSPACE_DIR = Path(__file__).parent.resolve()
+sys.path.insert(0, str(WORKSPACE_DIR))
+
+from dotenv import load_dotenv
+load_dotenv(WORKSPACE_DIR / ".env")
+
+from Outlook_Agent.outlook_agent_module import OutlookAgentModule
+from partner_adapter import PartnerAdapterClient
+from start_flow import run_local_extraction, classifier_extract, load_categories_from_env, DocumentClassifier
+from database import poc_db
+
+MONITORED_EMAIL = os.getenv("PARTNER_POC_MONITOR_EMAIL", "default")
+POLL_INTERVAL = int(os.getenv("PARTNER_POC_POLL_INTERVAL", 60))
+STAGING_DIR = WORKSPACE_DIR / "partner_poc_staging"
+
+async def process_email_submission(email_data: dict, agent: OutlookAgentModule):
+    """Executes the full pipeline for one email."""
+    # 1. Parse Email Headers
+    sender_val = email_data.get("sender") or email_data.get("from") or {}
+    sender_email = sender_val.get("emailAddress", {}).get("address", "unknown@sender.com") if isinstance(sender_val, dict) else str(sender_val)
+    modifier = MONITORED_EMAIL
+    subject = email_data.get("subject", "No Subject")
+    message_id = email_data.get("id")
+    received_time = email_data.get("receivedDateTime", "")
+
+    logger.info(f"--- [NEW SUBMISSION] From: {sender_email} | Subject: '{subject}' ---")
+
+    # 2. Download Attachments to Staging
+    msg_dir = STAGING_DIR / message_id
+    msg_dir.mkdir(parents=True, exist_ok=True)
+    
+    attachments = email_data.get("attachments", [])
+    downloaded_files = []
+    
+    for att in attachments:
+        name = att.get("name", "")
+        content = att.get("contentBytes")
+        if name and content:
+            file_path = msg_dir / name
+            with open(file_path, "wb") as f:
+                f.write(base64.b64decode(content))
+            downloaded_files.append(file_path)
+
+    if not downloaded_files:
+        logger.warning("Email contains no valid file attachments. Skipping.")
+        return
+
+    # 3. Classify and Extract Documents
+    categories = load_categories_from_env()
+    classifier = DocumentClassifier(categories=categories)
+
+    acord_pdf, acord_json = None, None
+    loss_run_pdf, loss_run_json = None, None
+
+    for pdf_path in downloaded_files:
+        if not pdf_path.name.lower().endswith(".pdf"):
+            continue
+
+        text, pdf_type, rotation = classifier_extract(pdf_path, max_pages=3)
+        category, score = classifier.classify(text)
+        logger.info(f"File '{pdf_path.name}' -> Classified as: {category} (Score: {score})")
+
+        extract_result = await run_local_extraction(category, pdf_path, text)
+        
+        cat_upper = category.upper()
+        if "ACORD" in cat_upper:
+            acord_pdf = str(pdf_path)
+            acord_json = extract_result.get("json")
+        elif "LOSS" in cat_upper or "CLAIM" in cat_upper:
+            loss_run_pdf = str(pdf_path)
+            loss_run_json = extract_result.get("json")
+
+    # 4. Dispatch to Partner API
+    adapter = PartnerAdapterClient()
+    logger.info("Forwarding extracted files and JSONs to Partner API...")
+
+    try:
+        response = await adapter.submit_payload(
+            sender_email=sender_email,
+            modifier_name=modifier,
+            email_metadata={
+                "subject": subject,
+                "message_id": message_id,
+                "received_at": received_time
+            },
+            acord_json_path=acord_json,
+            acord_file_path=acord_pdf,
+            loss_run_json_path=loss_run_json,
+            loss_run_file_path=loss_run_pdf,
+        )
+        logger.info(f"✅ [SUCCESS] Partner API Response: {response}")
+
+        # 5. Mark Email Read in Outlook
+        agent.mark_as_read(message_id)
+
+        # 6. Record Audit in SQLite
+        poc_db.log_universal(
+            module="PARTNER_POC",
+            action="Email Processing & Dispatch",
+            file_name=subject,
+            status="SUCCESS",
+            details=f"Sender: {sender_email} | Result: {json.dumps(response)}",
+            processed_by=modifier
+        )
+
+    except Exception as e:
+        logger.error(f"❌ [ERROR] Partner API dispatch failed: {e}", exc_info=True)
+        poc_db.log_universal(
+            module="PARTNER_POC",
+            action="Email Processing & Dispatch",
+            file_name=subject,
+            status="FAILED",
+            details=f"Error: {str(e)}",
+            processed_by=modifier
+        )
+
+
+async def main_loop():
+    logger.info(f"Starting Dedicated Partner Mail Monitor on mailbox: {MONITORED_EMAIL}")
+    agent = OutlookAgentModule(user_email=MONITORED_EMAIL)
+
+    while True:
+        try:
+            logger.info("Scanning for unread emails...")
+            unread_emails = agent.fetch_unread_emails() or []
+            
+            if unread_emails:
+                logger.info(f"Detected {len(unread_emails)} unread email(s).")
+                for email in unread_emails:
+                    await process_email_submission(email, agent)
+            else:
+                logger.info("No unread emails found.")
+
+        except Exception as err:
+            logger.error(f"Error in monitor loop: {err}")
+
+        logger.info(f"Sleeping for {POLL_INTERVAL}s...\n")
+        await asyncio.sleep(POLL_INTERVAL)
+
+if __name__ == "__main__":
+    asyncio.run(main_loop())
+```
+
+---
+
+## 5. Edge Cases & Resilience Strategy
+
+1. **Email Has ACORD but No Loss Run (or vice versa):**
+   * Handled gracefully: The adapter attaches whichever documents are present and sends `null` for the missing parts.
+2. **Partner Server Down / Temporary Network Failure:**
+   * Logged as `FAILED` in SQLite `converter.db` with the error reason.
+   * The email is **NOT** marked as read, so the monitor will automatically retry processing on the next cycle.
+3. **Non-PDF / Unsupported Attachments:**
+   * Filtered out during classification stage; only valid PDFs are routed to GPU extractors.
+
+---
+
+## 6. Step-by-Step Execution Checklist for Deployment
+
+- [ ] **Step 1:** Receive Swagger URL from Selva Sir's team.
+- [ ] **Step 2:** Update `PARTNER_API_BASE_URL` in [.env](file:///c:/Users/Intern/cognet%20full%20app/Sales%20team%20-%20Copy/.env).
+- [ ] **Step 3:** Confirm endpoint path in [partner_adapter.py](file:///c:/Users/Intern/cognet%20full%20app/Sales%20team%20-%20Copy/partner_adapter.py) (e.g. `/api/v1/insurance/submit`).
+- [ ] **Step 4:** Run standalone test script `test_partner_sync.py` to verify data transmission.
+- [ ] **Step 5:** Start the continuous background listener:
+  ```powershell
+  python partner_mail_flow.py
+  ```
+- [ ] **Step 6:** Send a live test email to the monitored mailbox and verify immediate intake on the partner's platform.

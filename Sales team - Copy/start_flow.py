@@ -199,45 +199,50 @@ if OutlookAgentModule is not None:
                 logger.warning("Failed to read/refresh from simple cache: %s", e)
 
         # 1b. Check Active Dashboard Sessions (OneDrive OAuth Cache Sync)
-        sessions_dir = WORKSPACE_DIR / ".sessions"
-
-        if sessions_dir.exists():
-            import glob
-            session_files = []
-            if getattr(self, "sanitized_user_email", None):
-                user_session = sessions_dir / f"onedrive_{self.sanitized_user_email}.json"
-                if user_session.exists():
-                    session_files.append(str(user_session))
-            if not session_files:
-                session_files = glob.glob(str(sessions_dir / "onedrive_*.json"))
-                session_files.sort(key=os.path.getmtime, reverse=True)
-            for s_file in session_files:
-                try:
-                    import json
-                    with open(s_file) as fh:
-                        data = json.load(fh)
-                    r_token = data.get("refresh_token")
-                    if r_token:
-                        logger.info("Found active Microsoft dashboard session: %s", Path(s_file).name)
-                        app = msal.ConfidentialClientApplication(
-                            self.azure_client_id,
-                            authority=authority,
-                            client_credential=self.azure_client_secret,
-                        )
-                        res = app.acquire_token_by_refresh_token(r_token, scopes=scopes)
-                        if "access_token" in res:
-                            # Update local cache
-                            os.makedirs(os.path.dirname(simple_cache_path), exist_ok=True)
-                            with open(simple_cache_path, "w") as fh:
-                                json.dump({
-                                    "access_token": res["access_token"],
-                                    "refresh_token": res.get("refresh_token", r_token),
-                                    "expires_at": time.time() + res.get("expires_in", 3600),
-                                }, fh)
-                            logger.info("Token synchronized successfully from dashboard session.")
-                            return res["access_token"]
-                except Exception as ex:
-                    logger.warning("Failed to sync session from %s: %s", Path(s_file).name, ex)
+        possible_session_dirs = [
+            WORKSPACE_DIR / "file-classification-" / ".sessions",
+            WORKSPACE_DIR / ".sessions",
+            Path.cwd() / "file-classification-" / ".sessions",
+            Path.cwd() / ".sessions",
+        ]
+        session_files = []
+        for sdir in possible_session_dirs:
+            if sdir.exists():
+                import glob
+                if getattr(self, "sanitized_user_email", None):
+                    user_session = sdir / f"onedrive_{self.sanitized_user_email}.json"
+                    if user_session.exists():
+                        session_files.append(str(user_session))
+                session_files.extend(glob.glob(str(sdir / "onedrive_*.json")))
+        session_files = list(dict.fromkeys(session_files))
+        session_files.sort(key=os.path.getmtime, reverse=True)
+        for s_file in session_files:
+            try:
+                import json
+                with open(s_file) as fh:
+                    data = json.load(fh)
+                r_token = data.get("refresh_token")
+                if r_token:
+                    logger.info("Found active Microsoft dashboard session: %s", Path(s_file).name)
+                    app = msal.ConfidentialClientApplication(
+                        self.azure_client_id,
+                        authority=authority,
+                        client_credential=self.azure_client_secret,
+                    )
+                    res = app.acquire_token_by_refresh_token(r_token, scopes=scopes)
+                    if "access_token" in res:
+                        # Update local cache
+                        os.makedirs(os.path.dirname(simple_cache_path), exist_ok=True)
+                        with open(simple_cache_path, "w") as fh:
+                            json.dump({
+                                "access_token": res["access_token"],
+                                "refresh_token": res.get("refresh_token", r_token),
+                                "expires_at": time.time() + res.get("expires_in", 3600),
+                            }, fh)
+                        logger.info("Token synchronized successfully from dashboard session.")
+                        return res["access_token"]
+            except Exception as ex:
+                logger.warning("Failed to sync session from %s: %s", Path(s_file).name, ex)
 
         # 2. Refresh-token path (explicit refresh_token parameter)
         if refresh_token:
@@ -379,13 +384,18 @@ def get_active_refresh_token(user_email: str | None = None) -> str | None:
     import json
     import os
 
-    sessions_dir = '.sessions'
-    if not os.path.exists(sessions_dir):
-        sessions_dir = os.path.join('file-classification-', '.sessions')
-        if not os.path.exists(sessions_dir):
-            return None
-
-    session_files = glob.glob(os.path.join(sessions_dir, 'onedrive_*.json'))
+    possible_session_dirs = [
+        WORKSPACE_DIR / "file-classification-" / ".sessions",
+        WORKSPACE_DIR / ".sessions",
+        Path.cwd() / "file-classification-" / ".sessions",
+        Path.cwd() / ".sessions",
+    ]
+    session_files = []
+    for sdir in possible_session_dirs:
+        if sdir.exists():
+            import glob
+            session_files.extend(glob.glob(str(sdir / "onedrive_*.json")))
+    session_files = list(dict.fromkeys(session_files))
     session_files.sort(key=os.path.getmtime, reverse=True)
 
     for s_file in session_files:
@@ -672,12 +682,14 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
             router = _UnifiedRouter()
 
             # Monkeypatch classify so it reuses the already-known category
-            async def _fast_classify(file_path, request_id=None):
+            def _fast_classify(file_path, request_id=None):
                 logger.info("[ROUTING] Reusing category '%s' for Gpu_server UnifiedRouter.", category)
                 return category, "gpu_server"
             router.classify_document = _fast_classify
 
-            result = await router.process(str(pdf_path))
+            import inspect
+            raw_res = router.process(str(pdf_path))
+            result = await raw_res if inspect.iscoroutine(raw_res) else raw_res
             return result
         except Exception as e:
             logger.error("Gpu_server (Insurance / Invoice) extraction failed: %s", e, exc_info=True)
@@ -743,14 +755,16 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
             router = UnifiedRouter()
             
             # Dynamically monkeypatch the router to reuse classification and text snippet
-            async def fast_classify(file_path, request_id=None):
-                provider = await router._identify_provider(Path(file_path).name, text[:2000], request_id=request_id)
+            def fast_classify(file_path, request_id=None):
+                provider = router._identify_provider(Path(file_path).name, text[:2000], request_id=request_id)
                 logger.info("[ROUTING] Bypassed router classification. Reusing category: %s | Provider: %s", category, provider)
                 return category, provider
             router.classify_document = fast_classify
             
-            # Run the async process method of Gpu_server's UnifiedRouter
-            result = await router.process(str(pdf_path))
+            # Run the process method of Gpu_server's UnifiedRouter
+            import inspect
+            raw_res = router.process(str(pdf_path))
+            result = await raw_res if inspect.iscoroutine(raw_res) else raw_res
             return result
         except Exception as e:
             logger.error("[ROUTING] UnifiedRouter fallback failed: %s", e, exc_info=True)
@@ -801,7 +815,9 @@ def upload_to_onedrive_cloud(category: str, filename: str, file_path: Path, user
     }
     
     try:
-        resp = requests.put(upload_url, headers=headers, data=file_data)
+        from outlook_agent_module import _get_graph_session
+        sess = _get_graph_session()
+        resp = sess.put(upload_url, headers=headers, data=file_data, timeout=60)
         resp.raise_for_status()
         logger.info("[CLOUD STORE] Successfully uploaded %s to cloud OneDrive.", filename)
     except Exception as e:
@@ -1019,6 +1035,44 @@ def execute_flow(
                     )
                 except Exception as db_err:
                     logger.warning("Failed to log success to converter.db: %s", db_err)
+
+            # ── STAGE 6: Multi-Tenant Automated Submission Hook ─────────────
+            try:
+                from core.submission.submission_service import SubmissionService
+                from core.tenant.loaders import TenantConfigLoader
+                
+                # Check all configured tenants for active submission rules
+                t_loader = TenantConfigLoader(WORKSPACE_DIR)
+                tenants_dir = WORKSPACE_DIR / "config" / "tenants"
+                if tenants_dir.exists():
+                    for t_path in tenants_dir.iterdir():
+                        if t_path.is_dir() and (t_path / "submission.json").exists():
+                            t_cfg = t_loader.load_submission_config(t_path.name)
+                            if t_cfg.enabled:
+                                logger.info("[AUTO-SUBMISSION] Triggering submission for active tenant '%s'...", t_path.name)
+                                sub_service = SubmissionService(workspace_dir=WORKSPACE_DIR)
+                                acord_d = None
+                                loss_d = None
+                                
+                                cat_u = category.upper()
+                                if "ACORD" in cat_u and json_out and os.path.exists(json_out):
+                                    with open(json_out, "r", encoding="utf-8") as _jf:
+                                        acord_d = json.load(_jf)
+                                elif ("LOSS" in cat_u or "CLAIM" in cat_u) and json_out and os.path.exists(json_out):
+                                    with open(json_out, "r", encoding="utf-8") as _jf:
+                                        loss_d = json.load(_jf)
+
+                                sub_res = sub_service.process_and_submit(
+                                    tenant_folder=t_path.name,
+                                    acord_data=acord_d,
+                                    loss_run_data=loss_d,
+                                    pdf_file_paths=[str(dest_pdf_path.resolve())],
+                                    email_address=user_email or sender_info or "system@cognethro.com",
+                                    extra_metadata={"source_file": filename, "category": category}
+                                )
+                                logger.info("[AUTO-SUBMISSION] Tenant '%s' Submission Status: %s (HTTP %s)", t_path.name, sub_res.get("status"), sub_res.get("status_code"))
+            except Exception as sub_err:
+                logger.warning("[AUTO-SUBMISSION] Tenant submission hook error: %s", sub_err)
         else:
             if is_others:
                 txt_dest = dest_dir / f"{filename_stem}_text.txt"

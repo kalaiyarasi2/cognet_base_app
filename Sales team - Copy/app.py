@@ -279,14 +279,55 @@ async def unified_lifespan(a: FastAPI):
     except Exception as e:
         print(f"[WARN] Failed to start Universal Trash cleanup service: {e}")
 
+    # ── Multi-Tenant Partner Mail Flow Background Worker ──
+    print("[INIT] Starting Multi-Tenant Partner Mail Flow background listener...")
+    mail_flow_tasks = []
+    try:
+        import asyncio
+        import json
+        from partner_mail_flow import PartnerMailFlowOrchestrator
+        
+        tenants_dir = WORKSPACE_DIR / "config" / "tenants"
+        active_tenants = []
+        if tenants_dir.exists():
+            for t_path in tenants_dir.iterdir():
+                if t_path.is_dir() and (t_path / "submission.json").exists():
+                    try:
+                        with open(t_path / "submission.json", "r", encoding="utf-8") as _f:
+                            cfg = json.load(_f)
+                            if cfg.get("enabled", True):
+                                active_tenants.append(t_path.name)
+                    except Exception:
+                        active_tenants.append(t_path.name)
+
+        interval = int(os.getenv("PARTNER_MAIL_POLL_INTERVAL", "60"))
+        
+        if not active_tenants:
+            print("[INIT] No active tenant submission configs found in config/tenants/.")
+        else:
+            for t_code in active_tenants:
+                orch = PartnerMailFlowOrchestrator(tenant_folder=t_code)
+                t_task = asyncio.create_task(orch.run_listener(poll_interval=interval))
+                mail_flow_tasks.append(t_task)
+                print(f"[INIT] Started mail ingestion worker for tenant '{t_code}' (interval: {interval}s)")
+    except Exception as e:
+        print(f"[WARN] Failed to start Partner Mail listener: {e}")
+
     yield
 
-    # Cancel cleanup task on shutdown if it exists
+    # Cancel background tasks on shutdown
     if cleanup_task and hasattr(cleanup_task, "cancel"):
         try:
             cleanup_task.cancel()
         except Exception:
             pass
+
+    for m_task in mail_flow_tasks:
+        if hasattr(m_task, "cancel"):
+            try:
+                m_task.cancel()
+            except Exception:
+                pass
 
 
 # Thin FastAPI wrapper — only owns the lifespan and the CORS outer middleware.
@@ -374,6 +415,26 @@ async def gpu_drive_classify_proxy(request: Request):
         return drive_classify(req_obj)
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+from fastapi import File, UploadFile
+
+@app.post("/api/gpu/api/extract", tags=["GPU Extract"])
+@app.post("/api/gpu/extract", tags=["GPU Extract"])
+async def gpu_extract_proxy(request: Request, file: UploadFile = File(...)):
+    """Direct proxy bridge for GPU document extraction."""
+    try:
+        gpu_parent = str(WORKSPACE_DIR / "Gpu_server")
+        gpu_dir = str(WORKSPACE_DIR / "Gpu_server" / "Unified_PDF_Platform")
+        if gpu_parent not in sys.path:
+            sys.path.insert(0, gpu_parent)
+        if gpu_dir not in sys.path:
+            sys.path.insert(0, gpu_dir)
+        from shared_configs import _perform_extraction
+        return await _perform_extraction(file, request)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
 
 @app.get("/api/token-usage", tags=["Token Usage"])
 async def get_token_usage(

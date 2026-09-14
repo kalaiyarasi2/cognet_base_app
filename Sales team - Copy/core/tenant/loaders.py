@@ -2,7 +2,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
-from core.tenant.models import TenantSettings, ModuleConfig
+from core.tenant.models import TenantSettings, ModuleConfig, TenantSubmissionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +12,16 @@ class TenantConfigLoader:
 
     def __init__(self, base_dir: Path):
         self.base_dir = Path(base_dir).resolve()
+
+    def load_submission_config(self, tenant_folder: str = "client_a") -> TenantSubmissionConfig:
+        config_path = self.base_dir / "config" / "tenants" / tenant_folder / "submission.json"
+        if not config_path.exists():
+            return TenantSubmissionConfig(enabled=False)
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return TenantSubmissionConfig(**data)
+
 
     def _bootstrap_tenant(self, tenant_folder: str):
         tenant_dir = self.base_dir / "config" / "tenants" / tenant_folder

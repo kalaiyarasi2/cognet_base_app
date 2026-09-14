@@ -55,8 +55,15 @@ from typing import Any, Dict, List, Optional, Set
 import msal
 import requests as _requests
 from dotenv import load_dotenv
-from langgraph.graph import END, START, StateGraph
-from openai import OpenAI
+try:
+    from langgraph.graph import END, START, StateGraph
+except ImportError:
+    END = START = StateGraph = None
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 from typing_extensions import TypedDict
 
 import openpyxl
@@ -114,9 +121,42 @@ class _EmailAgentState(TypedDict):
 # Internal helpers
 # ===========================================================================
 
+import socket
+from requests.adapters import HTTPAdapter
+
+def _get_default_local_ip() -> Optional[str]:
+    """Detects active local internet interface IP to avoid routing through dead VPN adapters."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return None
+
+class _SourceAddressAdapter(HTTPAdapter):
+    def __init__(self, source_address: str, *args, **kwargs):
+        self.source_address = source_address
+        super().__init__(*args, **kwargs)
+
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs['source_address'] = (self.source_address, 0)
+        return super().init_poolmanager(*args, **kwargs)
+
+def _get_graph_session() -> _requests.Session:
+    session = _requests.Session()
+    local_ip = _get_default_local_ip()
+    if local_ip:
+        adapter = _SourceAddressAdapter(local_ip)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+    return session
+
 def _graph_get(token: str, url: str, params: Optional[dict] = None) -> dict:
     """Authenticated GET against the MS Graph API."""
-    resp = _requests.get(url, headers={"Authorization": f"Bearer {token}"}, params=params)
+    sess = _get_graph_session()
+    resp = sess.get(url, headers={"Authorization": f"Bearer {token}"}, params=params, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -124,10 +164,12 @@ def _graph_get(token: str, url: str, params: Optional[dict] = None) -> dict:
 def _mark_read(token: str, email_id: str) -> None:
     """Mark an Outlook message as read via Graph API."""
     try:
-        _requests.patch(
+        sess = _get_graph_session()
+        sess.patch(
             f"https://graph.microsoft.com/v1.0/me/messages/{email_id}",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={"isRead": True},
+            timeout=15,
         )
     except Exception as exc:
         logger.warning(f"Could not mark email as read: {exc}")
@@ -512,13 +554,15 @@ def _node_download_and_store(state: _EmailAgentState) -> dict:
                     f"https://graph.microsoft.com/v1.0/me/drive/root:/{od_path}:/content"
                 )
 
-                resp = _requests.put(
+                sess = _get_graph_session()
+                resp = sess.put(
                     upload_url,
                     headers={
                         "Authorization": f"Bearer {token}",
                         "Content-Type":  "application/octet-stream",
                     },
                     data=file_bytes,
+                    timeout=60,
                 )
                 resp.raise_for_status()
 
@@ -587,6 +631,8 @@ def _node_log_result(state: _EmailAgentState) -> dict:
 # ---------------------------------------------------------------------------
 
 def _build_workflow():
+    if StateGraph is None:
+        return None
     wf = StateGraph(_EmailAgentState)
     wf.add_node("monitor_email",      _node_monitor_email)
     wf.add_node("load_categories",    _node_load_categories)
@@ -656,9 +702,9 @@ class OutlookAgentModule:
         self.user_email          = user_email
         self.sanitized_user_email = re.sub(r'[^a-zA-Z0-9]', '_', user_email.lower()) if user_email else None
 
-        self.azure_client_id     = azure_client_id     or os.getenv("AZURE_CLIENT_ID",     "")
-        self.azure_client_secret = azure_client_secret or os.getenv("AZURE_CLIENT_SECRET")
-        self.azure_tenant_id     = azure_tenant_id     or os.getenv("AZURE_TENANT_ID",     "")
+        self.azure_client_id     = azure_client_id     or os.getenv("AZURE_CLIENT_ID")     or os.getenv("MICROSOFT_CLIENT_ID",     "")
+        self.azure_client_secret = azure_client_secret or os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET", "")
+        self.azure_tenant_id     = azure_tenant_id     or os.getenv("AZURE_TENANT_ID")     or os.getenv("MICROSOFT_TENANT_ID",     "common")
         self.onedrive_folder     = onedrive_folder     or os.getenv("ONEDRIVE_FOLDER",     "AI_Agent_Attachments")
         self.openai_api_key      = openai_api_key      or os.getenv("OPENAI_API_KEY",      "")
         self.openai_model        = openai_model

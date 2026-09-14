@@ -67,3 +67,43 @@ class AuditLog(BaseModel):
     event_type: str
     message: str
     timestamp: Optional[str] = None
+
+
+class SubmissionAuthConfig(BaseModel):
+    type: str = "none"  # "none", "api_key", "bearer", "basic", "custom_headers"
+    header_name: Optional[str] = None
+    secret_env_var: Optional[str] = None
+    username_env_var: Optional[str] = None
+    password_env_var: Optional[str] = None
+    custom_headers: Dict[str, str] = Field(default_factory=dict)
+
+
+class SubmissionTransformRules(BaseModel):
+    strip_summary_level_keys: List[str] = Field(default_factory=lambda: ["policy_number", "carrier_name"])
+    unified_acord_lossrun: bool = True
+    inject_metadata: bool = False
+    custom_field_mappings: Dict[str, str] = Field(default_factory=dict)
+
+
+class SubmissionAttachmentRules(BaseModel):
+    include_original_pdfs: bool = True
+    multipart_file_field: str = "files"
+    max_attachment_size_mb: int = 50
+
+
+class SubmissionRetryPolicy(BaseModel):
+    max_retries: int = 3
+    backoff_factor: float = 1.5
+    timeout_seconds: int = 30
+
+
+class TenantSubmissionConfig(BaseModel):
+    enabled: bool = True
+    target_url: str = ""
+    http_method: str = "POST"
+    auth: SubmissionAuthConfig = Field(default_factory=SubmissionAuthConfig)
+    default_modifier: float = 1.30
+    transform_rules: SubmissionTransformRules = Field(default_factory=SubmissionTransformRules)
+    attachments: SubmissionAttachmentRules = Field(default_factory=SubmissionAttachmentRules)
+    retry_policy: SubmissionRetryPolicy = Field(default_factory=SubmissionRetryPolicy)
+
