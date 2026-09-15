@@ -29,7 +29,11 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] [PARTNER-FLOW] %(message)s"
 )
+root_l = logging.getLogger()
+if len(root_l.handlers) > 1:
+    root_l.handlers = [root_l.handlers[0]]
 logger = logging.getLogger("PartnerMailFlow")
+
 
 # Load environment configurations
 from dotenv import load_dotenv
@@ -242,6 +246,8 @@ class PartnerMailFlowOrchestrator:
 
                             attachments = email.get("attachments", [])
                             if not attachments:
+                                self._processed_msg_ids.add(msg_id)
+                                logger.info("Email '%s' has no attachments. Skipping.", email.get("subject", "No Subject"))
                                 continue
 
                             msg_staging = self.staging_dir / msg_id
@@ -258,6 +264,9 @@ class PartnerMailFlowOrchestrator:
                             if downloaded:
                                 self._processed_msg_ids.add(msg_id)
                                 await self.process_email_package(email, downloaded, token=token)
+                            else:
+                                self._processed_msg_ids.add(msg_id)
+                                logger.info("Email '%s' has no valid PDF attachments. Skipping.", email.get("subject", "No Subject"))
                     else:
                         logger.debug("No new unread emails.")
 

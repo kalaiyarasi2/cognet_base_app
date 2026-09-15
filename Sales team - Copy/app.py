@@ -21,11 +21,21 @@ if str(WORKSPACE_DIR) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_DIR))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1b. Environment & Global OCR Configuration
+# 1b. Environment & Global OCR Configuration & Logger Deduplication
 # ─────────────────────────────────────────────────────────────────────────────
 from dotenv import load_dotenv
 load_dotenv(WORKSPACE_DIR / ".env")
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+)
+
+# Deduplicate handlers on root logger so logs don't repeat 3 times
+class DeduplicatedStreamHandler(logging.StreamHandler):
+    pass
 
 tess_path = os.getenv("Tesseract_path")
 if tess_path:
@@ -39,6 +49,7 @@ if tess_path:
             print(f"[INFO] Pytesseract configured globally to use: {tess_exe}")
     except ImportError:
         pass
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Dynamic sub-app loader (scoped sys.path per sub-app)

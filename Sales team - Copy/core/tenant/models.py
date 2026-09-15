@@ -87,7 +87,9 @@ class SubmissionTransformRules(BaseModel):
 
 class SubmissionAttachmentRules(BaseModel):
     include_original_pdfs: bool = True
-    multipart_file_field: str = "files"
+    multipart_file_field: str = "file"
+    acord_file_field: str = "acordPdf"
+    loss_runs_file_field: str = "lossRunsPdf"
     max_attachment_size_mb: int = 50
 
 
@@ -103,7 +105,10 @@ class TenantSubmissionConfig(BaseModel):
     http_method: str = "POST"
     auth: SubmissionAuthConfig = Field(default_factory=SubmissionAuthConfig)
     default_modifier: float = 1.30
+    default_submitter_email: Optional[str] = None
+    override_sender_email: bool = False
     transform_rules: SubmissionTransformRules = Field(default_factory=SubmissionTransformRules)
     attachments: SubmissionAttachmentRules = Field(default_factory=SubmissionAttachmentRules)
     retry_policy: SubmissionRetryPolicy = Field(default_factory=SubmissionRetryPolicy)
+
 

@@ -81,25 +81,32 @@ class DynamicHttpAdapter:
                     )
 
                     if active_config.attachments.include_original_pdfs and pdf_file_paths:
+                        acord_field = getattr(active_config.attachments, "acord_file_field", "acordPdf") or "acordPdf"
+                        loss_field = getattr(active_config.attachments, "loss_runs_file_field", "lossRunsPdf") or "lossRunsPdf"
+
                         for path_str in pdf_file_paths:
                             p = Path(path_str)
                             if p.exists() and p.is_file():
                                 f = open(p, "rb")
                                 open_files.append(f)
-                                multipart_files.append(
-                                    ("attachments", (p.name, f, "application/pdf"))
-                                )
+                                pname = p.name.upper()
+                                if any(k in pname for k in ["ACORD", "COMPENSATION", "WORK_COMP", "WC "]):
+                                    multipart_files.append(
+                                        (acord_field, (p.name, f, "application/pdf"))
+                                    )
+                                else:
+                                    multipart_files.append(
+                                        (loss_field, (p.name, f, "application/pdf"))
+                                    )
                             else:
                                 logger.warning(f"Attachment not found or invalid: {path_str}")
 
                     # Dispatch Multipart Form Data with JSON payload file and optional attachments
-                    data = {"payload": json.dumps(payload)}
                     response = requests.request(
                         method=active_config.http_method,
                         url=target_url,
                         headers=headers,
                         auth=auth,
-                        data=data,
                         files=multipart_files,
                         timeout=retry_policy.timeout_seconds,
                     )

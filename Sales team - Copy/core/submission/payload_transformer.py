@@ -40,19 +40,24 @@ class PayloadTransformer:
         if strip_keys:
             self._clean_summary_level(cleaned_loss_run, strip_keys)
 
-        # 2. Determine default modifier
+        # 2. Determine default modifier & submitter email
         resolved_modifier = (
             modifier
             if modifier is not None
             else active_config.default_modifier
         )
 
+        resolved_email = email_address
+        if active_config.default_submitter_email:
+            if active_config.override_sender_email or not resolved_email:
+                resolved_email = active_config.default_submitter_email
+
         # 3. Build target unified JSON
         payload: Dict[str, Any] = {}
 
         if transform_rules.unified_acord_lossrun:
             payload["defaultModifier"] = resolved_modifier
-            payload["email"] = email_address
+            payload["email"] = resolved_email
             payload["acord"] = cleaned_acord
             payload["lossRuns"] = cleaned_loss_run
         else:
@@ -61,7 +66,7 @@ class PayloadTransformer:
                 payload["acord"] = cleaned_acord
             if cleaned_loss_run:
                 payload["lossRuns"] = cleaned_loss_run
-            payload["email"] = email_address
+            payload["email"] = resolved_email
             payload["modifier"] = resolved_modifier
 
         # 4. Inject metadata if enabled
