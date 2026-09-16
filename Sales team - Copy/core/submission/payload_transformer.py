@@ -35,6 +35,10 @@ class PayloadTransformer:
         cleaned_acord = copy.deepcopy(acord_data) if acord_data else {}
         cleaned_loss_run = copy.deepcopy(loss_run_data) if loss_run_data else {}
 
+        # Normalize class-code fields so numeric strings become nullable ints,
+        # matching the partner API's System.Nullable<Int32> schema.
+        self._normalize_class_codes(cleaned_loss_run)
+
         # 1. Strip configured keys from SummaryLevel (e.g., policy_number, carrier_name)
         strip_keys = transform_rules.strip_summary_level_keys
         if strip_keys:
@@ -101,3 +105,31 @@ class PayloadTransformer:
         elif isinstance(loss_data, list):
             for item in loss_data:
                 self._clean_summary_level(item, strip_keys)
+
+    def _normalize_class_codes(self, payload: Any):
+        """
+        Recursively converts class-code fields (claim_class / *_class) to nullable
+        integers so the partner API can deserialize them as System.Nullable<Int32>.
+        Non-numeric values are emitted as None instead of a failing string.
+        """
+        if isinstance(payload, dict):
+            for key, val in payload.items():
+                if key == "claim_class" or (isinstance(key, str) and key.endswith("_class")):
+                    payload[key] = self._to_nullable_int(val)
+                else:
+                    self._normalize_class_codes(val)
+        elif isinstance(payload, list):
+            for item in payload:
+                self._normalize_class_codes(item)
+
+    @staticmethod
+    def _to_nullable_int(value: Any):
+        if value is None or value == "" or value == []:
+            return None
+        if isinstance(value, bool):
+            return int(value)
+        try:
+            numeric = int(float(value))
+            return numeric
+        except (TypeError, ValueError):
+            return None

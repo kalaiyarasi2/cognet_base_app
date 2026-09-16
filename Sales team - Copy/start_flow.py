@@ -756,7 +756,7 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
             
             # Dynamically monkeypatch the router to reuse classification and text snippet
             def fast_classify(file_path, request_id=None):
-                provider = router._identify_provider(Path(file_path).name, text[:2000], request_id=request_id)
+                provider = router._identify_provider(os.path.basename(str(file_path)), text[:2000], request_id=request_id)
                 logger.info("[ROUTING] Bypassed router classification. Reusing category: %s | Provider: %s", category, provider)
                 return category, provider
             router.classify_document = fast_classify
