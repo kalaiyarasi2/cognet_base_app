@@ -66,6 +66,8 @@ def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
 
     if module_name in sys.modules:
         del sys.modules[module_name]
+    if "src" in sys.modules:
+        del sys.modules["src"]
 
     spec = importlib.util.spec_from_file_location(module_name, str(file_path))
     if spec is None or spec.loader is None:
@@ -192,6 +194,7 @@ payroll_app    = load_sub_app("payroll_api",    WORKSPACE_DIR / "Payroll_extract
 claim_app      = load_sub_app("claim_api",      WORKSPACE_DIR / "base-claim-" / "app.py")
 invoice_excel_app = load_sub_app("invoice_excel_api", WORKSPACE_DIR / "Invoice-to-excel-2026" / "Invoice-to-excel-2026" / "app_fastapi.py")
 summary_app    = load_sub_app("summary_api",    WORKSPACE_DIR / "summary & chatbot" / "app.py")
+notice_extraction_app = load_sub_app("notice_extraction_api", WORKSPACE_DIR / "Notice-extraction" / "api.py")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Build the unified ASGI app via PrefixDispatcher
@@ -218,6 +221,7 @@ _dispatcher = PrefixDispatcher(
         ("/api/payroll",    payroll_app),
         ("/api/invoice-excel", invoice_excel_app),
         ("/api/summary",    summary_app),
+        ("/api/notice-extraction", notice_extraction_app),
         ("/claim",          claim_app),
     ],
     default=classifier_app,

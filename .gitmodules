@@ -31,3 +31,6 @@
 [submodule "Sales team - Copy/summary & chatbot"]
 	path = Sales team - Copy/summary & chatbot
 	url = https://github.com/kalaiyarasi2/summary.git
+[submodule "Sales team - Copy/Notice-extraction"]
+	path = Sales team - Copy/Notice-extraction
+	url = https://github.com/jawagarnathst-tech/Notice-extraction

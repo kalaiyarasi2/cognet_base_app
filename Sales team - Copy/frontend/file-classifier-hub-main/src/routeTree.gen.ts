@@ -27,6 +27,7 @@ import { Route as ParitySetupRouteImport } from './routes/parity-setup'
 import { Route as OutlookRouteImport } from './routes/outlook'
 import { Route as OrganisationRouteImport } from './routes/organisation'
 import { Route as OnedriveRouteImport } from './routes/onedrive'
+import { Route as NoticeExtractionRouteImport } from './routes/notice-extraction'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as LoginMonitorRouteImport } from './routes/login-monitor'
 import { Route as LoginRouteImport } from './routes/login'
@@ -134,6 +135,11 @@ const OrganisationRoute = OrganisationRouteImport.update({
 const OnedriveRoute = OnedriveRouteImport.update({
   id: '/onedrive',
   path: '/onedrive',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NoticeExtractionRoute = NoticeExtractionRouteImport.update({
+  id: '/notice-extraction',
+  path: '/notice-extraction',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LogsRoute = LogsRouteImport.update({
@@ -245,6 +251,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/login-monitor': typeof LoginMonitorRoute
   '/logs': typeof LogsRoute
+  '/notice-extraction': typeof NoticeExtractionRoute
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
   '/outlook': typeof OutlookRoute
@@ -283,6 +290,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/login-monitor': typeof LoginMonitorRoute
   '/logs': typeof LogsRoute
+  '/notice-extraction': typeof NoticeExtractionRoute
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
   '/outlook': typeof OutlookRoute
@@ -322,6 +330,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/login-monitor': typeof LoginMonitorRoute
   '/logs': typeof LogsRoute
+  '/notice-extraction': typeof NoticeExtractionRoute
   '/onedrive': typeof OnedriveRoute
   '/organisation': typeof OrganisationRoute
   '/outlook': typeof OutlookRoute
@@ -362,6 +371,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/login-monitor'
     | '/logs'
+    | '/notice-extraction'
     | '/onedrive'
     | '/organisation'
     | '/outlook'
@@ -400,6 +410,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/login-monitor'
     | '/logs'
+    | '/notice-extraction'
     | '/onedrive'
     | '/organisation'
     | '/outlook'
@@ -438,6 +449,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/login-monitor'
     | '/logs'
+    | '/notice-extraction'
     | '/onedrive'
     | '/organisation'
     | '/outlook'
@@ -477,6 +489,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   LoginMonitorRoute: typeof LoginMonitorRoute
   LogsRoute: typeof LogsRoute
+  NoticeExtractionRoute: typeof NoticeExtractionRoute
   OnedriveRoute: typeof OnedriveRoute
   OrganisationRoute: typeof OrganisationRoute
   OutlookRoute: typeof OutlookRoute
@@ -626,6 +639,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnedriveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notice-extraction': {
+      id: '/notice-extraction'
+      path: '/notice-extraction'
+      fullPath: '/notice-extraction'
+      preLoaderRoute: typeof NoticeExtractionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/logs': {
       id: '/logs'
       path: '/logs'
@@ -773,6 +793,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   LoginMonitorRoute: LoginMonitorRoute,
   LogsRoute: LogsRoute,
+  NoticeExtractionRoute: NoticeExtractionRoute,
   OnedriveRoute: OnedriveRoute,
   OrganisationRoute: OrganisationRoute,
   OutlookRoute: OutlookRoute,

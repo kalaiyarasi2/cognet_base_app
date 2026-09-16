@@ -41,6 +41,7 @@ const ALL_MODULES = [
   { code: "BANK_STATEMENT", name: "Bank Statement", desc: "Financial Bank Statement Parsing (Finance)" },
   { code: "VENDOR_INVOICE", name: "Vendor Invoice", desc: "Vendor Invoice Verification (Finance)" },
   { code: "ASTRYA_INVOICE", name: "Invoice to Excel Extractor", desc: "Astrya Invoice Data Extraction (Finance)" },
+  { code: "NOTICE_EXTRACTION", name: "Notice Extraction", desc: "Notice Documents Processing (Finance)" },
 
   // Tools & Core Engines
   { code: "EXTRACTION", name: "Text Extraction", desc: "Document Text Extraction Engine" },

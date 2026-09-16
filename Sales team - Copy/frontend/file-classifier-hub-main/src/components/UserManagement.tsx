@@ -161,6 +161,7 @@ export function UserManagement() {
     { id: "ASTRYA_INVOICE", label: "Invoice to Excel Extractor" },
     { id: "EXTRACTION", label: "Text Extraction" },
     { id: "CLASSIFICATION", label: "Classification" },
+    { id: "NOTICE_EXTRACTION", label: "Notice Extraction" },
     { id: "HEALTH", label: "System Health" },
     { id: "LOGS", label: "Logs" },
     { id: "CONFIGURATION", label: "Configuration" },
