@@ -13,6 +13,7 @@ import sys
 import time
 import json
 import base64
+import hashlib
 import asyncio
 import logging
 import argparse
@@ -119,7 +120,7 @@ class PartnerMailFlowOrchestrator:
         classifier = DocumentClassifier(categories=categories)
 
         acord_json_data: Optional[Dict[str, Any]] = None
-        loss_run_json_data: Optional[Dict[str, Any]] = None
+        loss_run_docs: List[dict] = []
         source_pdf_paths: List[str] = []
 
         for pdf_path in downloaded_pdfs:
@@ -159,14 +160,22 @@ class PartnerMailFlowOrchestrator:
             if "ACORD" in cat_upper or "WORK_COMPENSATION" in cat_upper or "COMPENSATION" in cat_upper or "ACORD" in pdf_path.name.upper():
                 acord_json_data = json_content or acord_json_data
             elif "LOSS" in cat_upper or "CLAIM" in cat_upper or "INSURANCE" in cat_upper or "BERKLEY" in pdf_path.name.upper():
-                loss_run_json_data = json_content or loss_run_json_data
+                if json_content:
+                    loss_run_docs.append(json_content)
+
+        # Merge multiple loss-run documents if more than one was extracted
+        loss_run_data: Optional[Dict[str, Any]] = None
+        if len(loss_run_docs) == 1:
+            loss_run_data = loss_run_docs[0]
+        elif len(loss_run_docs) > 1:
+            loss_run_data = self._merge_loss_runs(loss_run_docs)
 
         # Execute submission via SubmissionService
         logger.info("Invoking Multi-Tenant Submission Service for tenant '%s'...", self.tenant_folder)
         submission_result = self.submission_service.process_and_submit(
             tenant_folder=self.tenant_folder,
             acord_data=acord_json_data,
-            loss_run_data=loss_run_json_data,
+            loss_run_data=loss_run_data,
             pdf_file_paths=source_pdf_paths,
             email_address=sender_email,
             extra_metadata={
@@ -207,6 +216,58 @@ class PartnerMailFlowOrchestrator:
                 logger.warning("Could not mark message as read: %s", e)
 
         return submission_result
+
+    @staticmethod
+    def _merge_loss_runs(docs: List[dict]) -> dict:
+        """
+        Merges multiple loss-run documents extracted from the same email.
+        Concatenates claims and SummaryLevel; sums claimsCount; keeps first
+        non-empty value for any other top-level key.
+        """
+        if len(docs) == 1:
+            return docs[0]
+
+        merged: Dict[str, Any] = {}
+        all_claims: List[dict] = []
+        all_summary: List[dict] = []
+        counts = {"lastFiveYears": 0, "olderThanFiveYears": 0, "total": 0}
+        merged_keys: set = set()
+
+        for doc in docs:
+            # Concatenate claims
+            claims = doc.get("claims")
+            if isinstance(claims, list):
+                all_claims.extend(claims)
+
+            # Concatenate SummaryLevel (any key variant)
+            for sk in ("SummaryLevel", "summary_level", "summaryLevel"):
+                if sk in doc and isinstance(doc[sk], list):
+                    all_summary.extend(doc[sk])
+                    break
+
+            # Sum claimsCount
+            cc = doc.get("claimsCount")
+            if isinstance(cc, dict):
+                for field in counts:
+                    counts[field] += cc.get(field, 0) or 0
+
+            # First non-empty value for every other key
+            for k, v in doc.items():
+                if k in ("claims", "SummaryLevel", "summary_level", "summaryLevel", "claimsCount"):
+                    continue
+                if k not in merged_keys:
+                    merged[k] = v
+                    merged_keys.add(k)
+
+        merged["claims"] = all_claims
+        merged["SummaryLevel"] = all_summary
+        merged["claimsCount"] = counts
+
+        logger.info(
+            "Merged %d loss-run docs: %d claims, %d summary rows",
+            len(docs), len(all_claims), len(all_summary),
+        )
+        return merged
 
     async def run_listener(self, poll_interval: int = 60, user_email: Optional[str] = None, once: bool = False):
         """
@@ -250,7 +311,7 @@ class PartnerMailFlowOrchestrator:
                                 logger.info("Email '%s' has no attachments. Skipping.", email.get("subject", "No Subject"))
                                 continue
 
-                            msg_staging = self.staging_dir / msg_id
+                            msg_staging = self.staging_dir / hashlib.sha256(msg_id.encode("utf-8")).hexdigest()[:16]
                             msg_staging.mkdir(parents=True, exist_ok=True)
 
                             downloaded = []
