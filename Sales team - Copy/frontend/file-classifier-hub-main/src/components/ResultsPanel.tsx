@@ -115,7 +115,7 @@ const ResultsPanel = ({
   const tableData = getTableData();
 
   const handleDownloadJson = async () => {
-    const targetJsonUrl = document.jsonPath ? `${getBackendUrl()}/api/gpu/api/download/${document.jsonPath}` : (document.jsonUrl ? document.jsonUrl.replace(/http:\/\/127\.0\.0\.1:\d+|http:\/\/localhost:\d+/g, getBackendUrl()) : null);
+  const targetJsonUrl = document.jsonPath ? `${getBackendUrl()}/api/gpu/api/download/${document.jsonPath}` : sanitizeUrl(document.jsonUrl);
     
     if (targetJsonUrl) {
       try {
@@ -143,10 +143,15 @@ const ResultsPanel = ({
     URL.revokeObjectURL(url);
   };
 
+  const sanitizeUrl = (url?: string | null) => {
+    if (!url) return null;
+    return url.replace(/^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0)(:\d+)?/i, getBackendUrl() || "");
+  };
+
   const handleDownloadExcel = async () => {
     const excelPath = document.excelPath || document.excel_path;
     const excelUrl = document.excelUrl || document.excel_url;
-    const downloadUrl = excelPath ? `${getBackendUrl()}/api/gpu/api/download/${excelPath}` : (excelUrl ? excelUrl.replace(/http:\/\/127\.0\.0\.1:\d+|http:\/\/localhost:\d+/g, getBackendUrl()) : null);
+    const downloadUrl = excelPath ? `${getBackendUrl()}/api/gpu/api/download/${excelPath}` : sanitizeUrl(excelUrl);
     
     if (!downloadUrl) {
       console.error("No Excel file URL or path available");

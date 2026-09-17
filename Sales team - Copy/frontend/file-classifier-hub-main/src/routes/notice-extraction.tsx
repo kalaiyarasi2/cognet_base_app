@@ -40,6 +40,7 @@ function NoticeExtractionPage() {
   const [history, setHistory] = useState<ExtractionResult[]>([]);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
+  const user = useApp((s) => s.user);
   const addLog = useApp((s) => s.addLog);
 
   async function run() {
@@ -60,10 +61,16 @@ function NoticeExtractionPage() {
       const formData = new FormData();
       formData.append("file", file);
 
+      const headers = new Headers();
+      if (user?.email) {
+        headers.append("X-Processed-By", user.email);
+      }
+
       const { getBackendUrl } = await import("@/lib/api");
       const response = await fetch(`${getBackendUrl()}/api/notice-extraction/api/extract`, {
         method: "POST",
         body: formData,
+        headers,
       });
 
       if (!response.ok) {
