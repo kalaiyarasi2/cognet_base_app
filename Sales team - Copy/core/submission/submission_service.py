@@ -27,6 +27,7 @@ class SubmissionService:
         tenant_folder: str,
         extracted_payloads: Optional[Dict[str, List[Dict[str, Any]]]] = None,
         pdf_file_paths: Optional[List[str]] = None,
+        additional_file_paths: Optional[List[str]] = None,
         email_address: str = "",
         modifier: Optional[float] = None,
         extra_metadata: Optional[Dict[str, Any]] = None,
@@ -85,6 +86,7 @@ class SubmissionService:
             dispatch_result: SubmissionResult = adapter.dispatch(
                 payload=transformed_payload,
                 pdf_file_paths=pdf_file_paths,
+                additional_file_paths=additional_file_paths,
                 config_override=config,
                 saved_submission_path=saved_copy_path,
                 extra_metadata=extra_metadata,
@@ -93,6 +95,7 @@ class SubmissionService:
             dispatch_result: SubmissionResult = self.adapter.dispatch(
                 payload=transformed_payload,
                 pdf_file_paths=pdf_file_paths,
+                additional_file_paths=additional_file_paths,
                 config_override=config,
             )
 

@@ -122,6 +122,7 @@ class PartnerMailFlowOrchestrator:
         from collections import defaultdict
         extracted_payloads: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         source_pdf_paths: List[str] = []
+        additional_file_paths: List[str] = []
 
         for pdf_path in downloaded_pdfs:
             if not pdf_path.exists() or not pdf_path.name.lower().endswith(".pdf"):
@@ -162,6 +163,10 @@ class PartnerMailFlowOrchestrator:
 
             if json_content and isinstance(json_content, dict):
                 extracted_payloads[cat_upper].append(json_content)
+                
+            excel_target = extract_result.get("excel")
+            if excel_target and os.path.exists(excel_target):
+                additional_file_paths.append(str(Path(excel_target).resolve()))
 
         # (Loss run merging logic is now dynamically handled in PayloadTransformer)
 
@@ -171,6 +176,7 @@ class PartnerMailFlowOrchestrator:
             tenant_folder=self.tenant_folder,
             extracted_payloads=extracted_payloads,
             pdf_file_paths=source_pdf_paths,
+            additional_file_paths=additional_file_paths,
             email_address=sender_email,
             extra_metadata={
                 "subject": subject,
