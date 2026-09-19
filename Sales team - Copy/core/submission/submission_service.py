@@ -25,8 +25,7 @@ class SubmissionService:
     def process_and_submit(
         self,
         tenant_folder: str,
-        acord_data: Optional[Dict[str, Any]] = None,
-        loss_run_data: Optional[Dict[str, Any]] = None,
+        extracted_payloads: Optional[Dict[str, List[Dict[str, Any]]]] = None,
         pdf_file_paths: Optional[List[str]] = None,
         email_address: str = "",
         modifier: Optional[float] = None,
@@ -47,8 +46,7 @@ class SubmissionService:
 
         # 1. Transform Payload
         transformed_payload = self.transformer.transform(
-            acord_data=acord_data,
-            loss_run_data=loss_run_data,
+            extracted_payloads=extracted_payloads,
             email_address=email_address,
             modifier=modifier,
             extra_metadata=extra_metadata,
@@ -80,12 +78,23 @@ class SubmissionService:
         except Exception as save_err:
             logger.warning(f"Could not save local verification copy for tenant '{tenant_folder}': {save_err}")
 
-        # 2. Dispatch via HTTP Adapter
-        dispatch_result: SubmissionResult = self.adapter.dispatch(
-            payload=transformed_payload,
-            pdf_file_paths=pdf_file_paths,
-            config_override=config,
-        )
+        # 2. Dispatch via HTTP Adapter or SharePoint Native Adapter
+        if getattr(config, "delivery_method", "http") == "sharepoint_direct":
+            from core.submission.sharepoint_adapter import SharePointDirectAdapter
+            adapter = SharePointDirectAdapter(config)
+            dispatch_result: SubmissionResult = adapter.dispatch(
+                payload=transformed_payload,
+                pdf_file_paths=pdf_file_paths,
+                config_override=config,
+                saved_submission_path=saved_copy_path,
+                extra_metadata=extra_metadata,
+            )
+        else:
+            dispatch_result: SubmissionResult = self.adapter.dispatch(
+                payload=transformed_payload,
+                pdf_file_paths=pdf_file_paths,
+                config_override=config,
+            )
 
         return {
             "status": "SUCCESS" if dispatch_result.success else "FAILED",
@@ -97,4 +106,5 @@ class SubmissionService:
             "execution_time_seconds": dispatch_result.execution_time_seconds,
             "transformed_payload": transformed_payload,
             "saved_submission_path": saved_copy_path,
+            "extra_info": getattr(dispatch_result, "extra_info", {})
         }

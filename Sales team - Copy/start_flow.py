@@ -23,6 +23,10 @@ import shutil
 import base64
 import asyncio
 import argparse
+import json
+import uuid
+import inspect
+import requests
 import logging
 from pathlib import Path
 import re
@@ -231,6 +235,15 @@ if OutlookAgentModule is not None:
                     )
                     res = app.acquire_token_by_refresh_token(r_token, scopes=scopes)
                     if "access_token" in res:
+                        if getattr(self, "user_email", None):
+                            try:
+                                import jwt
+                                decoded = jwt.decode(res["access_token"], options={"verify_signature": False})
+                                ms_email = decoded.get("upn") or decoded.get("unique_name") or ""
+                                if ms_email.lower() != self.user_email.lower():
+                                    continue
+                            except Exception:
+                                pass
                         # Update local cache
                         os.makedirs(os.path.dirname(simple_cache_path), exist_ok=True)
                         with open(simple_cache_path, "w") as fh:
@@ -256,7 +269,19 @@ if OutlookAgentModule is not None:
                 return result["access_token"]
             raise RuntimeError(f"Token refresh failed: {result.get('error_description')}")
 
-        # 3. Manual Device Code Flow with client secret support
+        # 3. Client Credentials Flow (App-only dynamic access)
+        if self.azure_client_secret:
+            logger.info("No active dashboard session. Attempting Client Credentials Flow (App-Only)...")
+            app = msal.ConfidentialClientApplication(
+                self.azure_client_id,
+                authority=authority,
+                client_credential=self.azure_client_secret,
+            )
+            result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+            if "access_token" in result:
+                return result["access_token"]
+            logger.warning(f"Client Credentials failed: {result.get('error_description')}")
+
         if not allow_device_flow:
             raise RuntimeError("No valid token found and device-code flow is disabled in background mode.")
         logger.info("No cached token; initiating device-code flow with client secret...")
@@ -411,10 +436,16 @@ def get_active_refresh_token(user_email: str | None = None) -> str | None:
                         if access_tok:
                             decoded = jwt.decode(access_tok, options={'verify_signature': False})
                             ms_email = decoded.get('upn') or decoded.get('unique_name') or 'unknown'
+                            if user_email and ms_email.lower() != user_email.lower():
+                                continue
                             logger.info("[AUTH] Using dashboard session for Microsoft account: %s (requested by: %s)", ms_email, user_email or 'default')
+                            return refresh
                     except Exception:
                         pass
-                    return refresh
+                    
+                    # If we don't need a specific user, just return the first valid token
+                    if not user_email:
+                        return refresh
         except Exception:
             pass
     return None
@@ -555,17 +586,21 @@ def fetch_gmail_attachments(dest_folder: Path, mark_read: bool = True) -> list[P
         return []
 
 
-async def run_local_extraction(category: str, pdf_path: Path, text: str = "") -> dict:
+async def run_local_extraction(category: str, pdf_path: Path, text: str = "", force_poc_engine: str = None) -> dict:
     """Routes the PDF to the correct backend module based on category and text."""
     category_upper = category.upper()
     text_upper = text.upper() if text else ""
     filename_stem = pdf_path.stem
     
+    if force_poc_engine:
+        logger.info("[ROUTING] Tenant config overriding routing -> Forcing POC Engine: %s", force_poc_engine)
+        category_upper = force_poc_engine.upper()
+        text_upper = force_poc_engine.upper()
+    
     # 1. Parity_setup (SBC)
     if "PARITY" in category_upper or "SBC" in category_upper or "SUMMARY OF BENEFITS" in text_upper or "SBC" in text_upper:
         logger.info("[ROUTING] Routing to Parity_setup (SBC Extractor) for file: %s", pdf_path.name)
         try:
-            import sys
             from pathlib import Path
             workspace_root = Path(__file__).parent.resolve()
             parity_root = workspace_root / "Parity_setup"
@@ -599,7 +634,6 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
             excel_writer.write(schema_dict, validation_results, str(excel_path))
             
             json_path = out_dir / f"{filename_stem}_extracted.json"
-            import json
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(schema_dict, f, indent=4)
                 
@@ -615,7 +649,6 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
     elif "RENEWAL" in category_upper or "RENEWAL" in text_upper:
         logger.info("[ROUTING] Routing to Renewal_process for file: %s", pdf_path.name)
         try:
-            import sys
             from pathlib import Path
             workspace_root = Path(__file__).parent.resolve()
             renewal_root = workspace_root / "Renewal_process"
@@ -641,7 +674,6 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
                 
             out_json = renewal_root / "output" / f"extracted_rates_{filename_stem}.json"
             out_json.parent.mkdir(parents=True, exist_ok=True)
-            import json
             with open(out_json, "w", encoding="utf-8") as f:
                 json.dump(rates_json, f, indent=4)
                 
@@ -667,7 +699,6 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
     ):
         logger.info("[ROUTING] Routing to Gpu_server / UnifiedRouter (Insurance Claims / Loss Runs / General Invoices) for file: %s", pdf_path.name)
         try:
-            import sys
             from pathlib import Path
             workspace_root = Path(__file__).parent.resolve()
             unified_platform_dir = workspace_root / "Gpu_server" / "Unified_PDF_Platform"
@@ -699,7 +730,6 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
     elif ("RESOURCING" in category_upper or "PLAN_COMPARISON" in category_upper) and not ("LOSS" in category_upper or "LOSS" in text_upper or "CLAIM" in category_upper):
         logger.info("[ROUTING] Routing to Resourcing-edge (Plan Rate Comparison) for file: %s", pdf_path.name)
         try:
-            import sys
             from pathlib import Path
             workspace_root = Path(__file__).parent.resolve()
             resourcing_root = workspace_root / "Resourcing-edge"
@@ -725,7 +755,6 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
     elif "RPVE" in category_upper or "RPVE" in text_upper or "BENEFIT INVOICE" in text_upper or "BENEFIT_INVOICE" in category_upper or "RAPT" in text_upper or "CENSUS" in text_upper:
         logger.info("[ROUTING] Routing to rpve (Benefit Invoice & RAPT Census Extractor) for file: %s", pdf_path.name)
         try:
-            import sys
             from pathlib import Path
             workspace_root = Path(__file__).parent.resolve()
             rpve_root = workspace_root / "rpve"
@@ -747,6 +776,51 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "") ->
         except Exception as e:
             logger.error("rpve extraction failed: %s", e, exc_info=True)
             return {"error": f"rpve extraction failed: {str(e)}"}
+            
+    # 6. Notice Extraction
+    elif "NOTICE" in category_upper or "NOTICE" in text_upper or "NOTICE" in filename_stem.upper():
+        logger.info("[ROUTING] Routing to Notice-extraction for file: %s", pdf_path.name)
+        try:
+            from pathlib import Path
+            workspace_root = Path(__file__).parent.resolve()
+            notice_root = workspace_root / "Notice-extraction"
+            
+            if str(notice_root) not in sys.path:
+                sys.path.insert(0, str(notice_root))
+                
+            # Import dynamically to avoid loading issues if this branch is never hit
+            from main import run_pipeline
+            from src.layout_service import LayoutConfig
+            
+            layout_config = LayoutConfig()
+            doc_result, ai_result = run_pipeline(
+                file_path=pdf_path,
+                layout_config=layout_config,
+                conf_threshold=0.80,
+                save_debug=False,
+                save_raw_ocr=False,
+                print_coordinates=False,
+                lang="en",
+                run_ai=True,
+                ai_model=os.getenv("AI_MODEL", "gpt-4o"),
+            )
+            
+            if not ai_result:
+                return {"error": "Notice AI extraction returned no result."}
+                
+            out_json = notice_root / "output" / f"extracted_notice_{filename_stem}.json"
+            out_json.parent.mkdir(parents=True, exist_ok=True)
+            
+            extracted_data = ai_result.to_strict_dict()
+            with open(out_json, "w", encoding="utf-8") as f:
+                json.dump(extracted_data, f, indent=4)
+                
+            return {
+                "json": str(out_json),
+            }
+        except Exception as e:
+            logger.error("Notice-extraction failed: %s", e, exc_info=True)
+            return {"error": f"Notice-extraction failed: {str(e)}"}
             
     else:
         logger.info("[ROUTING] Category '%s' is not mapped to any specific local POC extractor. Falling back to UnifiedRouter.", category)

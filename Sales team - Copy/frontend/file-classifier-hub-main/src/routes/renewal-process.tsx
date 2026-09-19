@@ -9,6 +9,7 @@ import { Panel } from "@/components/Panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { api, getBackendUrl } from "@/lib/api";
+import { useAuth } from "@/lib/store";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/renewal-process")({
@@ -35,6 +36,7 @@ const STAGES = [
 ];
 
 function RenewalProcessPage() {
+  const { user } = useAuth();
   const [censusFile, setCensusFile] = useState<File | null>(null);
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -106,7 +108,7 @@ function RenewalProcessPage() {
     try {
       // Stage 1: Census Ingestion
       setStageIdx(0);
-      const initialJob = await api.processRenewal(censusFile, invoiceFile);
+      const initialJob = await api.processRenewal(censusFile, invoiceFile, user?.email || undefined);
 
       // Poll until finished (increased max attempts to 600 = 15 minutes)
       const jobId = initialJob.job_id;

@@ -66,9 +66,9 @@ def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
 
     if module_name in sys.modules:
         del sys.modules[module_name]
-    if "src" in sys.modules:
-        del sys.modules["src"]
-
+    keys_to_del = [k for k in sys.modules if k == "src" or k.startswith("src.")]
+    for k in keys_to_del:
+        del sys.modules[k]
     spec = importlib.util.spec_from_file_location(module_name, str(file_path))
     if spec is None or spec.loader is None:
         with open(log_file, "a", encoding="utf-8") as f:
@@ -192,7 +192,7 @@ rpve_app       = load_sub_app("rpve_api",       WORKSPACE_DIR / "rpve" / "RPVE_s
 converter_app  = load_sub_app("converter_api",  WORKSPACE_DIR / "File-Convertor" / "main.py")
 payroll_app    = load_sub_app("payroll_api",    WORKSPACE_DIR / "Payroll_extractor" / "api_server.py")
 claim_app      = load_sub_app("claim_api",      WORKSPACE_DIR / "base-claim-" / "app.py")
-invoice_excel_app = load_sub_app("invoice_excel_api", WORKSPACE_DIR / "Invoice-to-excel-2026" / "Invoice-to-excel-2026" / "app_fastapi.py")
+invoice_excel_app = load_sub_app("invoice_excel_api", WORKSPACE_DIR / "Invoice-to-excel-2026" / "app_fastapi.py")
 summary_app    = load_sub_app("summary_api",    WORKSPACE_DIR / "summary & chatbot" / "app.py")
 notice_extraction_app = load_sub_app("notice_extraction_api", WORKSPACE_DIR / "Notice-extraction" / "api.py")
 
@@ -437,7 +437,22 @@ from fastapi import File, UploadFile
 @app.post("/api/gpu/extract", tags=["GPU Extract"])
 async def gpu_extract_proxy(request: Request, file: UploadFile = File(...)):
     """Direct proxy bridge for GPU document extraction."""
+    processed_by = request.headers.get("X-Processed-By")
+    if not processed_by:
+        try:
+            form = await request.form()
+            processed_by = form.get("processed_by")
+        except Exception:
+            pass
+    processed_by = processed_by or "SYSTEM"
+
     try:
+        try:
+            from database.poc_db import log_universal
+            log_universal("GPU_EXTRACTION", "extract", file.filename, "STARTED", "Processing document", processed_by)
+        except Exception:
+            pass
+
         gpu_parent = str(WORKSPACE_DIR / "Gpu_server")
         gpu_dir = str(WORKSPACE_DIR / "Gpu_server" / "Unified_PDF_Platform")
         if gpu_parent not in sys.path:
@@ -445,10 +460,33 @@ async def gpu_extract_proxy(request: Request, file: UploadFile = File(...)):
         if gpu_dir not in sys.path:
             sys.path.insert(0, gpu_dir)
         from shared_configs import _perform_extraction
-        return await _perform_extraction(file, request)
+        result = await _perform_extraction(file, request)
+        
+        if isinstance(result, dict):
+            if "error" in result:
+                try:
+                    from database.poc_db import log_universal
+                    log_universal("GPU_EXTRACTION", "extract", file.filename, "FAILED", result["error"], processed_by)
+                except Exception:
+                    pass
+            else:
+                try:
+                    from database.poc_db import log_universal
+                    doc_type = result.get("type", "GPU_EXTRACTION")
+                    pages = result.get("pages", 0)
+                    log_universal(doc_type, "extract", file.filename, "SUCCESS", f"Extracted {pages} pages", processed_by)
+                except Exception:
+                    pass
+                    
+        return result
     except Exception as e:
         import traceback
         traceback.print_exc()
+        try:
+            from database.poc_db import log_universal
+            log_universal("GPU_EXTRACTION", "extract", file.filename if file else "unknown", "FAILED", str(e), processed_by)
+        except Exception:
+            pass
         return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
 
 @app.get("/api/token-usage", tags=["Token Usage"])

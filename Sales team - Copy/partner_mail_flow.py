@@ -119,8 +119,8 @@ class PartnerMailFlowOrchestrator:
         categories = load_categories_from_env()
         classifier = DocumentClassifier(categories=categories)
 
-        acord_json_data: Optional[Dict[str, Any]] = None
-        loss_run_docs: List[dict] = []
+        from collections import defaultdict
+        extracted_payloads: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         source_pdf_paths: List[str] = []
 
         for pdf_path in downloaded_pdfs:
@@ -132,7 +132,7 @@ class PartnerMailFlowOrchestrator:
 
             try:
                 text, pdf_type, rotation = classifier_extract(pdf_path, max_pages=3)
-                category, score = classifier.classify(text)
+                category, score = classifier.classify(text, file_name=pdf_path.name)
             except Exception as e:
                 logger.error("Classification error for %s: %s", pdf_path.name, e)
                 category, score = "Others", 0.0
@@ -140,8 +140,11 @@ class PartnerMailFlowOrchestrator:
 
             logger.info("Category determined: %s (Confidence: %.2f)", category, score)
 
-            # Run GPU / Local Extraction
-            extract_result = await run_local_extraction(category, pdf_path, text)
+            # Run GPU / Local Extraction with optional Tenant POC Override
+            force_poc_engine = self.submission_config.transform_rules.poc_routing_overrides.get(category.upper())
+            if not force_poc_engine:
+                force_poc_engine = self.submission_config.transform_rules.default_poc_engine
+            extract_result = await run_local_extraction(category, pdf_path, text, force_poc_engine=force_poc_engine)
             
             cat_upper = category.upper()
             json_target = extract_result.get("json") or extract_result.get("json_path")
@@ -157,25 +160,16 @@ class PartnerMailFlowOrchestrator:
             elif isinstance(extract_result, dict) and any(k in extract_result for k in ["Applicant", "SummaryLevel", "claims"]):
                 json_content = extract_result
 
-            if "ACORD" in cat_upper or "WORK_COMPENSATION" in cat_upper or "COMPENSATION" in cat_upper or "ACORD" in pdf_path.name.upper():
-                acord_json_data = json_content or acord_json_data
-            elif "LOSS" in cat_upper or "CLAIM" in cat_upper or "INSURANCE" in cat_upper or "BERKLEY" in pdf_path.name.upper():
-                if json_content:
-                    loss_run_docs.append(json_content)
+            if json_content and isinstance(json_content, dict):
+                extracted_payloads[cat_upper].append(json_content)
 
-        # Merge multiple loss-run documents if more than one was extracted
-        loss_run_data: Optional[Dict[str, Any]] = None
-        if len(loss_run_docs) == 1:
-            loss_run_data = loss_run_docs[0]
-        elif len(loss_run_docs) > 1:
-            loss_run_data = self._merge_loss_runs(loss_run_docs)
+        # (Loss run merging logic is now dynamically handled in PayloadTransformer)
 
         # Execute submission via SubmissionService
         logger.info("Invoking Multi-Tenant Submission Service for tenant '%s'...", self.tenant_folder)
         submission_result = self.submission_service.process_and_submit(
             tenant_folder=self.tenant_folder,
-            acord_data=acord_json_data,
-            loss_run_data=loss_run_data,
+            extracted_payloads=extracted_payloads,
             pdf_file_paths=source_pdf_paths,
             email_address=sender_email,
             extra_metadata={

@@ -18,8 +18,10 @@ export const Route = createFileRoute("/psh-claim-validator")({
   component: PshClaimValidatorPage,
 });
 
+import { getBackendUrl } from "@/lib/api";
+
 // ─── Base-claim- app is mounted at /claim on the main backend (port 8000) ─────
-const PSH_BACKEND_URL = "";
+const PSH_BACKEND_URL = getBackendUrl();
 const PSH_CLAIM_PREFIX = "/claim";
 
 // ─── Field metadata matching EXPECTED_KEYS in base-claim- backend ─────────────
@@ -127,7 +129,7 @@ function PshClaimValidatorPage() {
       const res = await fetch(`${PSH_BACKEND_URL}${PSH_CLAIM_PREFIX}/api/extract-screenshot`, {
         method: "POST",
         headers: {
-          "X-Processed-By": user?.email || "SYSTEM"
+          "X-User-Email": user?.email || "SYSTEM"
         },
         body: formData,
       });

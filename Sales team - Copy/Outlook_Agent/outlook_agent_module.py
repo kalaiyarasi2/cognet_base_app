@@ -1026,9 +1026,10 @@ class OutlookAgentModule:
         )
         emails = []
 
+        base_url = f"https://graph.microsoft.com/v1.0/users/{self.user_email}" if self.user_email else "https://graph.microsoft.com/v1.0/me"
         data = _graph_get(
             token,
-            "https://graph.microsoft.com/v1.0/me/messages",
+            f"{base_url}/messages",
             params={
                 "$filter": "isRead eq false",
                 "$top":    limit,
@@ -1046,7 +1047,7 @@ class OutlookAgentModule:
             if msg.get("hasAttachments"):
                 att_data = _graph_get(
                     token,
-                    f"https://graph.microsoft.com/v1.0/me/messages/{msg_id}/attachments",
+                    f"{base_url}/messages/{msg_id}/attachments",
                 )
                 att_list = att_data.get("value", []) if isinstance(att_data, dict) else []
                 for att in att_list:

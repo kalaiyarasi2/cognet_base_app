@@ -926,6 +926,8 @@ async def process_pdf_endpoint(request: Request, file: UploadFile = File(...)):
             from database import poc_db
             processed_by = request.headers.get("X-Processed-By") or request.query_params.get("processed_by") or "SYSTEM"
             poc_db.log_resourcing_run(file.filename, "SUCCESS", pdf_path.stem, f"{pdf_path.stem}.json", processed_by=processed_by)
+            poc_db.log_universal(module="Resourcing Edge", action="STARTED", file_name=file.filename, status="STARTED", details="Starting Resourcing Edge pipeline", processed_by=processed_by)
+            poc_db.log_universal(module="Resourcing Edge", action="SUCCESS", file_name=file.filename, status="SUCCESS", details="Resourcing Edge pipeline completed successfully", processed_by=processed_by)
             print(f"[DB] Logged Resourcing Edge run for {file.filename} to converter.db", flush=True)
         except Exception as db_err:
             print(f"[WARN] Failed to log Resourcing Edge run to DB: {db_err}", flush=True)
@@ -964,6 +966,13 @@ async def process_pdf_endpoint(request: Request, file: UploadFile = File(...)):
             
     except Exception as exc:
         logger.error("Error occurred during PDF pipeline run: %s", exc)
+        try:
+            from database import poc_db
+            processed_by = request.headers.get("X-Processed-By") or request.query_params.get("processed_by") or "SYSTEM"
+            poc_db.log_universal(module="Resourcing Edge", action="FAILED", file_name=file.filename, status="FAILED", details=f"Error: {str(exc)[:100]}", processed_by=processed_by)
+        except Exception:
+            pass
+            
         raise HTTPException(
             status_code=500,
             detail={

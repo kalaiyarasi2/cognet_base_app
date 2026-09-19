@@ -349,6 +349,12 @@ class SharePointAgent:
                                 self.log(f"Drive '{d.get('name')}' root children returned HTTP {rc.status_code}")
                         except Exception as ex:
                             self.log(f"Drive '{d.get('name')}' root peek error: {ex}")
+                            
+                    if best_drive_id is not None:
+                        self.drive_id = best_drive_id
+                        self.log(f"Selected fallback drive (id={best_drive_id}) with {best_drive_count} items ✓")
+                        return True
+                        
             except Exception as e:
                 self.log(f"Drive list fetch error at '{d_url}': {e}")
 
@@ -375,10 +381,9 @@ class SharePointAgent:
                             items = rc.json().get("value", [])
                             root_names = [it.get("name", "") for it in items]
                             self.log(f"Lists API: '{lib_name}' drive has {len(items)} item(s): {root_names}")
-                            if items:
-                                self.drive_id = lib_drive_id
-                                self.log(f"Selected '{lib_name}' drive via Lists API (id={lib_drive_id}) ✓")
-                                return True
+                            self.drive_id = lib_drive_id
+                            self.log(f"Selected '{lib_name}' drive via Lists API (id={lib_drive_id}) ✓")
+                            return True
                         else:
                             self.log(f"Lists API drive root returned HTTP {rc.status_code} for '{lib_name}'")
                 else:
@@ -671,12 +676,14 @@ class SharePointAgent:
             body = {
                 "name": folder_name,
                 "folder": {},
-                "@microsoft.graph.conflictBehavior": "replace"
+                "@microsoft.graph.conflictBehavior": "fail"
             }
             try:
                 res = requests.post(create_url, headers=headers, json=body, timeout=10)
                 if res.status_code in (200, 201):
                     self.log(f"Ensured SharePoint output folder exists: '{current_full_path}'")
+                elif res.status_code == 409:
+                    self.log(f"SharePoint output folder already exists: '{current_full_path}'")
                 else:
                     self.log(f"SharePoint folder creation status for '{current_full_path}': HTTP {res.status_code}")
             except Exception as e:

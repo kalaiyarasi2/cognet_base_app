@@ -39,11 +39,22 @@ async function request<T>(path: string, init?: RequestInit, query?: Record<strin
     const qs = params.toString();
     if (qs) url += `?${qs}`;
   }
+  let userEmail = "";
+  if (typeof window !== "undefined") {
+    try {
+      const authData = JSON.parse(localStorage.getItem("fc_auth_token") || "{}");
+      if (authData?.state?.user?.email) {
+        userEmail = authData.state.user.email;
+      }
+    } catch (e) {}
+  }
+
   const res = await fetch(url, {
     ...init,
     credentials: "include",
     headers: {
       ...(init?.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
+      ...(userEmail ? { "X-User-Email": userEmail } : {}),
       ...(init?.headers || {}),
     },
   });
@@ -329,13 +340,14 @@ export const api = {
     }),
 
   // --- Renewal Process ---
-  processRenewal: (censusFile: File, invoiceFile: File) => {
+  processRenewal: (censusFile: File, invoiceFile: File, userEmail?: string) => {
     const fd = new FormData();
     fd.append("census", censusFile);
     fd.append("invoice", invoiceFile);
     return request<any>("/api/renewal/api/process", {
       method: "POST",
       body: fd,
+      headers: userEmail ? { "X-User-Email": userEmail } : {},
     });
   },
   getRenewalJobs: () =>

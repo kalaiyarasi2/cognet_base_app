@@ -18,8 +18,7 @@ class PayloadTransformer:
 
     def transform(
         self,
-        acord_data: Optional[Dict[str, Any]] = None,
-        loss_run_data: Optional[Dict[str, Any]] = None,
+        extracted_payloads: Optional[Dict[str, List[Dict[str, Any]]]] = None,
         email_address: str = "",
         modifier: Optional[float] = None,
         extra_metadata: Optional[Dict[str, Any]] = None,
@@ -31,20 +30,7 @@ class PayloadTransformer:
         active_config = config_override or self.config
         transform_rules = active_config.transform_rules
 
-        # Deep copy inputs to prevent mutating original extraction cache
-        cleaned_acord = copy.deepcopy(acord_data) if acord_data else {}
-        cleaned_loss_run = copy.deepcopy(loss_run_data) if loss_run_data else {}
-
-        # Normalize class-code fields so numeric strings become nullable ints,
-        # matching the partner API's System.Nullable<Int32> schema.
-        self._normalize_class_codes(cleaned_loss_run)
-
-        # 1. Strip configured keys from SummaryLevel (e.g., policy_number, carrier_name)
-        strip_keys = transform_rules.strip_summary_level_keys
-        if strip_keys:
-            self._clean_summary_level(cleaned_loss_run, strip_keys)
-
-        # 2. Determine default modifier & submitter email
+        # Determine default modifier & submitter email
         resolved_modifier = (
             modifier
             if modifier is not None
@@ -56,22 +42,70 @@ class PayloadTransformer:
             if active_config.override_sender_email or not resolved_email:
                 resolved_email = active_config.default_submitter_email
 
-        # 3. Build target unified JSON
+        # 3. Process each category from the extracted_payloads
         payload: Dict[str, Any] = {}
-
+        
+        extracted_payloads = extracted_payloads or {}
+        
+        # Backward compatibility for unified_acord_lossrun
+        cleaned_acord = {}
+        cleaned_loss_run = {}
+        
         if transform_rules.unified_acord_lossrun:
+            # Extract ACORD-like data
+            for cat, payloads in extracted_payloads.items():
+                if "ACORD" in cat or "COMPENSATION" in cat:
+                    cleaned_acord = copy.deepcopy(payloads[0]) if payloads else {}
+            # Extract LOSS-like data
+            loss_payloads = []
+            for cat, payloads in extracted_payloads.items():
+                if "LOSS" in cat or "CLAIM" in cat or "INSURANCE" in cat:
+                    loss_payloads.extend(payloads)
+            
+            if len(loss_payloads) == 1:
+                cleaned_loss_run = copy.deepcopy(loss_payloads[0])
+            elif len(loss_payloads) > 1:
+                cleaned_loss_run = copy.deepcopy(self._merge_documents(loss_payloads))
+                
+            # Normalizations specific to Loss Runs
+            self._normalize_class_codes(cleaned_loss_run)
+            if transform_rules.strip_summary_level_keys:
+                self._clean_summary_level(cleaned_loss_run, transform_rules.strip_summary_level_keys)
+
             payload["defaultModifier"] = resolved_modifier
             payload["email"] = resolved_email
             payload["acord"] = cleaned_acord
             payload["lossRuns"] = cleaned_loss_run
+            
         else:
-            # Standard passthrough if tenant doesn't require unified wrapper
-            if cleaned_acord:
-                payload["acord"] = cleaned_acord
-            if cleaned_loss_run:
-                payload["lossRuns"] = cleaned_loss_run
+            # Fully dynamic payload mapping for any POC
             payload["email"] = resolved_email
-            payload["modifier"] = resolved_modifier
+            
+            for category, payloads in extracted_payloads.items():
+                if not payloads:
+                    continue
+                    
+                # Apply merge strategy if there are multiple documents of the same category
+                if len(payloads) == 1:
+                    merged_data = copy.deepcopy(payloads[0])
+                else:
+                    if transform_rules.merge_multiple_documents:
+                        merged_data = copy.deepcopy(self._merge_documents(payloads))
+                    else:
+                        merged_data = copy.deepcopy(payloads)
+                
+                # Check for tenant-specified mapping key
+                target_key = transform_rules.payload_mapping.get(category)
+                
+                if target_key:
+                    payload[target_key] = merged_data
+                else:
+                    # If no explicit mapping, inject directly into root if it's a dict
+                    if isinstance(merged_data, dict):
+                        payload.update(merged_data)
+                    else:
+                        # Fallback for arrays without a specific key
+                        payload[category.lower()] = merged_data
 
         # 4. Inject metadata if enabled
         if transform_rules.inject_metadata:
@@ -133,3 +167,41 @@ class PayloadTransformer:
             return numeric
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _merge_documents(docs: List[dict]) -> dict:
+        """
+        Dynamically merges multiple extracted documents of the same category.
+        Concatenates lists (like claims), sums integers (like claimsCount),
+        and takes the first non-empty value for other keys.
+        """
+        if not docs:
+            return {}
+        if len(docs) == 1:
+            return docs[0]
+
+        merged: Dict[str, Any] = {}
+        list_keys = set()
+        
+        for doc in docs:
+            if not isinstance(doc, dict):
+                continue
+            for k, v in doc.items():
+                if isinstance(v, list):
+                    list_keys.add(k)
+                    if k not in merged:
+                        merged[k] = []
+                    merged[k].extend(v)
+                elif isinstance(v, dict) and k == "claimsCount":
+                    # Special sum logic for nested int counts
+                    if k not in merged:
+                        merged[k] = {"lastFiveYears": 0, "olderThanFiveYears": 0, "total": 0}
+                    merged[k]["lastFiveYears"] += int(v.get("lastFiveYears") or 0)
+                    merged[k]["olderThanFiveYears"] += int(v.get("olderThanFiveYears") or 0)
+                    merged[k]["total"] += int(v.get("total") or 0)
+                else:
+                    if k not in merged or not merged[k]:
+                        merged[k] = v
+                        
+        return merged
+

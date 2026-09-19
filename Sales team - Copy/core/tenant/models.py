@@ -82,7 +82,11 @@ class SubmissionTransformRules(BaseModel):
     strip_summary_level_keys: List[str] = Field(default_factory=lambda: ["policy_number", "carrier_name"])
     unified_acord_lossrun: bool = True
     inject_metadata: bool = False
+    merge_multiple_documents: bool = True
+    payload_mapping: Dict[str, str] = Field(default_factory=dict)
+    poc_routing_overrides: Dict[str, str] = Field(default_factory=dict)
     custom_field_mappings: Dict[str, str] = Field(default_factory=dict)
+    default_poc_engine: Optional[str] = None
 
 
 class SubmissionAttachmentRules(BaseModel):
@@ -90,6 +94,7 @@ class SubmissionAttachmentRules(BaseModel):
     multipart_file_field: str = "file"
     acord_file_field: str = "acordPdf"
     loss_runs_file_field: str = "lossRunsPdf"
+    excel_file_field: str = "excelFile"
     max_attachment_size_mb: int = 50
 
 
@@ -101,6 +106,8 @@ class SubmissionRetryPolicy(BaseModel):
 
 class TenantSubmissionConfig(BaseModel):
     enabled: bool = True
+    delivery_method: str = "http" # "http" or "sharepoint_direct"
+    sharepoint_base_folder: str = "Notices"
     target_url: str = ""
     http_method: str = "POST"
     auth: SubmissionAuthConfig = Field(default_factory=SubmissionAuthConfig)
