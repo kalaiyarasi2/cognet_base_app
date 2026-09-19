@@ -120,6 +120,34 @@ function NoticeExtractionPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function downloadExcel() {
+    if (!result) return;
+    try {
+      const { getBackendUrl } = await import("@/lib/api");
+      const response = await fetch(`${getBackendUrl()}/api/notice-extraction/api/export-excel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          extracted_data: result.extracted_data,
+          file_name: result.document.file_name
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to generate Excel");
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${result.document.file_name.replace(/\.[^.]+$/, "")}_extraction_tracker.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("Excel downloaded successfully.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to download Excel");
+    }
+  }
+
   function loadHistoryItem(item: ExtractionResult) {
     setResult(item);
     setFile(null);
@@ -229,9 +257,14 @@ function NoticeExtractionPage() {
           description="Extracted notice details"
           actions={
             result && (
-              <Button size="sm" variant="outline" onClick={downloadOutput}>
-                <Download className="w-3 h-3" /> Download JSON
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={downloadOutput}>
+                  <Download className="w-3 h-3 mr-1" /> JSON
+                </Button>
+                <Button size="sm" variant="outline" onClick={downloadExcel} className="bg-green-50 text-green-700 hover:bg-green-100 border-green-200">
+                  <Download className="w-3 h-3 mr-1" /> Excel
+                </Button>
+              </div>
             )
           }
         >

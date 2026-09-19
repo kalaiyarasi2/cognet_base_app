@@ -815,8 +815,20 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "", fo
             with open(out_json, "w", encoding="utf-8") as f:
                 json.dump(extracted_data, f, indent=4)
                 
+            try:
+                from src.excel_export_service import ExcelExportService
+                excel_service = ExcelExportService()
+                excel_bytes = excel_service.generate(extracted_data=extracted_data, file_name=pdf_path.name)
+                out_excel = notice_root / "output" / f"extracted_notice_{filename_stem}.xlsx"
+                with open(out_excel, "wb") as f:
+                    f.write(excel_bytes)
+            except Exception as excel_err:
+                logger.warning("Failed to generate Excel for Notice-extraction (non-fatal): %s", excel_err)
+                out_excel = None
+                
             return {
                 "json": str(out_json),
+                "excel": str(out_excel) if out_excel and out_excel.exists() else None,
             }
         except Exception as e:
             logger.error("Notice-extraction failed: %s", e, exc_info=True)
