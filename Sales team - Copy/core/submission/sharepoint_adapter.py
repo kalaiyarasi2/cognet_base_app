@@ -58,13 +58,21 @@ class SharePointDirectAdapter:
             safe_subject = f"Notice_{int(time.time())}"
             
         base_folder = active_config.sharepoint_base_folder.strip("/")
+        
+        # Generic .env override based on category
+        if extra_metadata and "category" in extra_metadata:
+            category_name = extra_metadata["category"].upper()
+            env_folder_override = os.getenv(f"SHAREPOINT_FOLDER_{category_name}")
+            if env_folder_override:
+                base_folder = env_folder_override.strip("/")
+                logger.info(f"Dynamic folder routing applied for category '{category_name}': {base_folder}")
+
         target_folder = f"{base_folder}/{safe_subject}" if base_folder else safe_subject
 
         logger.info(f"Uploading files to SharePoint native folder: {target_folder}")
 
         # Override agent config if target_url specifies a different SharePoint site
         if active_config.target_url:
-            import os
             import urllib.parse
             from dotenv import load_dotenv
             load_dotenv()

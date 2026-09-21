@@ -123,6 +123,9 @@ class PartnerMailFlowOrchestrator:
         extracted_payloads: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         source_pdf_paths: List[str] = []
         additional_file_paths: List[str] = []
+        
+        has_exception = False
+        overall_category = None
 
         for pdf_path in downloaded_pdfs:
             if not pdf_path.exists() or not pdf_path.name.lower().endswith(".pdf"):
@@ -133,16 +136,44 @@ class PartnerMailFlowOrchestrator:
 
             try:
                 text, pdf_type, rotation = classifier_extract(pdf_path, max_pages=3)
-                category, score = classifier.classify(text, file_name=pdf_path.name)
+                
+                # --- PRIORITY SKIP CHECK ---
+                # If a category is configured to SKIP, its keywords take absolute precedence
+                priority_category = None
+                if text:
+                    text_lower = text.lower()
+                    for cat_name, force_engine in self.submission_config.transform_rules.poc_routing_overrides.items():
+                        if force_engine == "SKIP":
+                            skip_keywords = categories.get(cat_name.upper(), [])
+                            if any(kw.lower() in text_lower for kw in skip_keywords):
+                                priority_category = cat_name.upper()
+                                break
+                                
+                if priority_category:
+                    category = priority_category
+                    score = 1.0
+                    logger.info("Priority SKIP keyword matched! Overriding LLM classification to %s", category)
+                else:
+                    category, score = classifier.classify(text, file_name=pdf_path.name)
             except Exception as e:
                 logger.error("Classification error for %s: %s", pdf_path.name, e)
                 category, score = "Others", 0.0
                 text = ""
 
             logger.info("Category determined: %s (Confidence: %.2f)", category, score)
+            
+            if not overall_category:
+                overall_category = category
 
             # Run GPU / Local Extraction with optional Tenant POC Override
             force_poc_engine = self.submission_config.transform_rules.poc_routing_overrides.get(category.upper())
+            
+            if force_poc_engine == "SKIP":
+                logger.info("Category %s is set to SKIP. Bypassing extraction.", category)
+                has_exception = True
+                overall_category = category
+                continue
+                
             if not force_poc_engine:
                 force_poc_engine = self.submission_config.transform_rules.default_poc_engine
             extract_result = await run_local_extraction(category, pdf_path, text, force_poc_engine=force_poc_engine)
@@ -182,6 +213,7 @@ class PartnerMailFlowOrchestrator:
                 "subject": subject,
                 "message_id": message_id,
                 "received_at": received_time,
+                "category": overall_category
             }
         )
 
