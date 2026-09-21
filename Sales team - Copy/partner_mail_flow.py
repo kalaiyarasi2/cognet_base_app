@@ -141,14 +141,19 @@ class PartnerMailFlowOrchestrator:
                 # If a category is configured to SKIP, its keywords take absolute precedence
                 priority_category = None
                 if text:
-                    text_lower = text.lower()
+                    import re
+                    # Normalize whitespace (replace newlines/tabs/multiple spaces with a single space)
+                    text_normalized = re.sub(r'\s+', ' ', text.lower())
                     for cat_name, force_engine in self.submission_config.transform_rules.poc_routing_overrides.items():
                         if force_engine == "SKIP":
                             skip_keywords = categories.get(cat_name.upper(), [])
-                            if any(kw.lower() in text_lower for kw in skip_keywords):
-                                priority_category = cat_name.upper()
+                            for kw in skip_keywords:
+                                kw_normalized = re.sub(r'\s+', ' ', kw.lower())
+                                if kw_normalized in text_normalized:
+                                    priority_category = cat_name.upper()
+                                    break
+                            if priority_category:
                                 break
-                                
                 if priority_category:
                     category = priority_category
                     score = 1.0
