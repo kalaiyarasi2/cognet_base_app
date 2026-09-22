@@ -38,7 +38,9 @@ class DynamicHttpAdapter:
         self,
         payload: Dict[str, Any],
         pdf_file_paths: Optional[List[str]] = None,
+        additional_file_paths: Optional[List[str]] = None,
         config_override: Optional[TenantSubmissionConfig] = None,
+        **kwargs: Any,
     ) -> SubmissionResult:
         """
         Dispatches payload and attachments to the configured tenant endpoint.
@@ -100,6 +102,27 @@ class DynamicHttpAdapter:
                                     )
                             else:
                                 logger.warning(f"Attachment not found or invalid: {path_str}")
+
+                    # Attach any additional files (e.g. generated Excel schemas / trackers)
+                    if additional_file_paths and active_config.attachments.include_additional_files:
+                        excel_field = getattr(active_config.attachments, "excel_file_field", "excelFile") or "excelFile"
+                        for path_str in additional_file_paths:
+                            p = Path(path_str)
+                            if p.exists() and p.is_file():
+                                f = open(p, "rb")
+                                open_files.append(f)
+                                pname = p.name.lower()
+                                if pname.endswith((".xlsx", ".xls")):
+                                    content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                elif pname.endswith(".csv"):
+                                    content_type = "text/csv"
+                                else:
+                                    content_type = "application/octet-stream"
+                                multipart_files.append(
+                                    (excel_field, (p.name, f, content_type))
+                                )
+                            else:
+                                logger.warning(f"Additional attachment not found or invalid: {path_str}")
 
                     # Dispatch Multipart Form Data with JSON payload file and optional attachments
                     response = requests.request(

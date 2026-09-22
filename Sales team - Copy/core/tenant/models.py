@@ -91,6 +91,7 @@ class SubmissionTransformRules(BaseModel):
 
 class SubmissionAttachmentRules(BaseModel):
     include_original_pdfs: bool = True
+    include_additional_files: bool = True   # set false to skip Excel/extra outputs
     multipart_file_field: str = "file"
     acord_file_field: str = "acordPdf"
     loss_runs_file_field: str = "lossRunsPdf"
