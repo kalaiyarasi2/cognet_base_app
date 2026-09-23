@@ -105,6 +105,22 @@ class SubmissionRetryPolicy(BaseModel):
     timeout_seconds: int = 30
 
 
+class FailureNotificationConfig(BaseModel):
+    """Config for sending failure alert emails back to the sender on HTTP errors."""
+    enabled: bool = False
+    # Which HTTP status codes should trigger a failure notification email
+    trigger_on_status_codes: List[int] = Field(default_factory=lambda: [400, 401, 403, 422, 500])
+    # Set this email in submission.json to control where failure alerts go.
+    # If left empty (""), the alert is sent back to the original email sender.
+    notify_email: str = ""
+    # Whether to attach the merged JSON in the failure email
+    attach_merged_json: bool = True
+    # Whether to attach the original input PDFs in the failure email
+    attach_input_pdfs: bool = True
+    # Custom subject prefix (e.g. "[SELVA TEAM]") – tenant name used if empty
+    subject_prefix: Optional[str] = None
+
+
 class TenantSubmissionConfig(BaseModel):
     enabled: bool = True
     delivery_method: str = "http" # "http" or "sharepoint_direct"
@@ -118,5 +134,6 @@ class TenantSubmissionConfig(BaseModel):
     transform_rules: SubmissionTransformRules = Field(default_factory=SubmissionTransformRules)
     attachments: SubmissionAttachmentRules = Field(default_factory=SubmissionAttachmentRules)
     retry_policy: SubmissionRetryPolicy = Field(default_factory=SubmissionRetryPolicy)
+    failure_notification: FailureNotificationConfig = Field(default_factory=FailureNotificationConfig)
 
 

@@ -73,6 +73,231 @@ from start_flow import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Generic Failure Notification Helper (config-driven, no tenant hardcoding)
+# ---------------------------------------------------------------------------
+
+def _send_failure_notification(
+    sender_email: str,
+    error_message: str,
+    status_code: Optional[int],
+    tenant_folder: str,
+    submission_config,
+    saved_json_path: Optional[str] = None,
+    pdf_paths: Optional[List[str]] = None,
+    graph_token: Optional[str] = None,
+    from_mailbox: Optional[str] = None,
+) -> None:
+    """
+    Sends a failure alert email back to the original sender.
+    Entirely driven by submission_config.failure_notification — no tenant-specific logic.
+    Reuses the already-obtained Outlook Graph token (graph_token) so no new MSAL
+    token acquisition is needed. Falls back to MSAL app-token, then SMTP.
+    """
+    fn_cfg = submission_config.failure_notification
+    if not fn_cfg.enabled:
+        return
+
+    # Only fire if the status code matches the configured trigger codes
+    if status_code is not None and status_code not in fn_cfg.trigger_on_status_codes:
+        logger.info(
+            "Failure notification skipped: HTTP %s not in trigger_on_status_codes %s",
+            status_code, fn_cfg.trigger_on_status_codes
+        )
+        return
+
+    recipient = fn_cfg.notify_email or sender_email
+    if not recipient:
+        logger.warning("Failure notification: no recipient email available. Skipping.")
+        return
+
+    prefix = fn_cfg.subject_prefix or f"[{tenant_folder.upper().replace('_', ' ')}]"
+    subject = f"{prefix} Submission Failed - HTTP {status_code or 'N/A'}: {error_message[:80]}"
+
+    error_html = f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; color: #1e293b; background: #f8fafc; padding: 24px;">
+        <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 10px;
+                    border: 1px solid #e2e8f0; overflow: hidden;">
+          <div style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+                      padding: 22px 28px;">
+            <h1 style="color:#fff; margin:0; font-size:18px; font-weight:700;">&#9888; Submission Failed</h1>
+            <p style="color:#fecaca; margin:4px 0 0 0; font-size:13px;">Tenant: {tenant_folder}</p>
+          </div>
+          <div style="padding: 28px;">
+            <p style="color:#374151; font-size:14px; line-height:1.6;">
+              Your document submission was processed but the partner API rejected it.
+              Please review the details below and re-submit or contact support.
+            </p>
+            <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px;
+                        padding:14px 18px; margin:16px 0;">
+              <div style="font-size:12px; color:#991b1b; font-weight:700; text-transform:uppercase;
+                          margin-bottom:4px;">Error Details</div>
+              <div style="font-size:14px; color:#7f1d1d; font-family:monospace; word-break:break-all;">
+                HTTP {status_code or 'N/A'} &mdash; {error_message}
+              </div>
+            </div>
+            <p style="font-size:13px; color:#6b7280;">
+              The merged JSON payload{' and original PDF attachments are' if fn_cfg.attach_input_pdfs else ' is'}
+              attached to this email for your reference.
+            </p>
+          </div>
+          <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:14px 28px;
+                      text-align:center;">
+            <p style="font-size:12px; color:#94a3b8; margin:0;">
+              This is an automated notification from the CogNet Submission Engine.
+            </p>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+
+    # Build attachments list
+    attachments = []
+    if fn_cfg.attach_merged_json and saved_json_path and os.path.exists(saved_json_path):
+        attachments.append({"path": saved_json_path, "name": "merged_submission.json",
+                             "mime": "application/json"})
+    if fn_cfg.attach_input_pdfs and pdf_paths:
+        for p in pdf_paths:
+            if os.path.exists(p):
+                attachments.append({"path": p, "name": Path(p).name, "mime": "application/pdf"})
+
+    import requests as _req
+
+    def _graph_send(access_token: str, mailbox: str = "") -> bool:
+        """Send via Graph API. Uses /me/sendMail for delegated tokens (no mailbox needed).
+        Falls back to /users/{mailbox}/sendMail if mailbox is provided (app tokens)."""
+        try:
+            graph_attachments = []
+            for att in attachments:
+                with open(att["path"], "rb") as af:
+                    encoded = base64.b64encode(af.read()).decode("utf-8")
+                graph_attachments.append({
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    "name": att["name"],
+                    "contentType": att["mime"],
+                    "contentBytes": encoded,
+                })
+
+            graph_payload = {
+                "message": {
+                    "subject": subject,
+                    "body": {"contentType": "HTML", "content": error_html},
+                    "toRecipients": [{"emailAddress": {"address": recipient}}],
+                    "attachments": graph_attachments,
+                },
+                "saveToSentItems": "false",
+            }
+            # Delegated token -> /me/sendMail (token already scoped to the user)
+            # App token -> /users/{mailbox}/sendMail
+            if mailbox:
+                endpoint = f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail"
+            else:
+                endpoint = "https://graph.microsoft.com/v1.0/me/sendMail"
+
+            resp = _req.post(
+                endpoint,
+                headers={"Authorization": f"Bearer {access_token}",
+                         "Content-Type": "application/json"},
+                json=graph_payload,
+                timeout=30,
+            )
+            if resp.status_code in (200, 202):
+                logger.info(
+                    "[FailureNotify] Sent failure email to '%s' via Graph (%s | tenant: %s)",
+                    recipient,
+                    f"from: {mailbox}" if mailbox else "/me",
+                    tenant_folder,
+                )
+                return True
+            else:
+                logger.warning(
+                    "[FailureNotify] Graph sendMail returned %s: %s", resp.status_code, resp.text
+                )
+        except Exception as exc:
+            logger.warning("[FailureNotify] Graph send attempt failed: %s", exc)
+        return False
+
+    # --- Priority 1: Reuse the already-obtained Outlook delegated token (/me/sendMail) ---
+    if graph_token:
+        logger.info("[FailureNotify] Using existing Outlook session token (/me/sendMail) to send failure email.")
+        if _graph_send(graph_token):  # no mailbox needed — delegated token
+            return
+
+    # --- Priority 2: Try acquiring a fresh app token via MSAL ---
+    # Supports both AZURE_ and MICROSOFT_ env var naming conventions
+    client_id     = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET")
+    ms_tenant_id  = os.getenv("AZURE_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID")
+    sender_acct   = from_mailbox or os.getenv("SENDER_EMAIL") or os.getenv("PARTNER_POC_MONITOR_EMAIL")
+
+    if all([client_id, client_secret, ms_tenant_id, sender_acct]):
+        try:
+            import msal
+            authority = f"https://login.microsoftonline.com/{ms_tenant_id}"
+            app = msal.ConfidentialClientApplication(
+                client_id, authority=authority, client_credential=client_secret
+            )
+            token_result = app.acquire_token_for_client(
+                scopes=["https://graph.microsoft.com/.default"]
+            )
+            if "access_token" in token_result:
+                if _graph_send(token_result["access_token"], sender_acct):
+                    return
+            else:
+                logger.warning("[FailureNotify] MSAL token error: %s", token_result.get("error"))
+        except Exception as msal_err:
+            logger.warning("[FailureNotify] MSAL token acquisition failed: %s", msal_err)
+
+    # --- Priority 3: Fallback to SMTP ---
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = os.getenv("SMTP_PORT")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+
+    if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
+        logger.warning(
+            "[FailureNotify] All send methods failed. Could not send failure email to '%s'.",
+            recipient
+        )
+        return
+
+    try:
+        msg = MIMEMultipart()
+        msg["Subject"] = subject
+        msg["From"]    = smtp_user
+        msg["To"]      = recipient
+        msg.attach(MIMEText(error_html, "html"))
+
+        for att in attachments:
+            with open(att["path"], "rb") as af:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(af.read())
+                encoders.encode_base64(part)
+                part.add_header("Content-Disposition",
+                                f'attachment; filename="{att["name"]}"')
+                msg.attach(part)
+
+        with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, recipient, msg.as_string())
+
+        logger.info(
+            "[FailureNotify] Sent failure email via SMTP to '%s' for tenant '%s'",
+            recipient, tenant_folder
+        )
+    except Exception as smtp_err:
+        logger.error("[FailureNotify] SMTP send also failed: %s", smtp_err)
+
+
 class PartnerMailFlowOrchestrator:
     """
     Orchestrates dedicated email intake, extraction, and partner submission.
@@ -181,7 +406,7 @@ class PartnerMailFlowOrchestrator:
                 
             if not force_poc_engine:
                 force_poc_engine = self.submission_config.transform_rules.default_poc_engine
-            extract_result = await run_local_extraction(category, pdf_path, text, force_poc_engine=force_poc_engine)
+            extract_result = await run_local_extraction(category, pdf_path, text, force_poc_engine=force_poc_engine, user_email=sender_email)
             
             cat_upper = category.upper()
             json_target = extract_result.get("json") or extract_result.get("json_path")
@@ -224,6 +449,37 @@ class PartnerMailFlowOrchestrator:
 
         status = submission_result.get("status", "UNKNOWN")
         logger.info("Submission Result: Status=%s | StatusCode=%s", status, submission_result.get("status_code"))
+
+        # --- Generic Failure Notification (config-driven, works for any tenant) ---
+        if status == "FAILED":
+            fn_cfg = self.submission_config.failure_notification
+            notify_target = fn_cfg.notify_email or sender_email
+            if fn_cfg.enabled:
+                logger.info(
+                    "Submission FAILED for tenant '%s' | Error: %s | "
+                    "Sending failure notification email to: %s",
+                    self.tenant_folder,
+                    submission_result.get("error") or "Unknown error",
+                    notify_target,
+                )
+            _send_failure_notification(
+                sender_email=sender_email,
+                error_message=submission_result.get("error") or "Unknown error",
+                status_code=submission_result.get("status_code"),
+                tenant_folder=self.tenant_folder,
+                submission_config=self.submission_config,
+                saved_json_path=submission_result.get("saved_submission_path"),
+                pdf_paths=source_pdf_paths,
+                graph_token=token,        # reuse the already-working Outlook token
+                from_mailbox="",          # empty = /me/sendMail (delegated token)
+            )
+            if fn_cfg.enabled:
+                logger.info(
+                    "Failure notification dispatched -> To: %s | Tenant: %s | HTTP Status: %s",
+                    notify_target,
+                    self.tenant_folder,
+                    submission_result.get("status_code"),
+                )
 
         # Log Audit entry into SQLite
         if _poc_db_ok:
