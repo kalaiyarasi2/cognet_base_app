@@ -6,6 +6,7 @@ import { Panel } from "@/components/Panel";
 import { Button } from "@/components/ui/button";
 import { PdfDropzone } from "@/components/PdfDropzone";
 import { useApp } from "@/lib/store";
+import { useAuth } from "@/lib/store";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +42,11 @@ function NoticeExtractionPage() {
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   const user = useApp((s) => s.user);
+  const { user: authUser } = useAuth();
   const addLog = useApp((s) => s.addLog);
+
+  // Prefer the persisted auth user email; fall back to app store user email
+  const userEmail = authUser?.email || user?.email || null;
 
   async function run() {
     if (!file || isProcessing) return;
@@ -62,8 +67,9 @@ function NoticeExtractionPage() {
       formData.append("file", file);
 
       const headers = new Headers();
-      if (user?.email) {
-        headers.append("X-Processed-By", user.email);
+      if (userEmail) {
+        headers.append("X-User-Email", userEmail);
+        headers.append("X-Processed-By", userEmail); // keep for legacy compat
       }
 
       const { getBackendUrl } = await import("@/lib/api");

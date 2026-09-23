@@ -306,7 +306,7 @@ class PartnerMailFlowOrchestrator:
         )
         return merged
 
-    async def run_listener(self, poll_interval: int = 60, user_email: Optional[str] = None, once: bool = False):
+    async def run_listener(self, poll_interval: int = 30, user_email: Optional[str] = None, once: bool = False):
         """
         Continuously polls the designated mailbox and processes submissions.
         """
@@ -380,7 +380,7 @@ class PartnerMailFlowOrchestrator:
 def main():
     parser = argparse.ArgumentParser(description="Dedicated Partner Mail Ingestion & Submission Flow")
     parser.add_argument("--tenant", default="client_a", help="Tenant configuration code (default: client_a)")
-    parser.add_argument("--interval", type=int, default=60, help="Polling interval in seconds (default: 60)")
+    parser.add_argument("--interval", type=int, default=30, help="Polling interval in seconds (default: 60)")
     parser.add_argument("--email", default=None, help="Target mailbox to monitor")
     parser.add_argument("--once", action="store_true", help="Run once and exit")
     args = parser.parse_args()

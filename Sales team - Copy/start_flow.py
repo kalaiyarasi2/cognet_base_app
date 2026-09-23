@@ -791,7 +791,17 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "", fo
             # Import dynamically to avoid loading issues if this branch is never hit
             from main import run_pipeline
             from src.layout_service import LayoutConfig
-            
+
+            try:
+                from database.poc_db import log_universal as _notice_log_uni
+            except ImportError:
+                _notice_log_uni = None
+
+            _notice_processed_by = user_email or "SYSTEM"
+
+            if _notice_log_uni:
+                _notice_log_uni("notice-extraction", "extract", pdf_path.name, "STARTED", "Processing Notice", processed_by=_notice_processed_by)
+
             layout_config = LayoutConfig()
             doc_result, ai_result = run_pipeline(
                 file_path=pdf_path,
@@ -806,6 +816,8 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "", fo
             )
             
             if not ai_result:
+                if _notice_log_uni:
+                    _notice_log_uni("notice-extraction", "extract", pdf_path.name, "FAILED", "Notice AI extraction returned no result.", processed_by=_notice_processed_by)
                 return {"error": "Notice AI extraction returned no result."}
                 
             out_json = notice_root / "output" / f"extracted_notice_{filename_stem}.json"
@@ -825,6 +837,9 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "", fo
             except Exception as excel_err:
                 logger.warning("Failed to generate Excel for Notice-extraction (non-fatal): %s", excel_err)
                 out_excel = None
+
+            if _notice_log_uni:
+                _notice_log_uni("notice-extraction", "extract", pdf_path.name, "SUCCESS", f"Extracted {doc_result.total_pages} pages", processed_by=_notice_processed_by)
                 
             return {
                 "json": str(out_json),
@@ -832,6 +847,8 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "", fo
             }
         except Exception as e:
             logger.error("Notice-extraction failed: %s", e, exc_info=True)
+            if _notice_log_uni:
+                _notice_log_uni("notice-extraction", "extract", pdf_path.name, "FAILED", f"Notice-extraction failed: {str(e)}", processed_by=_notice_processed_by)
             return {"error": f"Notice-extraction failed: {str(e)}"}
             
     else:

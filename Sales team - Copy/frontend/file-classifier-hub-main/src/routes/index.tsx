@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid,
-  LineChart, Line, PieChart, Pie, Cell, Legend,
+  LineChart, Line, PieChart, Pie, Cell,
 } from "recharts";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel, StatCard } from "@/components/Panel";
@@ -19,7 +19,13 @@ import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/")({ component: Dashboard });
 
-const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#6366f1", "#14b8a6"];
+const CHART_COLORS = [
+  "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#06b6d4", "#ec4899", "#6366f1", "#14b8a6", "#f97316",
+  "#84cc16", "#a855f7", "#0ea5e9", "#d946ef", "#22d3ee",
+  "#fb923c", "#4ade80", "#c084fc", "#38bdf8", "#facc15",
+];
+const TOP_N = 10; // Max slices before grouping into "Others"
 
 function Dashboard() {
   const stats = useApp((s) => s.stats);
@@ -162,9 +168,8 @@ function Dashboard() {
   const avgMs = dbStats?.avgProcessingMs || (stats.processed ? Math.round(stats.totalProcessingMs / stats.processed) : 0);
 
   const catData = useMemo(() => {
-    const result: { name: string; value: number }[] = [];
     const dbCategories = dbStats?.categoriesFound || stats.categoriesFound;
-    
+
     const LABEL_MAP: Record<string, string> = {
       "RESOURCING_EDGE": "Client 1",
       "RESOURCING EDGE": "Client 1",
@@ -175,18 +180,30 @@ function Dashboard() {
     };
 
     const keys = Object.keys(dbCategories);
+    let raw: { name: string; value: number }[] = [];
+
     if (keys.length > 0) {
       for (const k of keys) {
         const displayName = LABEL_MAP[k] || LABEL_MAP[k.toUpperCase()] || k;
-        result.push({ name: displayName, value: dbCategories[k] });
+        raw.push({ name: displayName, value: dbCategories[k] });
       }
     } else {
       const fallback = ["PARITY_SETUP", "RENEWAL_PROCESS", "Client 1", "RPVE", "CONVERTER"];
       for (const f of fallback) {
-        result.push({ name: f, value: 1 });
+        raw.push({ name: f, value: 1 });
       }
     }
-    return result;
+
+    // Sort descending so biggest slices come first
+    raw.sort((a, b) => b.value - a.value);
+
+    // Group everything beyond TOP_N into "Others"
+    if (raw.length > TOP_N) {
+      const top = raw.slice(0, TOP_N);
+      const othersValue = raw.slice(TOP_N).reduce((sum, x) => sum + x.value, 0);
+      return [...top, { name: "Others", value: othersValue }];
+    }
+    return raw;
   }, [dbStats?.categoriesFound, stats.categoriesFound]);
 
   const dailyData = (dbStats?.daily && dbStats.daily.length > 0)
@@ -311,18 +328,56 @@ function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Panel title="Category Distribution" description="Share of classified documents by category">
           {catData.length === 0 ? (
-            <div className="h-56 grid place-items-center text-[12.5px] text-muted-foreground">No data yet.</div>
+            <div className="h-40 grid place-items-center text-[12.5px] text-muted-foreground">No data yet.</div>
           ) : (
-            <div className="h-56">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie data={catData} dataKey="value" nameKey="name" outerRadius={70} innerRadius={40} paddingAngle={2}>
-                    {catData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6 }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="flex flex-col gap-3">
+              {/* Donut chart – fixed height, no built-in legend */}
+              <div className="h-44">
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie
+                      data={catData}
+                      dataKey="value"
+                      nameKey="name"
+                      outerRadius={78}
+                      innerRadius={46}
+                      paddingAngle={2}
+                      strokeWidth={0}
+                    >
+                      {catData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ fontSize: 12, borderRadius: 6 }}
+                      formatter={(value: number, name: string) => [`${value} files`, name]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Custom 2-column scrollable legend */}
+              <div className="max-h-28 overflow-y-auto pr-1">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                  {catData.map((entry, i) => (
+                    <div key={i} className="flex items-center gap-1.5 min-w-0">
+                      <span
+                        className="flex-shrink-0 w-2.5 h-2.5 rounded-sm"
+                        style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                      />
+                      <span
+                        className="text-[10.5px] text-muted-foreground truncate"
+                        title={entry.name}
+                      >
+                        {entry.name}
+                      </span>
+                      <span className="ml-auto flex-shrink-0 text-[10px] font-semibold tabular-nums">
+                        {entry.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </Panel>
