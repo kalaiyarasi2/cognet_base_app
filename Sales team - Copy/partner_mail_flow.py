@@ -311,7 +311,9 @@ class PartnerMailFlowOrchestrator:
         Continuously polls the designated mailbox and processes submissions.
         """
         # Resolve target email from argument, tenant config, or .env
-        clean_tenant = self.tenant_folder.upper()
+        # Folder names contain spaces (e.g. "Notice Manager") but .env keys use
+        # underscores (e.g. NOTICE_MANAGER_MONITOR_EMAIL) — normalize to match.
+        clean_tenant = self.tenant_folder.upper().replace(" ", "_")
         resolved_email = (
             user_email
             or os.getenv(f"{clean_tenant}_MONITOR_EMAIL")
