@@ -381,6 +381,8 @@ def _node_monitor_email(state: _EmailAgentState) -> dict:
             },
         )
         messages = data.get("value", []) if isinstance(data, dict) else []
+        # Reverse to process oldest emails first (FIFO)
+        messages.reverse()
         logger.info(f"  Found {len(messages)} unread message(s).")
 
         for msg in messages:
@@ -1037,6 +1039,8 @@ class OutlookAgentModule:
             },
         )
         messages = data.get("value", []) if isinstance(data, dict) else []
+        # Reverse to process oldest emails first (FIFO)
+        messages.reverse()
         for msg in messages:
             if not isinstance(msg, dict):
                 continue

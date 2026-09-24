@@ -586,7 +586,7 @@ def fetch_gmail_attachments(dest_folder: Path, mark_read: bool = True) -> list[P
         return []
 
 
-async def run_local_extraction(category: str, pdf_path: Path, text: str = "", force_poc_engine: str = None) -> dict:
+async def run_local_extraction(category: str, pdf_path: Path, text: str = "", force_poc_engine: str = None, user_email: str = None) -> dict:
     """Routes the PDF to the correct backend module based on category and text."""
     category_upper = category.upper()
     text_upper = text.upper() if text else ""
