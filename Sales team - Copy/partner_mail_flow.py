@@ -125,6 +125,7 @@ def _send_failure_notification(
             <p style="color:#fecaca; margin:4px 0 0 0; font-size:13px;">Tenant: {tenant_folder}</p>
           </div>
           <div style="padding: 28px;">
+            <p style="color:#1e293b; font-size:15px; font-weight:600; margin:0 0 12px 0;">Hi Team,</p>
             <p style="color:#374151; font-size:14px; line-height:1.6;">
               Your document submission was processed but the partner API rejected it.
               Please review the details below and re-submit or contact support.
