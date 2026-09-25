@@ -135,5 +135,8 @@ class TenantSubmissionConfig(BaseModel):
     attachments: SubmissionAttachmentRules = Field(default_factory=SubmissionAttachmentRules)
     retry_policy: SubmissionRetryPolicy = Field(default_factory=SubmissionRetryPolicy)
     failure_notification: FailureNotificationConfig = Field(default_factory=FailureNotificationConfig)
+    # When True: if the first dispatch returns HTTP 500, the system retries ONCE automatically.
+    # If the retry also fails → failure notification email is sent. Default False (opt-in per tenant).
+    retry_on_500: bool = False
 
 

@@ -99,6 +99,38 @@ class SubmissionService:
                 config_override=config,
             )
 
+        # ── 500-only single retry (opt-in per tenant via retry_on_500: true) ──────
+        # Triggers ONLY when: HTTP 500 received AND tenant config has retry_on_500=True.
+        # Waits 10 seconds, then re-dispatches exactly once.
+        # If retry succeeds → flow continues as SUCCESS (no email).
+        # If retry also fails → flow continues as FAILED → failure notification email sent.
+        if (
+            not dispatch_result.success
+            and dispatch_result.status_code == 500
+            and getattr(config, "retry_on_500", False)
+        ):
+            import time as _time
+            logger.warning(
+                "[500-Retry] Tenant '%s' received HTTP 500 on first attempt. "
+                "Waiting 10s before retrying ONCE...",
+                tenant_folder,
+            )
+            _time.sleep(10)
+            retry_result: SubmissionResult = self.adapter.dispatch(
+                payload=transformed_payload,
+                pdf_file_paths=pdf_file_paths,
+                additional_file_paths=additional_file_paths,
+                config_override=config,
+            )
+            logger.info(
+                "[500-Retry] Tenant '%s' retry completed — success=%s, HTTP=%s",
+                tenant_folder,
+                retry_result.success,
+                retry_result.status_code,
+            )
+            dispatch_result = retry_result  # use retry result for all downstream logic
+        # ─────────────────────────────────────────────────────────────────────────
+
         return {
             "status": "SUCCESS" if dispatch_result.success else "FAILED",
             "tenant_folder": tenant_folder,

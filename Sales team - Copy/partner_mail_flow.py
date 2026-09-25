@@ -304,7 +304,7 @@ class PartnerMailFlowOrchestrator:
     Orchestrates dedicated email intake, extraction, and partner submission.
     """
 
-    def __init__(self, tenant_folder: str = "client_a"):
+    def __init__(self, tenant_folder: str = "client_a", max_concurrent: int = 3):
         self.tenant_folder = tenant_folder
         self.submission_service = SubmissionService(workspace_dir=WORKSPACE_DIR)
         self.config_loader = TenantConfigLoader(base_dir=WORKSPACE_DIR)
@@ -312,6 +312,9 @@ class PartnerMailFlowOrchestrator:
         self.staging_dir = WORKSPACE_DIR / "temp_partner_staging"
         self.staging_dir.mkdir(parents=True, exist_ok=True)
         self._processed_msg_ids = set()
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._max_concurrent = max_concurrent
+        logger.info("Parallel processing enabled: max %d concurrent emails.", max_concurrent)
 
     def is_submission_enabled(self) -> bool:
         return self.submission_config.enabled
@@ -511,6 +514,28 @@ class PartnerMailFlowOrchestrator:
 
         return submission_result
 
+    async def _process_email_with_limit(
+        self,
+        email_item: Dict[str, Any],
+        downloaded_pdfs: List[Path],
+        token: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Wraps process_email_package with a semaphore to limit
+        the number of emails processed simultaneously.
+        """
+        msg_id = str(email_item.get("id", ""))
+        subject = email_item.get("subject", "No Subject")
+
+        async with self._semaphore:
+            logger.info(
+                "[Semaphore] Acquired slot for email: '%s' | Active slots used: %d/%d",
+                subject, self._max_concurrent - self._semaphore._value, self._max_concurrent
+            )
+            result = await self.process_email_package(email_item, downloaded_pdfs, token=token)
+            logger.info("[Semaphore] Released slot for email: '%s'", subject)
+            return result
+
     @staticmethod
     def _merge_loss_runs(docs: List[dict]) -> dict:
         """
@@ -595,7 +620,9 @@ class PartnerMailFlowOrchestrator:
                     emails = agent.fetch_unread_emails(refresh_token=refresh_token) or []
 
                     if emails:
-                        logger.info("Detected %d unread email(s).", len(emails))
+                        logger.info("Detected %d unread email(s). Preparing parallel processing...", len(emails))
+                        tasks = []
+
                         for email in emails:
                             msg_id = str(email.get("id", str(time.time())))
                             if msg_id in self._processed_msg_ids:
@@ -604,7 +631,10 @@ class PartnerMailFlowOrchestrator:
                             attachments = email.get("attachments", [])
                             if not attachments:
                                 self._processed_msg_ids.add(msg_id)
-                                logger.info("Email '%s' has no attachments. Skipping.", email.get("subject", "No Subject"))
+                                logger.info(
+                                    "Email '%s' has no attachments. Skipping.",
+                                    email.get("subject", "No Subject")
+                                )
                                 continue
 
                             msg_staging = self.staging_dir / hashlib.sha256(msg_id.encode("utf-8")).hexdigest()[:16]
@@ -620,10 +650,23 @@ class PartnerMailFlowOrchestrator:
 
                             if downloaded:
                                 self._processed_msg_ids.add(msg_id)
-                                await self.process_email_package(email, downloaded, token=token)
+                                tasks.append(
+                                    self._process_email_with_limit(email, downloaded, token=token)
+                                )
                             else:
                                 self._processed_msg_ids.add(msg_id)
-                                logger.info("Email '%s' has no valid PDF attachments. Skipping.", email.get("subject", "No Subject"))
+                                logger.info(
+                                    "Email '%s' has no valid PDF attachments. Skipping.",
+                                    email.get("subject", "No Subject")
+                                )
+
+                        if tasks:
+                            logger.info("Launching %d email task(s) in parallel (max %d concurrent)...", len(tasks), self._max_concurrent)
+                            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                            for i, result in enumerate(results):
+                                if isinstance(result, Exception):
+                                    logger.error("Parallel task %d raised an exception: %s", i + 1, result)
                     else:
                         logger.debug("No new unread emails.")
 
@@ -640,11 +683,12 @@ def main():
     parser = argparse.ArgumentParser(description="Dedicated Partner Mail Ingestion & Submission Flow")
     parser.add_argument("--tenant", default="client_a", help="Tenant configuration code (default: client_a)")
     parser.add_argument("--interval", type=int, default=30, help="Polling interval in seconds (default: 60)")
+    parser.add_argument("--concurrency", type=int, default=3, help="Max emails to process simultaneously (default: 3)")
     parser.add_argument("--email", default=None, help="Target mailbox to monitor")
     parser.add_argument("--once", action="store_true", help="Run once and exit")
     args = parser.parse_args()
 
-    orchestrator = PartnerMailFlowOrchestrator(tenant_folder=args.tenant)
+    orchestrator = PartnerMailFlowOrchestrator(tenant_folder=args.tenant, max_concurrent=args.concurrency)
     asyncio.run(orchestrator.run_listener(poll_interval=args.interval, user_email=args.email, once=args.once))
 
 
