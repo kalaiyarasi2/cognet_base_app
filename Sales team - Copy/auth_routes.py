@@ -267,7 +267,7 @@ async def sso_get_callback(code: str = None, error: str = None, error_descriptio
         "code": code,
         "redirect_uri": redirect_uri,
         "grant_type": "authorization_code",
-        "scope": "openid profile email User.Read Files.ReadWrite.All Sites.ReadWrite.All offline_access",
+        "scope": "openid profile email User.Read Files.ReadWrite.All Sites.ReadWrite.All Mail.Send Mail.Send.Shared offline_access",
     }
     if client_secret and client_secret.strip():
         data["client_secret"] = client_secret

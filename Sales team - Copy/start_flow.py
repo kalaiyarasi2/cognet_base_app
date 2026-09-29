@@ -139,6 +139,8 @@ if OutlookAgentModule is not None:
         scopes = [
             "https://graph.microsoft.com/Mail.Read",
             "https://graph.microsoft.com/Mail.ReadWrite",
+            "https://graph.microsoft.com/Mail.Send",
+            "https://graph.microsoft.com/Mail.Send.Shared",
             "https://graph.microsoft.com/Files.ReadWrite",
             "https://graph.microsoft.com/User.Read",
         ]
@@ -190,6 +192,10 @@ if OutlookAgentModule is not None:
                         client_credential=self.azure_client_secret,
                     )
                     res = app.acquire_token_by_refresh_token(r_token, scopes=scopes)
+                    if "access_token" not in res and "AADSTS65001" in res.get("error_description", ""):
+                        base_scopes = [s for s in scopes if "Mail.Send" not in s]
+                        logger.info("Account not yet consented to Mail.Send; falling back to base reading scopes.")
+                        res = app.acquire_token_by_refresh_token(r_token, scopes=base_scopes)
                     if "access_token" in res:
                         cached_data["access_token"] = res["access_token"]
                         cached_data["expires_at"] = time.time() + res.get("expires_in", 3600)
@@ -227,6 +233,19 @@ if OutlookAgentModule is not None:
                     data = json.load(fh)
                 r_token = data.get("refresh_token")
                 if r_token:
+                    # Validate that the session was issued for the current application client ID
+                    access_tok = data.get("access_token", "")
+                    if access_tok:
+                        try:
+                            import jwt
+                            decoded = jwt.decode(access_tok, options={"verify_signature": False})
+                            sess_appid = decoded.get("appid")
+                            if self.azure_client_id and sess_appid and sess_appid.lower() != self.azure_client_id.lower():
+                                logger.warning("[AUTH] Skipping session %s: issued for appid %s (current client_id: %s)", Path(s_file).name, sess_appid, self.azure_client_id)
+                                continue
+                        except Exception:
+                            pass
+
                     logger.info("Found active Microsoft dashboard session: %s", Path(s_file).name)
                     app = msal.ConfidentialClientApplication(
                         self.azure_client_id,
@@ -234,6 +253,10 @@ if OutlookAgentModule is not None:
                         client_credential=self.azure_client_secret,
                     )
                     res = app.acquire_token_by_refresh_token(r_token, scopes=scopes)
+                    if "access_token" not in res and "AADSTS65001" in res.get("error_description", ""):
+                        base_scopes = [s for s in scopes if "Mail.Send" not in s]
+                        logger.info("Session %s not yet consented to Mail.Send; falling back to base scopes.", Path(s_file).name)
+                        res = app.acquire_token_by_refresh_token(r_token, scopes=base_scopes)
                     if "access_token" in res:
                         if getattr(self, "user_email", None):
                             try:
@@ -254,10 +277,13 @@ if OutlookAgentModule is not None:
                             }, fh)
                         logger.info("Token synchronized successfully from dashboard session.")
                         return res["access_token"]
+                    else:
+                        logger.warning("Session %s token refresh returned: %s", Path(s_file).name, res.get("error_description"))
             except Exception as ex:
                 logger.warning("Failed to sync session from %s: %s", Path(s_file).name, ex)
 
         # 2. Refresh-token path (explicit refresh_token parameter)
+        token_refresh_error = None
         if refresh_token:
             app = msal.ConfidentialClientApplication(
                 self.azure_client_id,
@@ -265,13 +291,21 @@ if OutlookAgentModule is not None:
                 client_credential=self.azure_client_secret,
             )
             result = app.acquire_token_by_refresh_token(refresh_token, scopes=scopes)
+            if "access_token" not in result and "AADSTS65001" in result.get("error_description", ""):
+                base_scopes = [s for s in scopes if "Mail.Send" not in s]
+                logger.info("Refresh token not yet consented to Mail.Send; falling back to base scopes.")
+                result = app.acquire_token_by_refresh_token(refresh_token, scopes=base_scopes)
             if "access_token" in result:
                 return result["access_token"]
-            raise RuntimeError(f"Token refresh failed: {result.get('error_description')}")
+            token_refresh_error = result.get('error_description') or str(result)
+            logger.warning("Token refresh with refresh_token failed: %s", token_refresh_error)
+            if not self.azure_client_secret:
+                raise RuntimeError(f"Token refresh failed: {token_refresh_error}")
 
         # 3. Client Credentials Flow (App-only dynamic access)
+        client_cred_error = None
         if self.azure_client_secret:
-            logger.info("No active dashboard session. Attempting Client Credentials Flow (App-Only)...")
+            logger.info("Attempting Client Credentials Flow (App-Only)...")
             app = msal.ConfidentialClientApplication(
                 self.azure_client_id,
                 authority=authority,
@@ -279,11 +313,16 @@ if OutlookAgentModule is not None:
             )
             result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
             if "access_token" in result:
+                logger.info("Token acquired successfully via Client Credentials Flow.")
                 return result["access_token"]
-            logger.warning(f"Client Credentials failed: {result.get('error_description')}")
+            client_cred_error = result.get('error_description') or str(result)
+            logger.warning("Client Credentials failed: %s", client_cred_error)
 
         if not allow_device_flow:
-            raise RuntimeError("No valid token found and device-code flow is disabled in background mode.")
+            raise RuntimeError(
+                f"No valid token found and device-code flow is disabled. "
+                f"Refresh failed: [{token_refresh_error}]. Client Credentials failed: [{client_cred_error}]."
+            )
         logger.info("No cached token; initiating device-code flow with client secret...")
         
         device_code_url = f"https://login.microsoftonline.com/{self.azure_tenant_id}/oauth2/v2.0/devicecode"
@@ -435,6 +474,11 @@ def get_active_refresh_token(user_email: str | None = None) -> str | None:
                         access_tok = data.get('access_token', '')
                         if access_tok:
                             decoded = jwt.decode(access_tok, options={'verify_signature': False})
+                            current_client_id = os.getenv("MICROSOFT_CLIENT_ID") or os.getenv("AZURE_CLIENT_ID")
+                            sess_appid = decoded.get("appid")
+                            if current_client_id and sess_appid and sess_appid.lower() != current_client_id.lower():
+                                logger.warning("[AUTH] Skipping session %s: issued for appid %s, but current client_id is %s", Path(s_file).name, sess_appid, current_client_id)
+                                continue
                             ms_email = decoded.get('upn') or decoded.get('unique_name') or 'unknown'
                             if user_email and ms_email.lower() != user_email.lower():
                                 continue

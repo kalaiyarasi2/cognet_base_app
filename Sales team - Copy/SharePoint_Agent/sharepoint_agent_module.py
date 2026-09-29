@@ -29,7 +29,7 @@ class SharePointAgent:
 
     def __init__(self):
         self.tenant_id = os.getenv("MICROSOFT_TENANT_ID", "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae")
-        self.client_id = os.getenv("MICROSOFT_CLIENT_ID", "c08eee76-3a6c-433f-8c54-b46f32e1634c")
+        self.client_id = os.getenv("MICROSOFT_CLIENT_ID", "430f21c4-c059-42b4-8baa-e69de387932e")
         self.client_secret = os.getenv("MICROSOFT_CLIENT_SECRET", "")
         self.hostname = os.getenv("SHAREPOINT_HOSTNAME", "cognet.sharepoint.com")
         self.site_name = os.getenv("SHAREPOINT_SITE_NAME", "CognetStorage")

@@ -133,11 +133,11 @@ function LoginPage() {
   }
 
   async function handleMicrosoftSSO() {
-    const clientId = "c08eee76-3a6c-433f-8c54-b46f32e1634c";
+    const clientId = "430f21c4-c059-42b4-8baa-e69de387932e";
     const tenantId = "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae";
     const frontendOrigin = window.location.origin;
     const redirectUri = encodeURIComponent(frontendOrigin + "/auth/callback");
-    const scope = encodeURIComponent("openid profile email User.Read");
+    const scope = encodeURIComponent("openid profile email User.Read Mail.Read Mail.ReadWrite Mail.Send Mail.Send.Shared Files.ReadWrite.All Sites.ReadWrite.All offline_access");
 
     const msUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}&prompt=select_account`;
     window.location.href = msUrl;

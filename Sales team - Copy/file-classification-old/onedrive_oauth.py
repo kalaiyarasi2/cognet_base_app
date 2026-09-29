@@ -26,7 +26,9 @@ logger = get_logger("file_classifier.onedrive_oauth")
 # Scopes needed for accessing files and folders in OneDrive and user profile
 SCOPES = [
     "Files.ReadWrite",
-    "User.Read"
+    "User.Read",
+    "Mail.Send",
+    "Mail.Send.Shared",
 ]
 
 # --------------------------------------------------------------------------

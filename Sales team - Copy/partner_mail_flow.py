@@ -224,14 +224,34 @@ def _send_failure_notification(
     if graph_token:
         logger.info("[FailureNotify] Using existing Outlook session token (/me/sendMail) to send failure email.")
         if _graph_send(graph_token):  # no mailbox needed — delegated token
-            return
+            return True
 
-    # --- Priority 2: Try acquiring a fresh app token via MSAL ---
-    # Supports both AZURE_ and MICROSOFT_ env var naming conventions
+    # --- Priority 1b: Use dedicated sender account session (e.g. drivesupport@cognethro.com) ---
     client_id     = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET")
     ms_tenant_id  = os.getenv("AZURE_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID")
-    sender_acct   = from_mailbox or os.getenv("SENDER_EMAIL") or os.getenv("PARTNER_POC_MONITOR_EMAIL")
+    sender_acct   = from_mailbox or os.getenv("SENDER_EMAIL") or os.getenv("PARTNER_POC_MONITOR_EMAIL") or "drivesupport@cognethro.com"
+
+    if sender_acct and client_id and client_secret:
+        try:
+            s_refresh = get_active_refresh_token(sender_acct) if "get_active_refresh_token" in globals() else None
+            if s_refresh:
+                import msal
+                s_app = msal.ConfidentialClientApplication(
+                    client_id, authority=f"https://login.microsoftonline.com/{ms_tenant_id or 'common'}", client_credential=client_secret
+                )
+                s_res = s_app.acquire_token_by_refresh_token(
+                    s_refresh, scopes=["https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/User.Read"]
+                )
+                if "access_token" in s_res:
+                    logger.info("[FailureNotify] Using sender account (%s) token to send failure email.", sender_acct)
+                    if _graph_send(s_res["access_token"]):
+                        return True
+        except Exception as s_err:
+            logger.warning("[FailureNotify] Sending via sender account delegated token failed: %s", s_err)
+
+    # --- Priority 2: Try acquiring a fresh app token via MSAL ---
+    # Supports both AZURE_ and MICROSOFT_ env var naming conventions
 
     if all([client_id, client_secret, ms_tenant_id, sender_acct]):
         try:
@@ -245,7 +265,7 @@ def _send_failure_notification(
             )
             if "access_token" in token_result:
                 if _graph_send(token_result["access_token"], sender_acct):
-                    return
+                    return True
             else:
                 logger.warning("[FailureNotify] MSAL token error: %s", token_result.get("error"))
         except Exception as msal_err:
@@ -268,7 +288,7 @@ def _send_failure_notification(
             "[FailureNotify] All send methods failed. Could not send failure email to '%s'.",
             recipient
         )
-        return
+        return False
 
     try:
         msg = MIMEMultipart()
@@ -295,8 +315,10 @@ def _send_failure_notification(
             "[FailureNotify] Sent failure email via SMTP to '%s' for tenant '%s'",
             recipient, tenant_folder
         )
+        return True
     except Exception as smtp_err:
         logger.error("[FailureNotify] SMTP send also failed: %s", smtp_err)
+    return False
 
 
 class PartnerMailFlowOrchestrator:
@@ -466,7 +488,7 @@ class PartnerMailFlowOrchestrator:
                     submission_result.get("error") or "Unknown error",
                     notify_target,
                 )
-            _send_failure_notification(
+            sent = _send_failure_notification(
                 sender_email=sender_email,
                 error_message=submission_result.get("error") or "Unknown error",
                 status_code=submission_result.get("status_code"),
@@ -478,12 +500,20 @@ class PartnerMailFlowOrchestrator:
                 from_mailbox="",          # empty = /me/sendMail (delegated token)
             )
             if fn_cfg.enabled:
-                logger.info(
-                    "Failure notification dispatched -> To: %s | Tenant: %s | HTTP Status: %s",
-                    notify_target,
-                    self.tenant_folder,
-                    submission_result.get("status_code"),
-                )
+                if sent:
+                    logger.info(
+                        "Failure notification dispatched -> To: %s | Tenant: %s | HTTP Status: %s",
+                        notify_target,
+                        self.tenant_folder,
+                        submission_result.get("status_code"),
+                    )
+                else:
+                    logger.error(
+                        "Failure notification delivery FAILED -> Target: %s | Tenant: %s | HTTP Status: %s",
+                        notify_target,
+                        self.tenant_folder,
+                        submission_result.get("status_code"),
+                    )
 
         # Log Audit entry into SQLite
         if _poc_db_ok:
@@ -601,6 +631,8 @@ class PartnerMailFlowOrchestrator:
             or os.getenv(f"{clean_tenant}_MONITOR_EMAIL")
             or os.getenv(f"{clean_tenant.replace('_TEAM', '')}_MONITOR_EMAIL")
             or os.getenv("PARTNER_POC_MONITOR_EMAIL")
+            or os.getenv("SENDER_EMAIL")
+            or os.getenv("SMTP_USER")
             or None
         )
         

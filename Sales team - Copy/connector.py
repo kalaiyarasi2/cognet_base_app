@@ -103,6 +103,8 @@ if OutlookAgentModule is not None:
         scopes = [
             "https://graph.microsoft.com/Mail.Read",
             "https://graph.microsoft.com/Mail.ReadWrite",
+            "https://graph.microsoft.com/Mail.Send",
+            "https://graph.microsoft.com/Mail.Send.Shared",
             "https://graph.microsoft.com/Files.ReadWrite",
             "https://graph.microsoft.com/User.Read",
         ]
