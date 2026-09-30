@@ -135,7 +135,7 @@ if OutlookAgentModule is not None:
     from typing import Optional
     
     def patched_get_access_token(self, refresh_token: Optional[str] = None, allow_device_flow: bool = True) -> str:
-        authority = f"https://login.microsoftonline.com/{self.azure_tenant_id}"
+        authority = "https://login.microsoftonline.com/common"
         scopes = [
             "https://graph.microsoft.com/Mail.Read",
             "https://graph.microsoft.com/Mail.ReadWrite",
@@ -306,9 +306,10 @@ if OutlookAgentModule is not None:
         client_cred_error = None
         if self.azure_client_secret:
             logger.info("Attempting Client Credentials Flow (App-Only)...")
+            app_tenant = self.azure_tenant_id if getattr(self, "azure_tenant_id", None) and self.azure_tenant_id != "common" else (os.getenv("SYSTEM_MAIL_TENANT_ID") or "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae")
             app = msal.ConfidentialClientApplication(
                 self.azure_client_id,
-                authority=authority,
+                authority=f"https://login.microsoftonline.com/{app_tenant}",
                 client_credential=self.azure_client_secret,
             )
             result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])

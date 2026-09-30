@@ -4,6 +4,96 @@ import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+def _get_graph_access_token() -> str | None:
+    client_id = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET")
+    tenant_id = os.getenv("SYSTEM_MAIL_TENANT_ID") or os.getenv("AZURE_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID")
+    
+    # Client Credentials Flow requires a specific Azure tenant ID (e.g. GUID or domain).
+    # 'common', 'organizations', and 'consumers' are strictly rejected by MS Identity Platform for client_credentials.
+    if not tenant_id or tenant_id.strip().lower() in ("common", "organizations", "consumers"):
+        tenant_id = os.getenv("SYSTEM_MAIL_TENANT_ID") or os.getenv("AZURE_TENANT_ID") or "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae"
+
+    if not all([client_id, client_secret, tenant_id]):
+        return None
+
+    try:
+        import msal
+        authority = f"https://login.microsoftonline.com/{tenant_id}"
+        app = msal.ConfidentialClientApplication(
+            client_id, authority=authority, client_credential=client_secret
+        )
+        result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+        if "access_token" in result:
+            return result["access_token"]
+        print(f"[MS Graph Auth] Failed to acquire token: {result.get('error')} - {result.get('error_description')}")
+    except Exception as e:
+        print(f"[MS Graph Auth] Exception during token acquisition: {e}")
+    return None
+
+def _send_graph_mail(recipient_email: str, subject: str, html_content: str, tag: str = "EMAIL") -> bool:
+    token = _get_graph_access_token()
+    sender_email = os.getenv("SENDER_EMAIL") or os.getenv("SMTP_USER")
+    if not token or not sender_email:
+        return False
+
+    endpoint = f"https://graph.microsoft.com/v1.0/users/{sender_email}/sendMail"
+    email_msg = {
+        "message": {
+            "subject": subject,
+            "body": {
+                "contentType": "HTML",
+                "content": html_content
+            },
+            "toRecipients": [
+                {"emailAddress": {"address": recipient_email}}
+            ]
+        },
+        "saveToSentItems": "false"
+    }
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    try:
+        response = requests.post(endpoint, headers=headers, json=email_msg, timeout=15)
+        if response.status_code in (200, 202):
+            print(f"[{tag}] Successfully sent email to {recipient_email} via MS Graph.")
+            return True
+        else:
+            print(f"[{tag}] MS Graph failed with status {response.status_code}: {response.text}")
+    except Exception as e:
+        print(f"[{tag}] MS Graph Exception: {e}")
+    return False
+
+def _send_smtp_mail(recipient_email: str, subject: str, html_content: str, tag: str = "EMAIL") -> bool:
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = os.getenv("SMTP_PORT")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+
+    if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
+        print(f"[{tag}] No SMTP config found.")
+        return False
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = smtp_user
+        msg["To"] = recipient_email
+        msg.attach(MIMEText(html_content, "html"))
+
+        with smtplib.SMTP(smtp_host, int(smtp_port), timeout=15) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, recipient_email, msg.as_string())
+
+        print(f"[{tag}] Successfully sent email to {recipient_email} via SMTP.")
+        return True
+    except Exception as e:
+        print(f"[{tag}] Failed to send email via SMTP to {recipient_email}. Error: {e}")
+        return False
+
 def send_otp_email(recipient_email: str, otp_code: str, purpose: str = "login"):
     html_content = f"""
     <html>
@@ -20,82 +110,18 @@ def send_otp_email(recipient_email: str, otp_code: str, purpose: str = "login"):
     </html>
     """
 
+    subject = f"Your Verification Code: {otp_code}"
+
     # 1. Try Microsoft Graph API
-    client_id = os.getenv("MICROSOFT_CLIENT_ID")
-    client_secret = os.getenv("MICROSOFT_CLIENT_SECRET")
-    tenant_id = os.getenv("MICROSOFT_TENANT_ID")
-    sender_email = os.getenv("SENDER_EMAIL")
-
-    if all([client_id, client_secret, tenant_id, sender_email]):
-        try:
-            import msal
-            
-            authority = f"https://login.microsoftonline.com/{tenant_id}"
-            app = msal.ConfidentialClientApplication(
-                client_id, authority=authority, client_credential=client_secret
-            )
-            
-            result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-            
-            if "access_token" in result:
-                endpoint = f"https://graph.microsoft.com/v1.0/users/{sender_email}/sendMail"
-                email_msg = {
-                    "message": {
-                        "subject": f"Your Verification Code: {otp_code}",
-                        "body": {
-                            "contentType": "HTML",
-                            "content": html_content
-                        },
-                        "toRecipients": [
-                            {"emailAddress": {"address": recipient_email}}
-                        ]
-                    },
-                    "saveToSentItems": "false"
-                }
-                
-                headers = {
-                    "Authorization": f"Bearer {result['access_token']}",
-                    "Content-Type": "application/json"
-                }
-                
-                response = requests.post(endpoint, headers=headers, json=email_msg)
-                if response.status_code == 202 or response.status_code == 200:
-                    print(f"[LOGIN OTP] Successfully sent OTP to {recipient_email} via MS Graph.")
-                    return
-                else:
-                    print(f"[LOGIN OTP] MS Graph failed with status {response.status_code}: {response.text}")
-            else:
-                print(f"[LOGIN OTP] Failed to acquire token for MS Graph: {result.get('error')}")
-        except Exception as e:
-            print(f"[LOGIN OTP] MS Graph Exception: {e}")
-
-    # 2. Fallback to SMTP
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = os.getenv("SMTP_PORT")
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASS")
-
-    if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
-        print(f"[LOGIN OTP] No SMTP/Graph config found. MOCKING EMAIL TO {recipient_email}: {otp_code}")
+    if _send_graph_mail(recipient_email, subject, html_content, tag="LOGIN OTP"):
         return
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Your Verification Code: {otp_code}"
-        msg["From"] = smtp_user
-        msg["To"] = recipient_email
-        msg.attach(MIMEText(html_content, "html"))
+    # 2. Fallback to SMTP
+    if _send_smtp_mail(recipient_email, subject, html_content, tag="LOGIN OTP"):
+        return
 
-        with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, recipient_email, msg.as_string())
-            
-        print(f"[LOGIN OTP] Successfully sent OTP to {recipient_email} via SMTP.")
-    except Exception as e:
-        print(f"[LOGIN OTP] Failed to send email via SMTP to {recipient_email}. Error: {e}")
-        # Fallback to console print if SMTP fails
-        print(f"[LOGIN OTP] MOCKING EMAIL TO {recipient_email}: {otp_code}")
+    # 3. Fallback to console print if both fail
+    print(f"[LOGIN OTP] MOCKING EMAIL TO {recipient_email}: {otp_code}")
 
 def send_access_granted_email(recipient_email: str, recipient_name: str, granted_by: str, login_url: str = "http://localhost:5173/login"):
     html_content = f"""
@@ -109,87 +135,24 @@ def send_access_granted_email(recipient_email: str, recipient_name: str, granted
           <div style="margin: 20px 0;">
             <a href="{login_url}" style="background-color: #0057FF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Go to Project</a>
           </div>
-          <p style="font-size: 13px; color: #6b7280;">If you have any questions, please contact your administrator.</p>
+          <p style="font-size: 13px; color: #6b7280;">If you were not expecting this invite, please contact your administrator.</p>
         </div>
       </body>
     </html>
     """
 
+    subject = "Welcome! You have been granted access"
+
     # 1. Try Microsoft Graph API
-    client_id = os.getenv("MICROSOFT_CLIENT_ID")
-    client_secret = os.getenv("MICROSOFT_CLIENT_SECRET")
-    tenant_id = os.getenv("MICROSOFT_TENANT_ID")
-    sender_email = os.getenv("SENDER_EMAIL")
-
-    if all([client_id, client_secret, tenant_id, sender_email]):
-        try:
-            import msal
-            
-            authority = f"https://login.microsoftonline.com/{tenant_id}"
-            app = msal.ConfidentialClientApplication(
-                client_id, authority=authority, client_credential=client_secret
-            )
-            
-            result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-            
-            if "access_token" in result:
-                endpoint = f"https://graph.microsoft.com/v1.0/users/{sender_email}/sendMail"
-                email_msg = {
-                    "message": {
-                        "subject": "Welcome! You have been granted access",
-                        "body": {
-                            "contentType": "HTML",
-                            "content": html_content
-                        },
-                        "toRecipients": [
-                            {"emailAddress": {"address": recipient_email}}
-                        ]
-                    },
-                    "saveToSentItems": "false"
-                }
-                
-                headers = {
-                    "Authorization": f"Bearer {result['access_token']}",
-                    "Content-Type": "application/json"
-                }
-                
-                response = requests.post(endpoint, headers=headers, json=email_msg)
-                if response.status_code == 202 or response.status_code == 200:
-                    print(f"[ACCESS EMAIL] Successfully sent access email to {recipient_email} via MS Graph.")
-                    return
-                else:
-                    print(f"[ACCESS EMAIL] MS Graph failed with status {response.status_code}: {response.text}")
-            else:
-                print(f"[ACCESS EMAIL] Failed to acquire token for MS Graph: {result.get('error')}")
-        except Exception as e:
-            print(f"[ACCESS EMAIL] MS Graph Exception: {e}")
-
-    # 2. Fallback to SMTP
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = os.getenv("SMTP_PORT")
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASS")
-
-    if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
-        print(f"[ACCESS EMAIL] No SMTP/Graph config found. MOCKING EMAIL TO {recipient_email}")
+    if _send_graph_mail(recipient_email, subject, html_content, tag="ACCESS EMAIL"):
         return
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Welcome! You have been granted access"
-        msg["From"] = smtp_user
-        msg["To"] = recipient_email
-        msg.attach(MIMEText(html_content, "html"))
+    # 2. Fallback to SMTP
+    if _send_smtp_mail(recipient_email, subject, html_content, tag="ACCESS EMAIL"):
+        return
 
-        with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, recipient_email, msg.as_string())
-            
-        print(f"[ACCESS EMAIL] Successfully sent access email to {recipient_email} via SMTP.")
-    except Exception as e:
-        print(f"[ACCESS EMAIL] Failed to send email via SMTP to {recipient_email}. Error: {e}")
-        print(f"[ACCESS EMAIL] MOCKING EMAIL TO {recipient_email}")
+    # 3. Fallback to console print if both fail
+    print(f"[ACCESS EMAIL] MOCKING EMAIL TO {recipient_email}")
 
 def send_tenant_welcome_email(
     recipient_email: str,
@@ -247,75 +210,15 @@ def send_tenant_welcome_email(
     </html>
     """
 
+    subject = f"Welcome to Drive360 - Workspace Setup for {tenant_name} (OTP: {otp_code})"
+
     # 1. Try Microsoft Graph API
-    client_id = os.getenv("MICROSOFT_CLIENT_ID")
-    client_secret = os.getenv("MICROSOFT_CLIENT_SECRET")
-    tenant_id = os.getenv("MICROSOFT_TENANT_ID")
-    sender_email = os.getenv("SENDER_EMAIL")
-
-    if all([client_id, client_secret, tenant_id, sender_email]):
-        try:
-            import msal
-            authority = f"https://login.microsoftonline.com/{tenant_id}"
-            app = msal.ConfidentialClientApplication(
-                client_id, authority=authority, client_credential=client_secret
-            )
-            result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-            
-            if "access_token" in result:
-                endpoint = f"https://graph.microsoft.com/v1.0/users/{sender_email}/sendMail"
-                email_msg = {
-                    "message": {
-                        "subject": f"Welcome to Drive360 - Workspace Setup for {tenant_name} (OTP: {otp_code})",
-                        "body": {
-                            "contentType": "HTML",
-                            "content": html_content
-                        },
-                        "toRecipients": [
-                            {"emailAddress": {"address": recipient_email}}
-                        ]
-                    },
-                    "saveToSentItems": "false"
-                }
-                headers = {
-                    "Authorization": f"Bearer {result['access_token']}",
-                    "Content-Type": "application/json"
-                }
-                response = requests.post(endpoint, headers=headers, json=email_msg)
-                if response.status_code in (200, 202):
-                    print(f"[TENANT ONBOARDING] Successfully sent welcome email & OTP to {recipient_email} via MS Graph.")
-                    return
-                else:
-                    print(f"[TENANT ONBOARDING] MS Graph failed with status {response.status_code}: {response.text}")
-            else:
-                print(f"[TENANT ONBOARDING] Failed to acquire token for MS Graph: {result.get('error')}")
-        except Exception as e:
-            print(f"[TENANT ONBOARDING] MS Graph Exception: {e}")
-
-    # 2. Fallback to SMTP
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = os.getenv("SMTP_PORT")
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASS")
-
-    if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
-        print(f"[TENANT ONBOARDING] No SMTP/Graph config found. MOCKING EMAIL TO {recipient_email}: OTP is {otp_code}")
+    if _send_graph_mail(recipient_email, subject, html_content, tag="TENANT ONBOARDING"):
         return
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Welcome to Drive360 - Workspace Setup for {tenant_name} (OTP: {otp_code})"
-        msg["From"] = smtp_user
-        msg["To"] = recipient_email
-        msg.attach(MIMEText(html_content, "html"))
+    # 2. Fallback to SMTP
+    if _send_smtp_mail(recipient_email, subject, html_content, tag="TENANT ONBOARDING"):
+        return
 
-        with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, recipient_email, msg.as_string())
-            
-        print(f"[TENANT ONBOARDING] Successfully sent welcome email & OTP to {recipient_email} via SMTP.")
-    except Exception as e:
-        print(f"[TENANT ONBOARDING] Failed to send email via SMTP to {recipient_email}. Error: {e}")
-        print(f"[TENANT ONBOARDING] MOCKING EMAIL TO {recipient_email}: OTP is {otp_code}")
-
+    # 3. Fallback to console print if both fail
+    print(f"[TENANT ONBOARDING] MOCKING EMAIL TO {recipient_email}: OTP is {otp_code}")
