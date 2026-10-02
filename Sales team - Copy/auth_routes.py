@@ -1,5 +1,6 @@
 import os
 import sys
+import urllib.parse
 import importlib.util
 import jwt
 from datetime import datetime, timedelta
@@ -545,14 +546,17 @@ async def admin_grant_access(req: GrantAccessRequest, background_tasks: Backgrou
     )
     
     frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
-    login_url = f"{frontend_origin}/login"
+    encoded_email = urllib.parse.quote(req.email)
+    login_url = f"{frontend_origin}/login?email={encoded_email}"
     
     background_tasks.add_task(
         send_access_granted_email,
         req.email,
         req.full_name,
         admin_email,
-        login_url
+        login_url,
+        req.role,
+        req.allowed_modules or "ALL"
     )
     
     return {

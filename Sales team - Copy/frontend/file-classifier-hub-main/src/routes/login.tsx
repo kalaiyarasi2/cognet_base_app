@@ -36,6 +36,21 @@ function LoginPage() {
   const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
   const [forgotError, setForgotError] = useState<string | null>(null);
 
+  const [isInvitedLink, setIsInvitedLink] = useState(false);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const emailQuery = params.get("email");
+      if (emailQuery) {
+        setEmail(emailQuery.trim());
+        setIsInvitedLink(true);
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }, []);
+
   useEffect(() => {
     if (isAuthenticated && checkAuth()) {
       navigate({ to: "/" });
@@ -226,6 +241,16 @@ function LoginPage() {
         {/* Login Form Fields */}
         {loginStep === "email" && (
           <>
+            {isInvitedLink && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                background: "#eff6ff", color: "#1d4ed8", padding: "10px 14px",
+                borderRadius: 8, fontSize: 13, marginBottom: 16, border: "1px solid #dbeafe"
+              }}>
+                <Sparkles size={16} style={{ flexShrink: 0, color: "#0057FF" }} />
+                <span>Invited account recognized! Click <strong>Continue</strong> to verify and set up your access.</span>
+              </div>
+            )}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Email Address</label>
               <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(null); }} onKeyDown={(e) => e.key === "Enter" && handleCheckEmail()} placeholder="Enter your email" autoFocus autoComplete="email" style={{ width: "100%", height: 42, padding: "0 14px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#0f1117", outline: "none", boxSizing: "border-box", background: "#fff", transition: "border-color 0.15s" }} onFocus={(e) => e.target.style.borderColor = "#0057FF"} onBlur={(e) => e.target.style.borderColor = "#e5e7eb"} />

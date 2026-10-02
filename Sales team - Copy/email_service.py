@@ -123,19 +123,103 @@ def send_otp_email(recipient_email: str, otp_code: str, purpose: str = "login"):
     # 3. Fallback to console print if both fail
     print(f"[LOGIN OTP] MOCKING EMAIL TO {recipient_email}: {otp_code}")
 
-def send_access_granted_email(recipient_email: str, recipient_name: str, granted_by: str, login_url: str = "http://localhost:5173/login"):
+def send_access_granted_email(
+    recipient_email: str,
+    recipient_name: str,
+    granted_by: str,
+    login_url: str = "http://localhost:5173/login",
+    role: str = "USER",
+    allowed_modules: any = "ALL"
+):
+    MODULE_LABELS = {
+        "INVOICE": "Invoice Processing",
+        "SBC": "SBC Parity Analysis",
+        "RPVE": "RPVE Processing",
+        "RE": "Resourcing Edge",
+        "LOSS_RUN": "Loss Run Insurance",
+        "WORK_COMP": "Workers Comp",
+        "BANK_STATEMENT": "Bank Statements",
+        "VENDOR_INVOICE": "Vendor Invoices",
+        "DRIVE_GPU": "Drive GPU Engine",
+        "RENEWAL": "Renewal Process",
+        "PIPELINE": "Document Pipeline",
+        "CONVERTER": "Format Converter",
+        "PAYROLL": "Payroll Extractor",
+        "PSH_CLAIM": "PSH Claim Validator",
+        "ALL": "All System Modules"
+    }
+
+    modules_list = []
+    if isinstance(allowed_modules, list):
+        modules_list = allowed_modules
+    elif isinstance(allowed_modules, str):
+        if allowed_modules.upper() == "ALL":
+            modules_list = ["ALL"]
+        else:
+            modules_list = [m.strip().upper() for m in allowed_modules.split(",") if m.strip()]
+
+    role_label = "Administrator" if role in ["ADMIN", "TENANT_ADMIN"] else "Team Member"
+
+    modules_html = ""
+    for mod in modules_list:
+        label = MODULE_LABELS.get(mod, mod.replace("_", " ").title())
+        modules_html += f'<span style="display: inline-block; background-color: #EFF6FF; color: #1D4ED8; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 9999px; margin-right: 6px; margin-bottom: 6px; border: 1px solid #DBEAFE;">{label}</span>'
+
+    if not modules_html:
+        modules_html = '<span style="display: inline-block; background-color: #EFF6FF; color: #1D4ED8; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 9999px; border: 1px solid #DBEAFE;">Assigned Workspace</span>'
+
     html_content = f"""
     <html>
-      <body style="font-family: Arial, sans-serif; color: #333;">
-        <div style="max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 8px;">
-          <h2 style="color: #0057FF; margin-top: 0;">Access Granted</h2>
-          <p>Hello {recipient_name or 'User'},</p>
-          <p>You have been granted access to the workspace by <strong>{granted_by}</strong>.</p>
-          <p>You can access the project using the following link:</p>
-          <div style="margin: 20px 0;">
-            <a href="{login_url}" style="background-color: #0057FF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Go to Project</a>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; background-color: #f8fafc; margin: 0; padding: 24px;">
+        <div style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+          
+          <!-- Header Banner -->
+          <div style="background: linear-gradient(135deg, #0057FF 0%, #1E40AF 100%); padding: 26px 30px; text-align: left;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">Drive Agent Workspace</h1>
+            <p style="color: #DBEAFE; margin: 6px 0 0 0; font-size: 14px;">Access Granted Invitation</p>
           </div>
-          <p style="font-size: 13px; color: #6b7280;">If you were not expecting this invite, please contact your administrator.</p>
+          <div style="padding: 30px;">
+            <h2 style="color: #0F172A; margin-top: 0; font-size: 18px; font-weight: 600;">Welcome, {recipient_name or 'User'}!</h2>
+            <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-top: 4px;">
+              You have been granted access to the workspace by <strong>{granted_by}</strong>.
+            </p>
+
+            <!-- Access Badges Box -->
+            <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 14px 16px; margin: 18px 0;">
+              <div style="margin-bottom: 10px;">
+                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748B; letter-spacing: 0.5px; display: block; margin-bottom: 2px;">Assigned Role</span>
+                <span style="font-size: 14px; font-weight: 600; color: #0F172A;">{role_label}</span>
+              </div>
+              <div>
+                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748B; letter-spacing: 0.5px; display: block; margin-bottom: 6px;">Permitted Module(s)</span>
+                <div>{modules_html}</div>
+              </div>
+            </div>
+
+            <!-- Steps Section -->
+            <div style="background-color: #F0FDF4; border: 1px solid #DCFCE7; border-radius: 8px; padding: 16px 18px; margin: 18px 0;">
+              <h3 style="color: #166534; margin: 0 0 8px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+                Steps to Access Your Account:
+              </h3>
+              <ol style="margin: 0; padding-left: 20px; color: #15803D; font-size: 13px; line-height: 1.7;">
+                <li>Click the <strong>Go to App</strong> button below.</li>
+                <li>Enter your email to receive a 6-digit verification code (OTP).</li>
+                <li>Verify your OTP and create your account password.</li>
+                <li>You will be taken directly into your assigned module workspace!</li>
+              </ol>
+            </div>
+
+            <!-- CTA Button -->
+            <div style="text-align: center; margin: 26px 0 16px 0;">
+              <a href="{login_url}" style="background-color: #0057FF; color: #ffffff; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 15px; display: inline-block;">
+                Go to App
+              </a>
+            </div>
+
+            <p style="font-size: 12px; color: #94A3B8; text-align: center; margin-top: 16px;">
+              If you have any questions, please contact your administrator.
+            </p>
+          </div>
         </div>
       </body>
     </html>

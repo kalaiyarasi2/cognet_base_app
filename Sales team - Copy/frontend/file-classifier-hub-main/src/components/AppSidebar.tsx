@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, FileText, Tags,
   Workflow, FolderTree, Cloud, BarChart3, Activity, Terminal, Globe,
-  Settings2, SlidersHorizontal, Info, Shield, ChevronLeft, ChevronRight,
+  Settings2, SlidersHorizontal, Info, Shield, ShieldCheck, ChevronLeft, ChevronRight,
   RefreshCw, Scale, Cpu, FileCheck, HardDrive, Share2, FileSpreadsheet, Building2,
   CreditCard, ReceiptText, Mail, ClipboardCheck, Coins
 } from "lucide-react";
@@ -23,6 +23,7 @@ const groups: NavGroup[] = [
   {
     label: "Sales",
     items: [
+      { label: "WCUW", to: "/wcuw", icon: ShieldCheck, moduleCode: "WCUW" },
       { label: "Accord 130", to: "/drive-gpu?pipeline=WORK_COMP", icon: FileText, moduleCode: "WORK_COMP" },
       { label: "Loss Run", to: "/drive-gpu?pipeline=INSURANCE", icon: Shield, moduleCode: "LOSS_RUN" },
     ],

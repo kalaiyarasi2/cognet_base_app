@@ -34,3 +34,6 @@
 [submodule "Sales team - Copy/Notice-extraction"]
 	path = Sales team - Copy/Notice-extraction
 	url = https://github.com/jawagarnathst-tech/Notice-extraction
+[submodule "Sales team - Copy/Modifier_Poc"]
+	path = Sales team - Copy/Modifier_Poc
+	url = https://github.com/althafcoder/Modifier_Poc

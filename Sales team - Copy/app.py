@@ -1,4 +1,19 @@
 import sys
+import os
+
+# Force unbuffered stdout/stderr so logs appear immediately in real-time
+os.environ["PYTHONUNBUFFERED"] = "1"
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(line_buffering=True, write_through=True)
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(line_buffering=True, write_through=True)
+    except Exception:
+        pass
+
 import importlib.util
 import traceback
 from pathlib import Path
@@ -10,8 +25,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 WORKSPACE_DIR = Path(__file__).parent.resolve()
 
-# Ensure CWD is always WORKSPACE_DIR so relative paths (e.g. monitor/monitor.log) resolve correctly
-import os
+# Ensure CWD is always WORKSPACE_DIR so relative paths resolve correctly
 os.chdir(WORKSPACE_DIR)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -556,6 +570,7 @@ app.router.routes.append(
 
 print("[INFO] Unified Sales Team Workspace API Server initialized successfully.")
 
+
 if __name__ == "__main__":
     import uvicorn
     import logging
@@ -578,6 +593,8 @@ if __name__ == "__main__":
         host=host, 
         port=port, 
         reload=is_reload,
-        reload_excludes=["*.log", "*.db", "*.sqlite", "*.sqlite3", "database/*", "logs/*", "temp_uploads/*"]
+        reload_excludes=["*.log", "*.db", "*.sqlite", "*.sqlite3", "database/*", "logs/*", "temp_uploads/*"],
+        log_level="info",
+        access_log=True,
     )
 

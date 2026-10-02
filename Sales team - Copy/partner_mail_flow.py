@@ -421,7 +421,8 @@ class PartnerMailFlowOrchestrator:
             if not overall_category:
                 overall_category = category
 
-            # Run GPU / Local Extraction with optional Tenant POC Override
+
+            # ── STEP 1: Explicit per-category POC overrides (SKIP / force-engine) ──
             force_poc_engine = self.submission_config.transform_rules.poc_routing_overrides.get(category.upper())
             
             if force_poc_engine == "SKIP":
@@ -429,10 +430,279 @@ class PartnerMailFlowOrchestrator:
                 has_exception = True
                 overall_category = category
                 continue
-                
+
+            # ── STEP 2: POC Whitelist Enforcement ─────────────────────────────────
+            # If the tenant has declared an allowed_poc_engines whitelist, resolve
+            # what POC engine this classified category would normally use, then verify
+            # it is in the permitted set.
+            #
+            #  reject_unmatched_poc = True  → SKIP the file + send exception email
+            #  reject_unmatched_poc = False → silently redirect to default_poc_engine
+            allowed_engines = getattr(
+                self.submission_config.transform_rules, "allowed_poc_engines", []
+            )
+            reject_mode = getattr(
+                self.submission_config.transform_rules, "reject_unmatched_poc", False
+            )
+
+            if allowed_engines:
+                # Canonical resolver: maps classification labels → POC engine key.
+                # Must stay in sync with start_flow.run_local_extraction() branch logic.
+                _cat_up = category.upper()
+
+                def _resolve_engine(cat: str) -> str:
+                    """Return the canonical POC engine key for a given category string."""
+                    if any(k in cat for k in ("PARITY", "SBC", "SUMMARY_OF_BENEFITS", "SUMMARY OF BENEFITS")):
+                        return "SBC"
+                    if "RENEWAL" in cat:
+                        return "RENEWAL"
+                    if any(k in cat for k in ("INSURANCE_CLAIMS", "LOSS_RUN", "LOSS RUN", "LOSS", "CLAIM",
+                                              "WORK_COMPENSATION", "WORK_COMP", "ACORD", "COMPENSATION")):
+                        if any(k in cat for k in ("WORK_COMPENSATION", "WORK_COMP", "ACORD", "COMPENSATION")):
+                            return "WORK_COMPENSATION"
+                        return "INSURANCE_CLAIMS"
+                    if any(k in cat for k in ("RESOURCING", "PLAN_COMPARISON")):
+                        return "RESOURCING"
+                    if any(k in cat for k in ("RPVE", "BENEFIT_INVOICE", "BENEFIT INVOICE", "RAPT", "CENSUS")):
+                        return "RPVE"
+                    if "NOTICE" in cat:
+                        return "NOTICE_EXTRACTION"
+                    if "INVOICE" in cat:
+                        return "INVOICE"  # Invoices are their own engine — do NOT collapse into INSURANCE_CLAIMS
+                    return cat  # Fallback: treat raw category as the engine key
+
+                resolved_engine = _resolve_engine(_cat_up)
+                allowed_upper = [e.upper() for e in allowed_engines]
+
+                if resolved_engine.upper() not in allowed_upper:
+                    # ── Document type is NOT accepted by this tenant ───────────────
+                    if reject_mode:
+                        logger.warning(
+                            "[POC WHITELIST] Tenant '%s': classified as '%s' → engine '%s' "
+                            "is NOT in allowed_poc_engines %s. "
+                            "reject_unmatched_poc=True → SKIPPING file and sending exception email.",
+                            self.tenant_folder, category, resolved_engine, allowed_engines,
+                        )
+
+                        # ── Build & send the exception notification email ──────────
+                        fn_cfg = self.submission_config.failure_notification
+                        exc_recipient = fn_cfg.notify_email or sender_email
+                        exc_prefix = fn_cfg.subject_prefix or f"[{self.tenant_folder.upper().replace('_', ' ')}]"
+                        exc_subject = (
+                            f"{exc_prefix} Unaccepted Document Type: '{category}' — "
+                            f"Sent by {sender_email}"
+                        )
+                        exc_html = f"""
+                        <html>
+                          <body style="font-family: Arial, sans-serif; color: #1e293b; background: #fffbeb; padding: 24px;">
+                            <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 10px;
+                                        border: 1px solid #fcd34d; overflow: hidden;">
+                              <div style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+                                          padding: 22px 28px;">
+                                <h1 style="color:#fff; margin:0; font-size:18px; font-weight:700;">
+                                  &#9888; Unaccepted Document Type Received
+                                </h1>
+                                <p style="color:#fef3c7; margin:4px 0 0 0; font-size:13px;">
+                                  Tenant: <strong>{self.tenant_folder}</strong>
+                                </p>
+                              </div>
+                              <div style="padding: 28px;">
+                                <p style="color:#1e293b; font-size:15px; font-weight:600; margin:0 0 12px 0;">Hi Team,</p>
+                                <p style="color:#374151; font-size:14px; line-height:1.6;">
+                                  An email was received from <strong>{sender_email}</strong> but the attached
+                                  document was classified as a type that is <strong>not accepted</strong> by
+                                  this tenant's configuration.
+                                </p>
+                                <div style="background:#fffbeb; border:1px solid #fcd34d; border-radius:8px;
+                                            padding:16px 20px; margin:16px 0;">
+                                  <table style="width:100%; font-size:13px; border-collapse:collapse;">
+                                    <tr>
+                                      <td style="color:#92400e; font-weight:700; padding:4px 0; width:40%;">File Name</td>
+                                      <td style="color:#1e293b; padding:4px 0;">{pdf_path.name}</td>
+                                    </tr>
+                                    <tr>
+                                      <td style="color:#92400e; font-weight:700; padding:4px 0;">Classified As</td>
+                                      <td style="color:#1e293b; padding:4px 0;">{category}
+                                        <span style="font-size:11px; color:#6b7280;">(confidence: {score:.0%})</span>
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td style="color:#92400e; font-weight:700; padding:4px 0;">Resolved Engine</td>
+                                      <td style="color:#dc2626; padding:4px 0;">{resolved_engine}</td>
+                                    </tr>
+                                    <tr>
+                                      <td style="color:#92400e; font-weight:700; padding:4px 0;">Allowed Engines</td>
+                                      <td style="color:#16a34a; padding:4px 0;">{', '.join(allowed_engines)}</td>
+                                    </tr>
+                                    <tr>
+                                      <td style="color:#92400e; font-weight:700; padding:4px 0;">Original Sender</td>
+                                      <td style="color:#1e293b; padding:4px 0;">{sender_email}</td>
+                                    </tr>
+                                    <tr>
+                                      <td style="color:#92400e; font-weight:700; padding:4px 0;">Email Subject</td>
+                                      <td style="color:#1e293b; padding:4px 0;">{subject}</td>
+                                    </tr>
+                                  </table>
+                                </div>
+                                <p style="font-size:13px; color:#374151; line-height:1.6;">
+                                  The document has been <strong>skipped</strong> and was not processed
+                                  by any extraction engine. Please ask the sender to re-submit the
+                                  correct document type, or update the tenant whitelist configuration
+                                  if this document type should be accepted.
+                                </p>
+                                <p style="font-size:13px; color:#374151;">
+                                  The original PDF is attached to this email for your review.
+                                </p>
+                              </div>
+                              <div style="background:#fffbeb; border-top:1px solid #fcd34d; padding:14px 28px;
+                                          text-align:center;">
+                                <p style="font-size:12px; color:#92400e; margin:0;">
+                                  This is an automated exception notification from the CogNet Submission Engine.
+                                </p>
+                              </div>
+                            </div>
+                          </body>
+                        </html>
+                        """
+
+                        # Attach the original PDF so the admin can inspect it
+                        import requests as _req
+                        import base64 as _b64
+
+                        exc_attachments = []
+                        if str(pdf_path.resolve()) and pdf_path.exists():
+                            exc_attachments.append({
+                                "path": str(pdf_path.resolve()),
+                                "name": pdf_path.name,
+                                "mime": "application/pdf",
+                            })
+
+                        def _exc_graph_send(access_token: str, mailbox: str = "") -> bool:
+                            """Send exception notification via Graph API."""
+                            try:
+                                graph_atts = []
+                                for att in exc_attachments:
+                                    with open(att["path"], "rb") as af:
+                                        encoded = _b64.b64encode(af.read()).decode("utf-8")
+                                    graph_atts.append({
+                                        "@odata.type": "#microsoft.graph.fileAttachment",
+                                        "name": att["name"],
+                                        "contentType": att["mime"],
+                                        "contentBytes": encoded,
+                                    })
+                                g_payload = {
+                                    "message": {
+                                        "subject": exc_subject,
+                                        "body": {"contentType": "HTML", "content": exc_html},
+                                        "toRecipients": [{"emailAddress": {"address": exc_recipient}}],
+                                        "attachments": graph_atts,
+                                    },
+                                    "saveToSentItems": "false",
+                                }
+                                endpoint = (
+                                    f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail"
+                                    if mailbox
+                                    else "https://graph.microsoft.com/v1.0/me/sendMail"
+                                )
+                                resp = _req.post(
+                                    endpoint,
+                                    headers={"Authorization": f"Bearer {access_token}",
+                                             "Content-Type": "application/json"},
+                                    json=g_payload,
+                                    timeout=30,
+                                )
+                                if resp.status_code in (200, 202):
+                                    logger.info(
+                                        "[POC WHITELIST] Exception email sent to '%s' for file '%s' (tenant: %s).",
+                                        exc_recipient, pdf_path.name, self.tenant_folder,
+                                    )
+                                    return True
+                                else:
+                                    logger.warning("[POC WHITELIST] Graph returned %s: %s", resp.status_code, resp.text)
+                            except Exception as _ge:
+                                logger.warning("[POC WHITELIST] Graph send failed: %s", _ge)
+                            return False
+
+                        exc_sent = False
+                        if token:
+                            exc_sent = _exc_graph_send(token)
+
+                        if not exc_sent:
+                            # SMTP fallback
+                            import smtplib
+                            from email.mime.multipart import MIMEMultipart as _MMP
+                            from email.mime.text import MIMEText as _MMT
+                            from email.mime.base import MIMEBase as _MMB
+                            from email import encoders as _enc
+                            _smtp_host = os.getenv("SMTP_HOST")
+                            _smtp_port = os.getenv("SMTP_PORT")
+                            _smtp_user = os.getenv("SMTP_USER")
+                            _smtp_pass = os.getenv("SMTP_PASS")
+                            if all([_smtp_host, _smtp_port, _smtp_user, _smtp_pass]):
+                                try:
+                                    _msg = _MMP()
+                                    _msg["Subject"] = exc_subject
+                                    _msg["From"] = _smtp_user
+                                    _msg["To"] = exc_recipient
+                                    _msg.attach(_MMT(exc_html, "html"))
+                                    for att in exc_attachments:
+                                        with open(att["path"], "rb") as af:
+                                            _part = _MMB("application", "octet-stream")
+                                            _part.set_payload(af.read())
+                                            _enc.encode_base64(_part)
+                                            _part.add_header("Content-Disposition", f'attachment; filename="{att["name"]}"')
+                                            _msg.attach(_part)
+                                    with smtplib.SMTP(_smtp_host, int(_smtp_port)) as _srv:
+                                        _srv.starttls()
+                                        _srv.login(_smtp_user, _smtp_pass)
+                                        _srv.sendmail(_smtp_user, exc_recipient, _msg.as_string())
+                                    logger.info(
+                                        "[POC WHITELIST] Exception email sent via SMTP to '%s' (tenant: %s).",
+                                        exc_recipient, self.tenant_folder,
+                                    )
+                                    exc_sent = True
+                                except Exception as _se:
+                                    logger.error("[POC WHITELIST] SMTP exception email also failed: %s", _se)
+
+                        if not exc_sent:
+                            logger.error(
+                                "[POC WHITELIST] Could not deliver exception email for file '%s' to '%s'.",
+                                pdf_path.name, exc_recipient,
+                            )
+
+                        # Mark the flag and skip extraction for this file entirely
+                        has_exception = True
+                        continue  # ← skip to next PDF; do NOT call run_local_extraction
+
+                    else:
+                        # reject_mode=False: silently redirect to default_poc_engine
+                        fallback = (
+                            self.submission_config.transform_rules.default_poc_engine
+                            or allowed_upper[0]
+                        )
+                        logger.warning(
+                            "[POC WHITELIST] Tenant '%s': classified as '%s' → engine '%s' "
+                            "is NOT in allowed_poc_engines %s. "
+                            "Redirecting to default_poc_engine '%s'.",
+                            self.tenant_folder, category, resolved_engine, allowed_engines, fallback,
+                        )
+                        force_poc_engine = fallback
+
+                else:
+                    logger.info(
+                        "[POC WHITELIST] Tenant '%s': category '%s' → engine '%s' is ALLOWED.",
+                        self.tenant_folder, category, resolved_engine,
+                    )
+                    if not force_poc_engine:
+                        force_poc_engine = resolved_engine
+
+            # ── STEP 3: Fallback to tenant-level default if still unset ───────────
             if not force_poc_engine:
                 force_poc_engine = self.submission_config.transform_rules.default_poc_engine
+
             extract_result = await run_local_extraction(category, pdf_path, text, force_poc_engine=force_poc_engine, user_email=sender_email)
+
+
             
             cat_upper = category.upper()
             json_target = extract_result.get("json") or extract_result.get("json_path")
@@ -457,6 +727,45 @@ class PartnerMailFlowOrchestrator:
 
         # (Loss run merging logic is now dynamically handled in PayloadTransformer)
 
+        # ── Whitelist-rejection guard ──────────────────────────────────────────
+        # If every PDF in this email was rejected by the POC whitelist (all got
+        # `continue`-d), extracted_payloads will be empty.  In that case there is
+        # nothing to submit — skip the partner API call entirely so we don't send
+        # a spurious "Submission Failed" email on top of the exception email that
+        # was already sent per-file above.
+        if has_exception and not extracted_payloads:
+            logger.info(
+                "[POC WHITELIST] All documents in this email were rejected by the "
+                "whitelist for tenant '%s'. Skipping partner submission entirely. "
+                "Exception notification(s) already sent.",
+                self.tenant_folder,
+            )
+            # Audit the skip so there is a traceable record in the DB
+            if _poc_db_ok:
+                try:
+                    poc_db.log_universal(
+                        module="PARTNER_SUBMISSION",
+                        action=f"Tenant Submission ({self.tenant_folder})",
+                        file_name=subject,
+                        status="SKIPPED_WHITELIST_REJECTION",
+                        details=json.dumps({
+                            "sender": sender_email,
+                            "reason": "All attached documents were rejected by allowed_poc_engines whitelist",
+                            "pdf_count": len(source_pdf_paths),
+                        }),
+                        processed_by=sender_email,
+                    )
+                except Exception as db_err:
+                    logger.warning("Failed to log SKIPPED audit entry: %s", db_err)
+            # Mark the email as read so it isn't re-processed next poll
+            if token and message_id and _mark_read:
+                try:
+                    _mark_read(token, message_id)
+                    logger.info("Marked message %s as READ in mailbox.", message_id)
+                except Exception as e:
+                    logger.warning("Could not mark message as read: %s", e)
+            return {"status": "SKIPPED_WHITELIST_REJECTION", "reason": "All documents rejected by POC whitelist"}
+
         # Execute submission via SubmissionService
         logger.info("Invoking Multi-Tenant Submission Service for tenant '%s'...", self.tenant_folder)
         submission_result = self.submission_service.process_and_submit(
@@ -472,6 +781,7 @@ class PartnerMailFlowOrchestrator:
                 "category": overall_category
             }
         )
+
 
         status = submission_result.get("status", "UNKNOWN")
         logger.info("Submission Result: Status=%s | StatusCode=%s", status, submission_result.get("status_code"))

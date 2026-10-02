@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WcuwRouteImport } from './routes/wcuw'
 import { Route as UploadRouteImport } from './routes/upload'
 import { Route as TokenUtilizationRouteImport } from './routes/token-utilization'
 import { Route as TenantsRouteImport } from './routes/tenants'
@@ -47,6 +48,11 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 
+const WcuwRoute = WcuwRouteImport.update({
+  id: '/wcuw',
+  path: '/wcuw',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
@@ -270,6 +276,7 @@ export interface FileRoutesByFullPath {
   '/tenants': typeof TenantsRoute
   '/token-utilization': typeof TokenUtilizationRoute
   '/upload': typeof UploadRoute
+  '/wcuw': typeof WcuwRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -309,6 +316,7 @@ export interface FileRoutesByTo {
   '/tenants': typeof TenantsRoute
   '/token-utilization': typeof TokenUtilizationRoute
   '/upload': typeof UploadRoute
+  '/wcuw': typeof WcuwRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRoutesById {
@@ -349,6 +357,7 @@ export interface FileRoutesById {
   '/tenants': typeof TenantsRoute
   '/token-utilization': typeof TokenUtilizationRoute
   '/upload': typeof UploadRoute
+  '/wcuw': typeof WcuwRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRouteTypes {
@@ -390,6 +399,7 @@ export interface FileRouteTypes {
     | '/tenants'
     | '/token-utilization'
     | '/upload'
+    | '/wcuw'
     | '/auth/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -429,6 +439,7 @@ export interface FileRouteTypes {
     | '/tenants'
     | '/token-utilization'
     | '/upload'
+    | '/wcuw'
     | '/auth/callback'
   id:
     | '__root__'
@@ -468,6 +479,7 @@ export interface FileRouteTypes {
     | '/tenants'
     | '/token-utilization'
     | '/upload'
+    | '/wcuw'
     | '/auth/callback'
   fileRoutesById: FileRoutesById
 }
@@ -508,11 +520,19 @@ export interface RootRouteChildren {
   TenantsRoute: typeof TenantsRoute
   TokenUtilizationRoute: typeof TokenUtilizationRoute
   UploadRoute: typeof UploadRoute
+  WcuwRoute: typeof WcuwRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/wcuw': {
+      id: '/wcuw'
+      path: '/wcuw'
+      fullPath: '/wcuw'
+      preLoaderRoute: typeof WcuwRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/upload': {
       id: '/upload'
       path: '/upload'
@@ -812,6 +832,7 @@ const rootRouteChildren: RootRouteChildren = {
   TenantsRoute: TenantsRoute,
   TokenUtilizationRoute: TokenUtilizationRoute,
   UploadRoute: UploadRoute,
+  WcuwRoute: WcuwRoute,
   AuthCallbackRoute: AuthCallbackRoute,
 }
 export const routeTree = rootRouteImport

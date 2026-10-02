@@ -87,6 +87,32 @@ class SubmissionTransformRules(BaseModel):
     poc_routing_overrides: Dict[str, str] = Field(default_factory=dict)
     custom_field_mappings: Dict[str, str] = Field(default_factory=dict)
     default_poc_engine: Optional[str] = None
+    # ── POC Whitelist ──────────────────────────────────────────────────────────
+    # When non-empty, ONLY the listed POC engine identifiers are permitted for
+    # this tenant.  Any document classified into a category that does NOT resolve
+    # to one of these engines will be re-routed to `default_poc_engine` instead
+    # of being processed by an unauthorised engine.
+    #
+    # Supported engine identifiers (match start_flow.py routing branch names):
+    #   "INSURANCE_CLAIMS"    → Gpu_server / Insurance_pdf_extractor-main
+    #   "WORK_COMPENSATION"   → Gpu_server / work_compensation
+    #   "LOSS_RUN"            → Gpu_server / UnifiedRouter (loss runs)
+    #   "RENEWAL"             → Renewal_process
+    #   "SBC"                 → Parity_setup
+    #   "RPVE"                → rpve (Benefit Invoice)
+    #   "NOTICE_EXTRACTION"   → Notice-extraction
+    #
+    # Leave empty ([]) to allow all POC engines (default global behaviour).
+    allowed_poc_engines: List[str] = Field(default_factory=list)
+    # ── Reject-on-Mismatch ─────────────────────────────────────────────────────
+    # When True AND allowed_poc_engines is non-empty:
+    #   • Any document whose category is NOT in the whitelist is SKIPPED entirely.
+    #   • An exception notification email is sent to failure_notification.notify_email
+    #     (or back to the original sender) informing them that the document type is
+    #     not accepted by this tenant.
+    # When False (default): mismatched documents are silently redirected to
+    #   default_poc_engine instead of being rejected.
+    reject_unmatched_poc: bool = False
 
 
 class SubmissionAttachmentRules(BaseModel):

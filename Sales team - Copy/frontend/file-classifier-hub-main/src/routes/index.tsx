@@ -53,6 +53,7 @@ function Dashboard() {
           "SBC": "/parity-setup",
           "RPVE": "/rpve",
           "RE": "/resourcing-edge",
+          "WCUW": "/wcuw",
           "LOSS_RUN": "/drive-gpu?pipeline=INSURANCE",
           "WORK_COMP": "/drive-gpu?pipeline=WORK_COMP",
           "BANK_STATEMENT": "/drive-gpu?pipeline=BANK_STATEMENT",
