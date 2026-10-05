@@ -336,6 +336,7 @@ class PartnerMailFlowOrchestrator:
         self._processed_msg_ids = set()
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._max_concurrent = max_concurrent
+        self.monitored_email: Optional[str] = None
         logger.info("Parallel processing enabled: max %d concurrent emails.", max_concurrent)
 
     def is_submission_enabled(self) -> bool:
@@ -362,13 +363,25 @@ class PartnerMailFlowOrchestrator:
         subject = str(email_item.get("subject", "No Subject"))
         message_id = str(email_item.get("id", ""))
         received_time = str(email_item.get("receivedDateTime", ""))
+        
+        body_val = email_item.get("body")
+        if isinstance(body_val, dict):
+            email_body = str(body_val.get("content", ""))
+        elif isinstance(body_val, str):
+            email_body = body_val
+        else:
+            email_body = ""
+            
+        if not email_body and "bodyPreview" in email_item:
+            email_body = str(email_item.get("bodyPreview", ""))
 
         logger.info("=" * 60)
         logger.info("Processing Email Submission: Sender=%s | Subject='%s'", sender_email, subject)
         logger.info("=" * 60)
 
         categories = load_categories_from_env()
-        classifier = DocumentClassifier(categories=categories)
+        min_score = float(os.getenv("MIN_SCORE_THRESHOLD", "5.0"))
+        classifier = DocumentClassifier(categories=categories, threshold=min_score)
 
         from collections import defaultdict
         extracted_payloads: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -377,6 +390,9 @@ class PartnerMailFlowOrchestrator:
         
         has_exception = False
         overall_category = None
+        loss_run_file = None
+        acord_file = None
+        modifier_file = None
 
         for pdf_path in downloaded_pdfs:
             if not pdf_path.exists() or not pdf_path.name.lower().endswith(".pdf"):
@@ -452,6 +468,8 @@ class PartnerMailFlowOrchestrator:
 
                 def _resolve_engine(cat: str) -> str:
                     """Return the canonical POC engine key for a given category string."""
+                    if any(k in cat for k in ("MODIFIER", "XMOD", "X-MOD", "EXPERIENCE_MODIFIER", "EXMOD")):
+                        return "EXPERIENCE_MODIFIER"
                     if any(k in cat for k in ("PARITY", "SBC", "SUMMARY_OF_BENEFITS", "SUMMARY OF BENEFITS")):
                         return "SBC"
                     if "RENEWAL" in cat:
@@ -705,6 +723,12 @@ class PartnerMailFlowOrchestrator:
 
             
             cat_upper = category.upper()
+            if cat_upper in ("INSURANCE", "INSURANCE_CLAIMS", "LOSS_RUN") and not loss_run_file:
+                loss_run_file = pdf_path.name
+            elif cat_upper in ("WORK_COMP", "WORK_COMPENSATION", "ACORD") and not acord_file:
+                acord_file = pdf_path.name
+            elif cat_upper in ("MODIFIER", "EXPERIENCE_MODIFIER") and not modifier_file:
+                modifier_file = pdf_path.name
             json_target = extract_result.get("json") or extract_result.get("json_path")
             json_content = None
             if json_target and os.path.exists(json_target):
@@ -717,6 +741,28 @@ class PartnerMailFlowOrchestrator:
                 json_content = extract_result.get("data")
             elif isinstance(extract_result, dict) and any(k in extract_result for k in ["Applicant", "SummaryLevel", "claims"]):
                 json_content = extract_result
+
+            # --- Apply Tenant Engine Enrichment (Same as UI flow) ---
+            try:
+                import sys
+                gpu_server_path = str(Path(__file__).parent / "Gpu_server")
+                if gpu_server_path not in sys.path:
+                    sys.path.insert(0, gpu_server_path)
+                from Unified_PDF_Platform.tenant_engine import TenantExtractionEngine
+                
+                engine = TenantExtractionEngine(self.tenant_folder)
+                if json_target and os.path.exists(json_target) and engine.has_extensions:
+                    doc_type = "WORK_COMP" if cat_upper in ("WORK_COMP", "WORK_COMPENSATION", "ACORD") else "INSURANCE"
+                    enriched_content = engine.enrich(
+                        base_json_path=json_target,
+                        extracted_text=text,
+                        source_doc_type=doc_type
+                    )
+                    if "error" not in enriched_content:
+                        json_content = enriched_content
+            except Exception as e:
+                logger.warning("Failed to enrich payload with TenantEngine in MailFlow: %s", e)
+            # --------------------------------------------------------
 
             if json_content and isinstance(json_content, dict):
                 extracted_payloads[cat_upper].append(json_content)
@@ -767,6 +813,16 @@ class PartnerMailFlowOrchestrator:
             return {"status": "SKIPPED_WHITELIST_REJECTION", "reason": "All documents rejected by POC whitelist"}
 
         # Execute submission via SubmissionService
+        clean_tenant = self.tenant_folder.upper().replace(" ", "_")
+        resolved_email = (
+            getattr(self, "monitored_email", None)
+            or os.getenv(f"{clean_tenant}_MONITOR_EMAIL")
+            or os.getenv(f"{clean_tenant.replace('_TEAM', '')}_MONITOR_EMAIL")
+            or os.getenv("PARTNER_POC_MONITOR_EMAIL")
+            or os.getenv("SENDER_EMAIL")
+            or os.getenv("SMTP_USER")
+            or ""
+        )
         logger.info("Invoking Multi-Tenant Submission Service for tenant '%s'...", self.tenant_folder)
         submission_result = self.submission_service.process_and_submit(
             tenant_folder=self.tenant_folder,
@@ -778,7 +834,14 @@ class PartnerMailFlowOrchestrator:
                 "subject": subject,
                 "message_id": message_id,
                 "received_at": received_time,
-                "category": overall_category
+                "category": overall_category,
+                "graph_token": token,
+                "from_mailbox": resolved_email,
+                "sender_email": sender_email,
+                "lossRunFile": loss_run_file,
+                "acordFile": acord_file,
+                "modifierFile": modifier_file,
+                "email_body": email_body,
             }
         )
 
@@ -945,6 +1008,7 @@ class PartnerMailFlowOrchestrator:
             or os.getenv("SMTP_USER")
             or None
         )
+        self.monitored_email = resolved_email
         
         logger.info(
             "Starting Partner Mail Flow Listener for Tenant: '%s' | Monitored Mailbox: %s (Interval: %ds)",
@@ -968,6 +1032,31 @@ class PartnerMailFlowOrchestrator:
                         for email in emails:
                             msg_id = str(email.get("id", str(time.time())))
                             if msg_id in self._processed_msg_ids:
+                                continue
+
+                            # Loopback prevention: Ignore system alerts / output emails sent by this flow
+                            sender_val = email.get("sender") or email.get("from") or {}
+                            sender_str = ""
+                            if isinstance(sender_val, dict):
+                                sender_str = sender_val.get("emailAddress", {}).get("address", "").lower()
+                            elif isinstance(sender_val, str):
+                                sender_str = sender_val.lower()
+
+                            subject = str(email.get("subject", ""))
+                            is_self_sender = resolved_email and sender_str == resolved_email.lower()
+                            is_system_alert = any(prefix in subject for prefix in ["[WCUW]", "Exception Alert", "Submission Processed", "⚠️"])
+
+                            if is_self_sender or is_system_alert:
+                                self._processed_msg_ids.add(msg_id)
+                                logger.info(
+                                    "Skipping system-generated or self-sent email: '%s' from %s",
+                                    subject, sender_str or "self"
+                                )
+                                if token and msg_id and _mark_read:
+                                    try:
+                                        _mark_read(token, msg_id)
+                                    except Exception:
+                                        pass
                                 continue
 
                             attachments = email.get("attachments", [])

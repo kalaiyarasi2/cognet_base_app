@@ -20,6 +20,19 @@ class TenantConfigLoader:
 
         with open(config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
+
+        if not data.get("tenant_code"):
+            t_json = self.base_dir / "config" / "tenants" / tenant_folder / "tenant.json"
+            if t_json.exists():
+                try:
+                    with open(t_json, "r", encoding="utf-8") as tf:
+                        td = json.load(tf)
+                        data["tenant_code"] = td.get("tenant_code", tenant_folder.upper())
+                except Exception:
+                    data["tenant_code"] = tenant_folder.upper()
+            else:
+                data["tenant_code"] = tenant_folder.upper()
+
         return TenantSubmissionConfig(**data)
 
 

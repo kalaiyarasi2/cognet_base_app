@@ -5,7 +5,7 @@ import {
   AlertCircle, FileJson, Table as TableIcon, Copy, Brain, RefreshCw,
   Building2, BarChart3, Check, Sparkles, HardHat, DollarSign,
   Search, ShieldAlert, ArrowRight, ExternalLink, MapPin, Users, History, Phone, Mail,
-  ChevronDown, ChevronUp, RotateCcw, Briefcase, Calendar, Percent
+  ChevronDown, ChevronUp, RotateCcw, Briefcase, Calendar, Percent, Database
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel } from "@/components/Panel";
@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { api, getBackendUrl } from "@/lib/api";
 import { useAuth } from "@/lib/store";
+import ExceptionTab from "@/components/ExceptionTab";
 
 export const Route = createFileRoute("/wcuw")({
   component: WcuwPage,
@@ -95,7 +96,7 @@ function WcuwPage() {
   const [extractionState, setExtractionState] = useState<ExtractionState | null>(null);
 
   // View state
-  const [activeMainTab, setActiveMainTab] = useState<"table" | "json" | "summary">("table");
+  const [activeMainTab, setActiveMainTab] = useState<"table" | "json" | "summary" | "exceptions">("table");
   const [activeTableSubTab, setActiveTableSubTab] = useState<"all" | "claims" | "rating" | "locations" | "contacts" | "priors">("all");
   const [activeJsonSubTab, setActiveJsonSubTab] = useState<"unified" | "loss_run" | "acord" | "modifier">("unified");
   const [tableSearch, setTableSearch] = useState("");
@@ -117,6 +118,7 @@ function WcuwPage() {
   const lossRunInputRef = useRef<HTMLInputElement>(null);
   const acordInputRef = useRef<HTMLInputElement>(null);
   const modifierInputRef = useRef<HTMLInputElement>(null);
+  const lastSavedStateRef = useRef<any>(null);
 
   // File selection handlers
   const handleLossRunSelect = (f: File) => {
@@ -518,6 +520,44 @@ function WcuwPage() {
     URL.revokeObjectURL(url);
     toast.success(`Downloaded ${filename}`);
   };
+
+  const handleSaveToServer = async () => {
+    let payloadToSave: any = unifiedJsonPayload;
+    if (activeJsonSubTab === "loss_run" && extractionState?.lossRunSchema) {
+      payloadToSave = extractionState.lossRunSchema;
+    } else if (activeJsonSubTab === "acord" && extractionState?.acordSchema) {
+      payloadToSave = extractionState.acordSchema;
+    } else if (activeJsonSubTab === "modifier") {
+      payloadToSave = extractionState?.modifierResult || { experience_mod: finalModifier };
+    }
+
+    try {
+      const resp = await fetch(`${getBackendUrl()}/api/gpu/api/tenant/wcuw/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadToSave)
+      });
+      if (resp.ok) {
+        toast.success("Successfully saved JSON payload to backend server!");
+      } else {
+        toast.error(`Failed to save: ${resp.statusText}`);
+      }
+    } catch (e: any) {
+      toast.error(`Save error: ${e.message}`);
+    }
+  };
+
+  // Auto-save whenever extraction successfully finishes
+  useEffect(() => {
+    if (extractionState && !isProcessing && lastSavedStateRef.current !== extractionState) {
+      lastSavedStateRef.current = extractionState;
+      // Slight delay to ensure all React state (like applicant name) has settled into the payload
+      setTimeout(() => {
+        handleSaveToServer();
+      }, 500);
+    }
+  }, [extractionState, isProcessing]);
+
 
   const handleDownloadExcel = () => {
     if (extractionState?.lossRunExcelUrl) {
@@ -1087,6 +1127,15 @@ function WcuwPage() {
 
             <Button
               size="sm"
+              onClick={handleSaveToServer}
+              className="h-8 text-[11px] font-bold bg-green-600 text-white hover:bg-green-700"
+            >
+              <Database className="w-3.5 h-3.5 mr-1.5" />
+              Save to Server
+            </Button>
+
+            <Button
+              size="sm"
               variant="outline"
               onClick={handleDownloadExcel}
               className="h-8 text-[11px] font-bold"
@@ -1141,7 +1190,50 @@ function WcuwPage() {
                 <Brain className="w-3.5 h-3.5" />
                 AI SUMMARY
               </TabsTrigger>
+              <TabsTrigger value="exceptions" className="text-xs font-semibold gap-1.5 data-[state=active]:bg-card shadow-xs text-red-600 data-[state=active]:text-red-700">
+                <AlertCircle className="w-3.5 h-3.5" />
+                EXCEPTIONS
+              </TabsTrigger>
             </TabsList>
+
+            {/* TAB 4: EXCEPTIONS VIEW */}
+            <TabsContent value="exceptions" className="space-y-4">
+              <ExceptionTab 
+                exceptionRules={[
+                  {
+                    "id": "missing_fein",
+                    "condition": "!demographics.fein",
+                    "exception_message": "Exception: No FEIN Found - Ensure FEIN is provided for policy issuance."
+                  },
+                  {
+                    "id": "missing_loss_runs",
+                    "condition": "!has_document('INSURANCE')",
+                    "exception_message": "Exception: Missing Loss Runs - Required to proceed with underwriting."
+                  },
+                  {
+                    "id": "valuation_date_old",
+                    "condition": "days_since(report_metadata.valuation_date) > 60",
+                    "exception_message": "Exception: Valuation Date too old - Must be within the last 60 days."
+                  },
+                  {
+                    "id": "zero_employees",
+                    "condition": "summary.employee_count == 0",
+                    "exception_message": "Exception: Zero Employees - Verify if this is an owner-only policy."
+                  },
+                  {
+                    "id": "missing_modifier",
+                    "condition": "!has_document('EXPERIENCE_MODIFIER')",
+                    "exception_message": "Exception: Missing Modifier Worksheet - Ensure it is uploaded if applicable."
+                  },
+                  {
+                    "id": "missing_acord",
+                    "condition": "!has_document('WORK_COMP')",
+                    "exception_message": "Exception: Missing ACORD 130 - Required to extract policy and rating information."
+                  }
+                ]}
+                unifiedPayload={unifiedJsonPayload} 
+              />
+            </TabsContent>
 
             {/* TAB 1: TABLE VIEW (First Priority — Extracted Data Grid & Cards) */}
             <TabsContent value="table" className="space-y-4">

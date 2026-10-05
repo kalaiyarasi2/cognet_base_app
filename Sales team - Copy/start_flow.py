@@ -896,6 +896,73 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "", fo
                 _notice_log_uni("notice-extraction", "extract", pdf_path.name, "FAILED", f"Notice-extraction failed: {str(e)}", processed_by=_notice_processed_by)
             return {"error": f"Notice-extraction failed: {str(e)}"}
             
+    # 7. Modifier_Poc (Experience Modification / X-Mod Extractor)
+    elif (
+        "MODIFIER" in category_upper 
+        or "EXPERIENCE_MODIFIER" in category_upper
+        or "XMOD" in category_upper 
+        or "X-MOD" in category_upper 
+        or "MODWORKSHEET" in filename_stem.upper() 
+        or "EXMOD" in filename_stem.upper() 
+        or "RISKSUMMARY" in filename_stem.upper()
+        or "X_MOD" in filename_stem.upper()
+    ):
+        logger.info("[ROUTING] Routing to Modifier_Poc (X-Mod Extractor) for file: %s", pdf_path.name)
+        try:
+            from pathlib import Path
+            workspace_root = Path(__file__).parent.resolve()
+            modifier_root = workspace_root / "Modifier_Poc"
+            
+            if str(modifier_root) not in sys.path:
+                sys.path.insert(0, str(modifier_root))
+                
+            import extract_xmod
+            
+            try:
+                from database.poc_db import log_universal as _mod_log_uni
+            except ImportError:
+                _mod_log_uni = None
+                
+            _mod_processed_by = user_email or "SYSTEM"
+            if _mod_log_uni:
+                _mod_log_uni("modifier", "extract", pdf_path.name, "STARTED", "Extracting X-Mod", processed_by=_mod_processed_by)
+                
+            llm_client = extract_xmod.load_llm_client(workspace_root / ".env")
+            out_dir = modifier_root / "output"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            dump_dir = out_dir / "extracted_text"
+            dump_dir.mkdir(parents=True, exist_ok=True)
+            
+            result = extract_xmod.process_file(
+                ocr=None,
+                path=pdf_path,
+                year=2026,
+                dpi=300,
+                dump_dir=dump_dir,
+                llm=llm_client,
+                use_llm=True
+            )
+            
+            out_json = out_dir / f"extracted_xmod_{filename_stem}.json"
+            with open(out_json, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=4, ensure_ascii=False)
+                
+            xmod_val = result.get("experience_mod")
+            logger.info("[ROUTING] Modifier_Poc extraction finished for %s -> X-Mod: %s", pdf_path.name, xmod_val)
+            
+            if _mod_log_uni:
+                _mod_log_uni("modifier", "extract", pdf_path.name, "SUCCESS", f"Extracted X-Mod: {xmod_val}", processed_by=_mod_processed_by)
+                
+            return {
+                "json": str(out_json),
+                "excel": None
+            }
+        except Exception as e:
+            logger.error("Modifier_Poc extraction failed: %s", e, exc_info=True)
+            if _mod_log_uni:
+                _mod_log_uni("modifier", "extract", pdf_path.name, "FAILED", f"Modifier extraction failed: {str(e)}", processed_by=_mod_processed_by)
+            return {"error": f"Modifier extraction failed: {str(e)}"}
+
     else:
         logger.info("[ROUTING] Category '%s' is not mapped to any specific local POC extractor. Falling back to UnifiedRouter.", category)
         try:
@@ -1062,7 +1129,7 @@ def execute_flow(
         _classify_error = None
         try:
             text, pdf_type, rotation_info = classifier_extract(temp_pdf_path, max_pages=pdf_max_pages)
-            category, score = classifier.classify(text)
+            category, score = classifier.classify(text, file_name=filename)
         except Exception as e:
             logger.error("[CLASSIFY] [ERR] Classification failed: %s. Defaulting to 'Others'.", e)
             category, score = "Others", 0.0

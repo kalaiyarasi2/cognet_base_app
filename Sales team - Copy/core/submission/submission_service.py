@@ -79,7 +79,7 @@ class SubmissionService:
         except Exception as save_err:
             logger.warning(f"Could not save local verification copy for tenant '{tenant_folder}': {save_err}")
 
-        # 2. Dispatch via HTTP Adapter or SharePoint Native Adapter
+        # 2. Dispatch via HTTP Adapter, SharePoint Native Adapter, or Mail-Out Adapter
         if getattr(config, "delivery_method", "http") == "sharepoint_direct":
             from core.submission.sharepoint_adapter import SharePointDirectAdapter
             adapter = SharePointDirectAdapter(config)
@@ -90,6 +90,24 @@ class SubmissionService:
                 config_override=config,
                 saved_submission_path=saved_copy_path,
                 extra_metadata=extra_metadata,
+            )
+        elif getattr(config, "delivery_method", "http") == "mail_out":
+            # Mail-out mode: email the processed outputs instead of POSTing to an API
+            from core.submission.mail_out_adapter import MailOutAdapter
+            mail_adapter = MailOutAdapter(config)
+            # Inject saved_submission_path and extracted_payloads into extra_metadata
+            # so the adapter can attach the merged JSON and evaluate exceptions
+            enriched_meta = dict(extra_metadata or {})
+            enriched_meta["saved_submission_path"] = saved_copy_path
+            enriched_meta["email_address"] = email_address
+            enriched_meta["extracted_payloads"] = dict(extracted_payloads or {})
+            enriched_meta.setdefault("sender_email", email_address)
+            dispatch_result: SubmissionResult = mail_adapter.dispatch(
+                payload=transformed_payload,
+                pdf_file_paths=pdf_file_paths,
+                additional_file_paths=additional_file_paths,
+                config_override=config,
+                extra_metadata=enriched_meta,
             )
         else:
             dispatch_result: SubmissionResult = self.adapter.dispatch(

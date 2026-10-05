@@ -113,6 +113,16 @@ class SubmissionTransformRules(BaseModel):
     # When False (default): mismatched documents are silently redirected to
     #   default_poc_engine instead of being rejected.
     reject_unmatched_poc: bool = False
+    # ── Generic Tenant Transformation & Schema Extension Rules ──────────────
+    include_tenant_code: bool = False
+    include_modifier_data: bool = False
+    clean_metadata_summary: bool = False
+    opportunity_template: Optional[Dict[str, Any]] = None
+    email_extraction_rules: Optional[Dict[str, str]] = None
+    # Optional dotted-path sources, e.g. {"opportunityName": "acord.demographics.applicantName"}
+    opportunity_field_sources: Dict[str, str] = Field(default_factory=dict)
+    # Optional dotted-path list sources for metadata counts, e.g. {"totalClaims": "lossRuns.claims"}
+    metadata_count_sources: Dict[str, str] = Field(default_factory=dict)
 
 
 class SubmissionAttachmentRules(BaseModel):
@@ -147,9 +157,33 @@ class FailureNotificationConfig(BaseModel):
     subject_prefix: Optional[str] = None
 
 
+class MailOutConfig(BaseModel):
+    """
+    Config for mail-out delivery mode: instead of POSTing to an API,
+    the system emails the processed outputs to a fixed recipient.
+    Activated when TenantSubmissionConfig.delivery_method == "mail_out".
+    """
+    # "fixed": always send to result_to address
+    # "sender": reply back to the original email sender
+    result_recipient_mode: str = "fixed"
+    result_to: str = ""              # env var placeholders supported e.g. ${WCUW_CLIENT_OUTPUT_EMAIL}
+    exception_recipient: str = ""    # env var placeholders supported e.g. ${WCUW_EXCEPTIONAL_MAIL}
+    # If True, send result email even when exceptions are found (plus send exception alert)
+    # If False, only send the exception alert and skip the result email
+    send_result_even_if_exceptions: bool = True
+    subject_prefix: str = "[COGNET]"
+    # Which output files to attach in the result email.
+    # Supported values: "lossrun_json", "acord_json", "merged_json", "lossrun_excel", "acord_excel"
+    attach_outputs: List[str] = Field(default_factory=lambda: ["merged_json"])
+    # Custom filename for the attached merged/unified json (defaults to merged_output.json or <tenant>_unified_payload.json)
+    unified_json_filename: Optional[str] = None
+
+
 class TenantSubmissionConfig(BaseModel):
+    tenant_code: str = ""
     enabled: bool = True
-    delivery_method: str = "http" # "http" or "sharepoint_direct"
+    # Delivery method: "http" | "sharepoint_direct" | "mail_out"
+    delivery_method: str = "http"
     sharepoint_base_folder: str = "Notices"
     target_url: str = ""
     http_method: str = "POST"
@@ -164,5 +198,7 @@ class TenantSubmissionConfig(BaseModel):
     # When True: if the first dispatch returns HTTP 500, the system retries ONCE automatically.
     # If the retry also fails → failure notification email is sent. Default False (opt-in per tenant).
     retry_on_500: bool = False
+    # Mail-out delivery config — only used when delivery_method == "mail_out"
+    mail_out: MailOutConfig = Field(default_factory=MailOutConfig)
 
 
