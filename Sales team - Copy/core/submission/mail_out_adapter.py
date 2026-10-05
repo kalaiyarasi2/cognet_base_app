@@ -64,6 +64,89 @@ def _resolve(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Dynamic JSON Path Resolver
+# ---------------------------------------------------------------------------
+
+def _resolve_json_path(data: Any, path: str) -> Any:
+    """
+    Walk a dotted JSON path (e.g. 'acord.data.demographics.applicantName' or
+    'acord.data.priorCarriers.0.policyNumber') through nested dicts and lists.
+    """
+    if not path or not isinstance(data, (dict, list)):
+        return None
+
+    keys = path.split(".")
+    current = data
+    for k in keys:
+        if isinstance(current, dict):
+            current = current.get(k)
+        elif isinstance(current, list):
+            try:
+                idx = int(k)
+                if 0 <= idx < len(current):
+                    current = current[idx]
+                else:
+                    return None
+            except ValueError:
+                return None
+        else:
+            return None
+        if current is None:
+            return None
+
+    # Special handling: if path resolves to a list of rating entries, sum employees
+    if isinstance(current, list) and current and isinstance(current[0], dict):
+        if any("fullTimeEmployees" in item or "partTimeEmployees" in item for item in current):
+            total_emp = 0
+            has_emp = False
+            for item in current:
+                ft = item.get("fullTimeEmployees") or 0
+                pt = item.get("partTimeEmployees") or 0
+                try:
+                    total_emp += int(float(ft)) + int(float(pt))
+                    has_emp = True
+                except (ValueError, TypeError):
+                    pass
+            if has_emp:
+                return total_emp
+
+    return current
+
+
+def _resolve_field_value(
+    payload: Dict[str, Any],
+    path: str,
+    fallback_paths: Optional[List[str]] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Any:
+    """Resolve a field value by checking primary path and any fallback paths across payload and extra."""
+    val = _resolve_json_path(payload, path)
+    if val is not None and str(val).strip() != "":
+        return val
+
+    # Try fallback paths on payload
+    if fallback_paths:
+        for fb in fallback_paths:
+            val = _resolve_json_path(payload, fb)
+            if val is not None and str(val).strip() != "":
+                return val
+
+    # Also try resolving on extra or raw extracted payloads if passed
+    if extra:
+        extracted = extra.get("extracted_payloads", {})
+        val = _resolve_json_path(extracted, path)
+        if val is not None and str(val).strip() != "":
+            return val
+        if fallback_paths:
+            for fb in fallback_paths:
+                val = _resolve_json_path(extracted, fb)
+                if val is not None and str(val).strip() != "":
+                    return val
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # HTML builders
 # ---------------------------------------------------------------------------
 
@@ -73,11 +156,18 @@ def _build_result_email_html(
     sender_email: str,
     received_at: str,
     doc_results: List[Dict[str, Any]],
-    key_fields: Dict[str, Any],
-    exceptions: List[Dict[str, str]],
-    subject_prefix: str = "[WCUW]",
+    display_sections: Optional[List[Any]] = None,
+    payload: Optional[Dict[str, Any]] = None,
+    extra: Optional[Dict[str, Any]] = None,
+    exceptions: Optional[List[Dict[str, str]]] = None,
+    subject_prefix: str = "[COGNET]",
+    key_fields: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Build the rich HTML result email body."""
+    """Build the rich HTML result email body dynamically from tenant config."""
+    payload = payload or {}
+    extra = extra or {}
+    exceptions = exceptions or []
+    display_sections = display_sections or []
 
     # ── Document table rows ──────────────────────────────────────────────────
     doc_rows = ""
@@ -91,33 +181,56 @@ def _build_result_email_html(
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;color:{status_color};font-weight:600;">{status_icon} {doc.get('status','')}</td>
         </tr>"""
 
-    # ── Key fields rows ──────────────────────────────────────────────────────
+    # ── Key fields rows helper ───────────────────────────────────────────────
     def _kv_row(label: str, value: Any, highlight: bool = False) -> str:
         color = "#dc2626" if highlight else "#334155"
+        val_display = "—"
+        if value is not None:
+            s = str(value).strip()
+            if s and s.lower() != "none" and s != "—":
+                val_display = s
         return f"""
         <tr>
           <td style="padding:6px 12px;font-size:13px;color:#64748b;font-weight:600;width:40%;">{label}</td>
-          <td style="padding:6px 12px;font-size:13px;color:{color};">{value or '—'}</td>
+          <td style="padding:6px 12px;font-size:13px;color:{color};">{val_display}</td>
         </tr>"""
 
-    acord = key_fields.get("acord", {})
-    lossrun = key_fields.get("lossrun", {})
+    # ── Render Display Sections Config-Driven ────────────────────────────────
+    sections_html = ""
+    for sec in display_sections:
+        title = getattr(sec, "title", None) or (sec.get("title") if isinstance(sec, dict) else "Key Extracted Data")
+        fields = getattr(sec, "fields", None) or (sec.get("fields") if isinstance(sec, dict) else [])
+        sec_rows = ""
+        for f in fields:
+            label = getattr(f, "label", None) or (f.get("label") if isinstance(f, dict) else "")
+            path = getattr(f, "path", None) or (f.get("path") if isinstance(f, dict) else "")
+            fb_paths = getattr(f, "fallback_paths", None) or (f.get("fallback_paths") if isinstance(f, dict) else [])
+            highlight_if_empty = getattr(f, "highlight_if_empty", False) or (f.get("highlight_if_empty", False) if isinstance(f, dict) else False)
 
-    acord_rows = (
-        _kv_row("Applicant Name", acord.get("applicant_name") or acord.get("applicantName"))
-        + _kv_row("FEIN", acord.get("fein") or acord.get("demographics", {}).get("fein") if isinstance(acord.get("demographics"), dict) else acord.get("fein"),
-                  highlight=not bool(acord.get("fein") or (isinstance(acord.get("demographics"), dict) and acord["demographics"].get("fein"))))
-        + _kv_row("Policy Number", acord.get("policyNumber") or acord.get("policy_number"))
-        + _kv_row("State", acord.get("state"))
-        + _kv_row("Effective Date", acord.get("effectiveDate") or acord.get("effective_date"))
-    )
+            val = _resolve_field_value(payload, path, fb_paths, extra=extra)
+            is_empty = val is None or str(val).strip() == ""
+            highlight = highlight_if_empty and is_empty
+            sec_rows += _kv_row(label, val, highlight=highlight)
 
-    lr_rows = (
-        _kv_row("Carrier", lossrun.get("carrier_name") or lossrun.get("carrierName"))
-        + _kv_row("Valuation Date", lossrun.get("valuation_date") or lossrun.get("valuationDate"))
-        + _kv_row("Employee Count", lossrun.get("employee_count") or (lossrun.get("summary", {}) or {}).get("employee_count"))
-        + _kv_row("Total Claims", lossrun.get("total_claims") or (lossrun.get("claimsCount", {}) or {}).get("total"))
-    )
+        if sec_rows:
+            sections_html += f"""
+            <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:8px;">{title}</div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:20px;
+                          background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+              <tbody>{sec_rows}</tbody>
+            </table>"""
+
+    # Fallback if no display_sections were configured: render key_fields if provided
+    if not sections_html and key_fields:
+        for kf_title, kf_dict in key_fields.items():
+            if isinstance(kf_dict, dict) and kf_dict:
+                sec_rows = "".join(_kv_row(k.replace('_', ' ').title(), v) for k, v in kf_dict.items())
+                sections_html += f"""
+                <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:8px;">{kf_title.replace('_', ' ').title()}</div>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:20px;
+                              background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                  <tbody>{sec_rows}</tbody>
+                </table>"""
 
     # ── Exception table ──────────────────────────────────────────────────────
     if exceptions:
@@ -149,6 +262,7 @@ def _build_result_email_html(
 
     # ── Full HTML ────────────────────────────────────────────────────────────
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    tenant_title = tenant_folder.upper().replace("_", " ")
     return f"""
     <html>
       <head><meta charset="utf-8"></head>
@@ -162,7 +276,7 @@ def _build_result_email_html(
               {subject_prefix} Submission Processed
             </h1>
             <p style="color:#bfdbfe;margin:4px 0 0;font-size:13px;">
-              Workers Compensation Underwriting &mdash; {ts}
+              {tenant_title} Automation &mdash; {ts}
             </p>
           </div>
 
@@ -189,7 +303,7 @@ def _build_result_email_html(
               </tr>
               <tr>
                 <td style="padding:8px 14px;font-size:13px;color:#64748b;font-weight:600;">Processed By</td>
-                <td style="padding:8px 14px;font-size:13px;color:#334155;">CogNet WCUW Automation</td>
+                <td style="padding:8px 14px;font-size:13px;color:#334155;">CogNet {tenant_title} Automation</td>
               </tr>
             </table>
 
@@ -207,19 +321,8 @@ def _build_result_email_html(
               <tbody>{doc_rows}</tbody>
             </table>
 
-            <!-- ACORD Key Fields -->
-            <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:8px;">Key Extracted Data — ACORD 130</div>
-            <table style="width:100%;border-collapse:collapse;margin-bottom:20px;
-                          background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-              <tbody>{acord_rows}</tbody>
-            </table>
-
-            <!-- Loss Run Key Fields -->
-            <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:8px;">Key Extracted Data — Loss Run</div>
-            <table style="width:100%;border-collapse:collapse;margin-bottom:20px;
-                          background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-              <tbody>{lr_rows}</tbody>
-            </table>
+            <!-- Configured Dynamic Display Sections -->
+            {sections_html}
 
             <!-- Exceptions -->
             <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:4px;">Exceptions</div>
@@ -233,7 +336,7 @@ def _build_result_email_html(
           <!-- Footer -->
           <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:14px 28px;text-align:center;">
             <p style="font-size:12px;color:#94a3b8;margin:0;">
-              This is an automated result from the CogNet WCUW Submission Engine.
+              This is an automated result from the CogNet {tenant_title} Submission Engine.
             </p>
           </div>
         </div>
@@ -527,10 +630,36 @@ class MailOutAdapter:
 
         # ── Build document results list for email ────────────────────────────
         doc_results: List[Dict[str, Any]] = []
+        meta_info = payload.get("metadata", {}) if isinstance(payload, dict) else {}
         for cat, docs in extracted_payloads.items():
             for i, _ in enumerate(docs):
+                cat_u = cat.upper()
+                fname = None
+                if "LOSS" in cat_u or "INSURANCE" in cat_u:
+                    fname = extra.get("lossRunFile") or meta_info.get("lossRunFile")
+                elif "ACORD" in cat_u or "COMP" in cat_u:
+                    fname = extra.get("acordFile") or meta_info.get("acordFile")
+                elif "MODIFIER" in cat_u:
+                    fname = extra.get("modifierFile") or meta_info.get("modifierFile")
+
+                if not fname and pdf_file_paths:
+                    for p in pdf_file_paths:
+                        p_name = Path(p).name.lower()
+                        if ("loss" in p_name or "claim" in p_name or "hartford" in p_name) and ("LOSS" in cat_u or "INSURANCE" in cat_u):
+                            fname = Path(p).name
+                            break
+                        elif ("acord" in p_name or "comp" in p_name) and ("ACORD" in cat_u or "COMP" in cat_u):
+                            fname = Path(p).name
+                            break
+                        elif ("mod" in p_name) and ("MODIFIER" in cat_u):
+                            fname = Path(p).name
+                            break
+
+                if not fname:
+                    fname = f"{cat.lower()}_{i+1}.pdf"
+
                 doc_results.append({
-                    "file": f"{cat.lower()}_{i+1}.pdf",
+                    "file": fname,
                     "type": cat,
                     "status": "OK",
                 })
@@ -542,19 +671,6 @@ class MailOutAdapter:
                     "type": "—",
                     "status": "OK",
                 })
-
-        # ── Extract key fields from payload for email display ────────────────
-        key_fields: Dict[str, Any] = {}
-        acord_raw = {}
-        lr_raw = {}
-        for cat, docs in extracted_payloads.items():
-            cat_up = cat.upper()
-            if cat_up in ("WORK_COMP", "WORK_COMPENSATION") and docs:
-                acord_raw = docs[0] if isinstance(docs[0], dict) else {}
-            elif cat_up in ("INSURANCE_CLAIMS", "INSURANCE") and docs:
-                lr_raw = docs[0] if isinstance(docs[0], dict) else {}
-        key_fields["acord"] = acord_raw
-        key_fields["lossrun"] = lr_raw
 
         # ── Collect output file attachments ──────────────────────────────────
         attach_keys = set(mail_cfg.attach_outputs)
@@ -608,7 +724,9 @@ class MailOutAdapter:
                 sender_email=sender_email,
                 received_at=received_at,
                 doc_results=doc_results,
-                key_fields=key_fields,
+                display_sections=getattr(mail_cfg, "display_sections", []),
+                payload=payload,
+                extra=extra,
                 exceptions=exceptions,
                 subject_prefix=prefix,
             )

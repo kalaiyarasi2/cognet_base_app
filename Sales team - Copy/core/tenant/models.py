@@ -157,6 +157,18 @@ class FailureNotificationConfig(BaseModel):
     subject_prefix: Optional[str] = None
 
 
+class MailOutDisplayField(BaseModel):
+    label: str                                   # e.g., "Applicant Name", "FEIN", "Total Claims"
+    path: str                                    # Dotted JSON path, e.g., "acord.data.demographics.applicantName"
+    highlight_if_empty: bool = False             # Highlight in red if empty/missing (e.g. FEIN)
+    fallback_paths: List[str] = Field(default_factory=list)  # Alternative paths if primary is missing
+
+
+class MailOutDisplaySection(BaseModel):
+    title: str                                   # Table title, e.g., "Key Extracted Data — ACORD 130"
+    fields: List[MailOutDisplayField] = Field(default_factory=list)
+
+
 class MailOutConfig(BaseModel):
     """
     Config for mail-out delivery mode: instead of POSTing to an API,
@@ -177,6 +189,8 @@ class MailOutConfig(BaseModel):
     attach_outputs: List[str] = Field(default_factory=lambda: ["merged_json"])
     # Custom filename for the attached merged/unified json (defaults to merged_output.json or <tenant>_unified_payload.json)
     unified_json_filename: Optional[str] = None
+    # Config-driven display sections for result email body
+    display_sections: List[MailOutDisplaySection] = Field(default_factory=list)
 
 
 class TenantSubmissionConfig(BaseModel):
