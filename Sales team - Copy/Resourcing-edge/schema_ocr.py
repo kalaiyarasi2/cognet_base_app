@@ -8,8 +8,17 @@ and provides mapping to a JSON schema using either a text LLM or Regex, avoiding
 from pathlib import Path
 import os
 import json
-import re
 from universal_trash import move_to_trash
+import sys
+import time
+
+try:
+    import core_gpu
+except ImportError:
+    _root_dir = Path(__file__).resolve().parent.parent
+    if str(_root_dir) not in sys.path:
+        sys.path.insert(0, str(_root_dir))
+    import core_gpu
 
 try:
     from openai import OpenAI  # only needed for LLM schema mapping
@@ -90,7 +99,13 @@ class SchemaOCRExtractor:
             # Execute with automated GPU VRAM optimization and CPU fallback protection
             #self.output_text = gpu_manager.execute_with_rostaing(str(self.pdf_path), _run_rostaing_extraction)
             # Run rostaing-ocr extraction directly
+            t0 = time.time()
             self.output_text = _run_rostaing_extraction(str(self.pdf_path))
+            elapsed = time.time() - t0
+            try:
+                core_gpu.log_ocr_audit("Resourcing-Edge", "rostaing-ocr", elapsed_sec=elapsed)
+            except Exception:
+                pass
             
             print(f"[Rostaing OCR] Finished extracting. Text length: {len(self.output_text)} characters.")
             

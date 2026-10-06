@@ -1137,6 +1137,16 @@ def execute_flow(
         _classify_ms = int((time.time() - _t0_classify) * 1000)
 
         logger.info("[CLASSIFY] Category: '%s' (score: %.2f)", category, score)
+        try:
+            import core_gpu
+            logger.info(
+                "[PIPELINE AUDIT] Document: %s | Stage: Classification | Device: %s | Elapsed: %dms",
+                filename,
+                core_gpu.get_hardware_device_string(),
+                _classify_ms,
+            )
+        except Exception:
+            pass
 
         # ── STAGE 3: Create structured target directory (Category/Filename_Without_Ext) ───
         filename_stem = Path(filename).stem
