@@ -51,7 +51,7 @@ class PayloadTransformer:
         # Check for extracted modifier data across categories
         modifier_data = None
         for cat, payloads in extracted_payloads.items():
-            if ("MODIFIER" in cat or "EXPERIENCE_MODIFIER" in cat) and payloads:
+            if any(k in cat.upper() for k in ("MODIFIER", "EXPERIENCE_MODIFIER", "XMOD", "EXMOD")) and payloads:
                 modifier_data = copy.deepcopy(payloads[0]) if isinstance(payloads[0], dict) else {}
                 break
 
@@ -68,7 +68,7 @@ class PayloadTransformer:
             
             # Extract ACORD-like data
             for cat, payloads in extracted_payloads.items():
-                if "ACORD" in cat or "COMPENSATION" in cat:
+                if any(k in cat.upper() for k in ("ACORD", "COMPENSATION", "WORK_COMP")):
                     cleaned_acord = copy.deepcopy(payloads[0]) if payloads else {}
             # Extract LOSS-like data
             loss_payloads = []

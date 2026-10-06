@@ -109,7 +109,7 @@ def _has_document(doc_type: str, doc_map: Dict[str, Any]) -> bool:
         "INSURANCE_CLAIMS": ["INSURANCE_CLAIMS", "INSURANCE", "LOSS_RUN", "LOSSRUNS"],
         "WORK_COMP": ["WORK_COMP", "WORK_COMPENSATION", "ACORD"],
         "WORK_COMPENSATION": ["WORK_COMPENSATION", "WORK_COMP", "ACORD"],
-        "EXPERIENCE_MODIFIER": ["EXPERIENCE_MODIFIER", "MODIFIER", "EXPERIENCE MODIFIER", "MODIFIERDATA"],
+        "EXPERIENCE_MODIFIER": ["EXPERIENCE_MODIFIER", "MODIFIER", "EXPERIENCE MODIFIER", "MODIFIERDATA", "XMOD", "X-MOD", "EXMOD"],
     }
     candidates = aliases.get(upper, [upper])
     for key in doc_map:
@@ -308,7 +308,13 @@ class ExceptionEvaluator:
             if merged_payload.get("lossRuns"):
                 doc_map["INSURANCE"] = True
                 doc_map["INSURANCE_CLAIMS"] = True
-            if merged_payload.get("modifier") or merged_payload.get("modifierData"):
+            # Only consider modifier document present if actual modifierData or modifierFile exists
+            # (Do NOT check merged_payload.get('modifier') because it defaults to numeric 1.0)
+            has_mod_doc = bool(
+                (isinstance(merged_payload.get("modifierData"), dict) and bool(merged_payload["modifierData"]))
+                or (isinstance(merged_payload.get("metadata"), dict) and bool(merged_payload["metadata"].get("modifierFile")))
+            )
+            if has_mod_doc:
                 doc_map["EXPERIENCE_MODIFIER"] = True
                 doc_map["MODIFIER"] = True
 

@@ -727,7 +727,7 @@ class PartnerMailFlowOrchestrator:
                 loss_run_file = pdf_path.name
             elif cat_upper in ("WORK_COMP", "WORK_COMPENSATION", "ACORD") and not acord_file:
                 acord_file = pdf_path.name
-            elif cat_upper in ("MODIFIER", "EXPERIENCE_MODIFIER") and not modifier_file:
+            elif any(k in cat_upper for k in ("MODIFIER", "EXPERIENCE_MODIFIER", "XMOD", "X-MOD", "EXMOD")) and not modifier_file:
                 modifier_file = pdf_path.name
             json_target = extract_result.get("json") or extract_result.get("json_path")
             json_content = None
