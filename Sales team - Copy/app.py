@@ -307,7 +307,13 @@ async def unified_lifespan(a: FastAPI):
     print("[INIT] Starting Universal Trash background service...")
     cleanup_task = None
     try:
-        import universal_trash
+        import importlib.util as _ilu
+        _TRASH_PATH = WORKSPACE_DIR / "universal_trash" / "__init__.py"
+        _s = _ilu.spec_from_file_location("universal_trash", str(_TRASH_PATH))
+        universal_trash = _ilu.module_from_spec(_s)
+        sys.modules["universal_trash"] = universal_trash
+        _s.loader.exec_module(universal_trash)
+        
         start_func = getattr(universal_trash, "start_cleanup_service", None) or getattr(universal_trash, "start_scheduled_cleanup", None)
         if start_func:
             cleanup_task = start_func()

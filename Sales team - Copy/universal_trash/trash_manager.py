@@ -54,6 +54,7 @@ def move_to_trash(file_path: str | Path, module_name: str = "general", file_type
 
         # Attempt to move the file
         shutil.move(str(source_path), str(dest_path))
+        os.utime(dest_path, None)
         logger.debug(f"File moved to trash: {source_path} -> {dest_path}")
         return True
 
