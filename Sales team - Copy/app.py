@@ -14,6 +14,13 @@ if hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
+# IMPORTANT (Windows): torch must be imported BEFORE paddle/paddleocr, otherwise
+# torch fails with "Error loading torch\lib\shm.dll" due to DLL load-order clashes.
+try:
+    import torch  # noqa: F401
+except Exception:
+    pass
+
 import importlib.util
 import traceback
 from pathlib import Path

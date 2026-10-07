@@ -83,6 +83,18 @@ class GPUEngine:
             self.paddle_cuda_available = bool(
                 hasattr(paddle, "is_compiled_with_cuda") and paddle.is_compiled_with_cuda()
             )
+            # Paddle GPU build + visible device => enable GPU even if torch is CPU-only
+            if (
+                not self.has_cuda
+                and self.paddle_cuda_available
+                and paddle.device.cuda.device_count() > 0
+            ):
+                self.has_cuda = True
+                self.device = "cuda"
+                try:
+                    self.device_name = paddle.device.cuda.get_device_name(0)
+                except Exception:
+                    self.device_name = "NVIDIA GPU (Paddle)"
         except Exception:
             self.paddle_cuda_available = False
 

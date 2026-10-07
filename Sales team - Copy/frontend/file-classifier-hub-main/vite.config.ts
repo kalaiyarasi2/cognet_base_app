@@ -8,6 +8,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   nitro: {
+    compatibilityDate: "2024-09-01",
     output: {
       dir: "dist",
       serverDir: "dist/server",

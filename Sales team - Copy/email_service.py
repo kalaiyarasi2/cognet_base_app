@@ -1,8 +1,84 @@
 import os
+import json
+import time
+import glob
+import base64
 import smtplib
 import requests
+from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+_DEFAULT_DELEGATED_SENDER = "drivesupport@cognethro.com"
+
+
+def _jwt_claims(token: str) -> dict:
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload.encode()).decode())
+    except Exception:
+        return {}
+
+
+def _get_delegated_sender_token() -> str | None:
+    """Get a delegated Mail.Send token for the sender mailbox (e.g. drivesupport)
+    from the dashboard OAuth session files (.sessions/onedrive_*.json).
+    Delegated tokens are not subject to the app-only (workload identity) block."""
+    sender = (os.getenv("DELEGATED_SENDER_EMAIL") or _DEFAULT_DELEGATED_SENDER).lower()
+    base = Path(__file__).parent
+    session_dirs = [base / ".sessions", base / "file-classification-" / ".sessions", Path.cwd() / ".sessions"]
+    files = []
+    for d in session_dirs:
+        if d.exists():
+            files.extend(glob.glob(str(d / "onedrive_*.json")))
+    files = list(dict.fromkeys(files))
+    files.sort(key=os.path.getmtime, reverse=True)
+
+    client_id = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
+    client_secret = os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET")
+    tenant_id = os.getenv("AZURE_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID") or "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae"
+    if tenant_id.strip().lower() in ("common", "organizations", "consumers"):
+        tenant_id = "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae"
+
+    for f in files:
+        try:
+            with open(f, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            claims = _jwt_claims(data.get("access_token", ""))
+            acct = (claims.get("upn") or claims.get("unique_name") or "").lower()
+            if acct != sender:
+                continue
+            if data.get("expires_at", 0) > time.time() + 60 and data.get("access_token"):
+                return data["access_token"]
+            refresh = data.get("refresh_token")
+            if not (refresh and client_id and client_secret):
+                continue
+            import msal
+            app = msal.ConfidentialClientApplication(
+                client_id,
+                authority=f"https://login.microsoftonline.com/{tenant_id}",
+                client_credential=client_secret,
+            )
+            res = app.acquire_token_by_refresh_token(
+                refresh, scopes=["https://graph.microsoft.com/Mail.Send"]
+            )
+            if "access_token" in res:
+                data["access_token"] = res["access_token"]
+                data["expires_at"] = time.time() + res.get("expires_in", 3600)
+                if res.get("refresh_token"):
+                    data["refresh_token"] = res["refresh_token"]
+                try:
+                    with open(f, "w", encoding="utf-8") as fh:
+                        json.dump(data, fh)
+                except Exception:
+                    pass
+                return res["access_token"]
+            print(f"[MS Graph Delegated] Refresh failed for {sender}: {res.get('error')} - {res.get('error_description')}")
+        except Exception as e:
+            print(f"[MS Graph Delegated] Error reading session {Path(f).name}: {e}")
+    return None
+
 
 def _get_graph_access_token() -> str | None:
     client_id = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
@@ -32,6 +108,14 @@ def _get_graph_access_token() -> str | None:
     return None
 
 def _send_graph_mail(recipient_email: str, subject: str, html_content: str, tag: str = "EMAIL") -> bool:
+    # 1. Preferred: delegated token of the sender mailbox (drivesupport) via /me/sendMail
+    d_token = _get_delegated_sender_token()
+    if d_token:
+        if _post_graph_send("https://graph.microsoft.com/v1.0/me/sendMail", d_token,
+                            recipient_email, subject, html_content, tag):
+            return True
+
+    # 2. Fallback: app-only token
     token = _get_graph_access_token()
     sender_email = os.getenv("SENDER_EMAIL") or os.getenv("SMTP_USER")
     if not token or not sender_email:
@@ -64,6 +148,30 @@ def _send_graph_mail(recipient_email: str, subject: str, html_content: str, tag:
             print(f"[{tag}] MS Graph failed with status {response.status_code}: {response.text}")
     except Exception as e:
         print(f"[{tag}] MS Graph Exception: {e}")
+    return False
+
+def _post_graph_send(endpoint: str, token: str, recipient_email: str, subject: str, html_content: str, tag: str) -> bool:
+    email_msg = {
+        "message": {
+            "subject": subject,
+            "body": {"contentType": "HTML", "content": html_content},
+            "toRecipients": [{"emailAddress": {"address": recipient_email}}],
+        },
+        "saveToSentItems": "false",
+    }
+    try:
+        response = requests.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=email_msg,
+            timeout=15,
+        )
+        if response.status_code in (200, 202):
+            print(f"[{tag}] Successfully sent email to {recipient_email} via MS Graph (delegated).")
+            return True
+        print(f"[{tag}] MS Graph (delegated) failed with status {response.status_code}: {response.text}")
+    except Exception as e:
+        print(f"[{tag}] MS Graph (delegated) Exception: {e}")
     return False
 
 def _send_smtp_mail(recipient_email: str, subject: str, html_content: str, tag: str = "EMAIL") -> bool:
