@@ -31,6 +31,8 @@ class DynamicHttpAdapter:
     retries, and structured error responses.
     """
 
+    _token_cache: Dict[str, Dict[str, Any]] = {}
+
     def __init__(self, config: Optional[TenantSubmissionConfig] = None):
         self.config = config or TenantSubmissionConfig()
 
@@ -67,6 +69,7 @@ class DynamicHttpAdapter:
         start_time = time.time()
         last_error = None
         attempt = 0
+        refreshed_for_401 = False
 
         while attempt < max(1, retry_policy.max_retries):
             attempt += 1
@@ -85,6 +88,7 @@ class DynamicHttpAdapter:
                     if active_config.attachments.include_original_pdfs and pdf_file_paths:
                         acord_field = getattr(active_config.attachments, "acord_file_field", "acordPdf") or "acordPdf"
                         loss_field = getattr(active_config.attachments, "loss_runs_file_field", "lossRunsPdf") or "lossRunsPdf"
+                        modifier_field = getattr(active_config.attachments, "modifier_file_field", "modifierPdf") or "modifierPdf"
 
                         for path_str in pdf_file_paths:
                             p = Path(path_str)
@@ -95,6 +99,10 @@ class DynamicHttpAdapter:
                                 if any(k in pname for k in ["ACORD", "COMPENSATION", "WORK_COMP", "WC "]):
                                     multipart_files.append(
                                         (acord_field, (p.name, f, "application/pdf"))
+                                    )
+                                elif any(k in pname for k in ["MODIFIER", "EXPERIENCE_MODIFIER", "XMOD", "X-MOD", "EXMOD"]):
+                                    multipart_files.append(
+                                        (modifier_field, (p.name, f, "application/pdf"))
                                     )
                                 else:
                                     multipart_files.append(
@@ -153,6 +161,13 @@ class DynamicHttpAdapter:
                             attempt_count=attempt,
                             execution_time_seconds=elapsed,
                         )
+                    elif response.status_code == 401 and active_config.auth.type == "dynamic_token" and not refreshed_for_401:
+                        logger.warning(
+                            f"Received HTTP 401 Unauthorized for {target_url}. Invalidate cached token and retry with fresh token."
+                        )
+                        refreshed_for_401 = True
+                        headers = self._build_headers(active_config, force_refresh_token=True)
+                        continue
                     else:
                         last_error = f"HTTP {response.status_code}: {resp_body}"
                         logger.warning(
@@ -193,7 +208,99 @@ class DynamicHttpAdapter:
 
         return re.sub(r"\$\{([A-Za-z0-9_]+)\}", replace_match, text)
 
-    def _build_headers(self, config: TenantSubmissionConfig) -> Dict[str, str]:
+    @staticmethod
+    def _get_nested_val(data: Any, path: str) -> Any:
+        """Extracts nested value using dotted path notation, e.g. 'data.accessToken'."""
+        if not path:
+            return data
+        cur = data
+        for part in path.split("."):
+            if isinstance(cur, dict):
+                cur = cur.get(part)
+            else:
+                return None
+        return cur
+
+    def _get_dynamic_token(self, config: TenantSubmissionConfig, force_refresh: bool = False) -> Optional[str]:
+        """
+        Retrieves a dynamic authentication token for the tenant.
+        Caches the token in memory until expiration (with a 60s safety buffer).
+        Reuses the existing token if still valid.
+        """
+        auth_cfg = config.auth
+        cache_key = f"{config.tenant_code}_{auth_cfg.token_url}"
+
+        # 1. Check in-memory cache
+        if not force_refresh and cache_key in self._token_cache:
+            cached_entry = self._token_cache[cache_key]
+            expires_at = cached_entry.get("expires_at", 0)
+            remaining_seconds = expires_at - time.time()
+            if remaining_seconds > 60:
+                logger.debug(
+                    "[DynamicAuth] Reusing cached token for tenant '%s' (valid for %.0fs remaining)",
+                    config.tenant_code, remaining_seconds
+                )
+                return cached_entry.get("token")
+
+        # 2. Acquire fresh token from token endpoint
+        token_url = self._resolve_env_placeholders(auth_cfg.token_url or "")
+        if not token_url:
+            logger.error("[DynamicAuth] Token URL is empty or unresolvable for tenant '%s'", config.tenant_code)
+            return None
+
+        client_id = os.getenv(auth_cfg.client_id_env_var or "", "") if auth_cfg.client_id_env_var else ""
+        client_secret = os.getenv(auth_cfg.client_secret_env_var or "", "") if auth_cfg.client_secret_env_var else ""
+
+        if not client_id or not client_secret:
+            logger.error(
+                "[DynamicAuth] Missing credentials for tenant '%s': client_id_env_var='%s', client_secret_env_var='%s'",
+                config.tenant_code, auth_cfg.client_id_env_var, auth_cfg.client_secret_env_var
+            )
+            return None
+
+        payload = {
+            "clientId": client_id,
+            "clientSecret": client_secret
+        }
+
+        try:
+            logger.info("[DynamicAuth] Requesting fresh token from %s for tenant '%s'...", token_url, config.tenant_code)
+            resp = requests.post(
+                token_url,
+                json=payload,
+                headers={"Content-Type": "application/json", "Accept": "*/*"},
+                timeout=auth_cfg.custom_headers.get("timeout", 15) if isinstance(auth_cfg.custom_headers, dict) else 15
+            )
+
+            if resp.status_code == 200:
+                resp_json = resp.json()
+                token = self._get_nested_val(resp_json, auth_cfg.token_path or "data.accessToken")
+                expires_in_raw = self._get_nested_val(resp_json, auth_cfg.expires_in_path or "data.expiresIn")
+                try:
+                    expires_in = float(expires_in_raw) if expires_in_raw is not None else 900.0
+                except (ValueError, TypeError):
+                    expires_in = 900.0
+
+                if token:
+                    self._token_cache[cache_key] = {
+                        "token": token,
+                        "expires_at": time.time() + expires_in
+                    }
+                    logger.info(
+                        "[DynamicAuth] Successfully acquired token for tenant '%s' (expires in %.0fs)",
+                        config.tenant_code, expires_in
+                    )
+                    return token
+                else:
+                    logger.error("[DynamicAuth] Token path '%s' not found in response: %s", auth_cfg.token_path, resp_json)
+            else:
+                logger.error("[DynamicAuth] Token request failed with HTTP %s: %s", resp.status_code, resp.text)
+        except Exception as exc:
+            logger.error("[DynamicAuth] Exception while acquiring token from %s: %s", token_url, exc)
+
+        return None
+
+    def _build_headers(self, config: TenantSubmissionConfig, force_refresh_token: bool = False) -> Dict[str, str]:
         headers = dict(config.auth.custom_headers)
         auth_cfg = config.auth
 
@@ -206,6 +313,12 @@ class DynamicHttpAdapter:
             token = os.getenv(auth_cfg.secret_env_var, "")
             if token:
                 headers["Authorization"] = f"Bearer {token}"
+
+        elif auth_cfg.type == "dynamic_token":
+            token = self._get_dynamic_token(config, force_refresh=force_refresh_token)
+            if token:
+                prefix = auth_cfg.token_type or "Bearer"
+                headers["Authorization"] = f"{prefix} {token}"
 
         return headers
 

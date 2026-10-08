@@ -70,12 +70,19 @@ class AuditLog(BaseModel):
 
 
 class SubmissionAuthConfig(BaseModel):
-    type: str = "none"  # "none", "api_key", "bearer", "basic", "custom_headers"
+    type: str = "none"  # "none", "api_key", "bearer", "basic", "custom_headers", "dynamic_token"
     header_name: Optional[str] = None
     secret_env_var: Optional[str] = None
     username_env_var: Optional[str] = None
     password_env_var: Optional[str] = None
     custom_headers: Dict[str, str] = Field(default_factory=dict)
+    # Dynamic Token / OAuth2 Fields
+    token_url: Optional[str] = None
+    client_id_env_var: Optional[str] = None
+    client_secret_env_var: Optional[str] = None
+    token_path: str = "data.accessToken"
+    expires_in_path: str = "data.expiresIn"
+    token_type: str = "Bearer"
 
 
 class SubmissionTransformRules(BaseModel):
@@ -131,6 +138,7 @@ class SubmissionAttachmentRules(BaseModel):
     multipart_file_field: str = "file"
     acord_file_field: str = "acordPdf"
     loss_runs_file_field: str = "lossRunsPdf"
+    modifier_file_field: str = "modifierPdf"
     excel_file_field: str = "excelFile"
     max_attachment_size_mb: int = 50
 
