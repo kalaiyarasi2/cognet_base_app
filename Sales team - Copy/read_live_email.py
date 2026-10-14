@@ -24,7 +24,12 @@ def fetch():
         d = json.load(f)
     r_token = d.get("refresh_token")
 
-    agent = OutlookAgentModule(user_email="kalaiyarasig@cognethro.com")
+    agent_email = sys.argv[1] if len(sys.argv) > 1 else (
+        os.getenv("TEST_MONITOR_EMAIL") 
+        or os.getenv("WCUW_MONITOR_EMAIL") 
+        or "kalaiyarasig@cognethro.com"
+    )
+    agent = OutlookAgentModule(user_email=agent_email)
     token = agent.get_access_token(refresh_token=r_token, allow_device_flow=False)
     emails = agent.fetch_unread_emails(refresh_token=r_token) or []
 

@@ -8,8 +8,9 @@ import requests
 from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from core.env_loader import get_env, get_app_tenant_id, warn_missing, tenant_env
 
-_DEFAULT_DELEGATED_SENDER = "drivesupport@cognethro.com"
+_DEFAULT_DELEGATED_SENDER = ""  # resolved from .env (DELEGATED_SENDER_EMAIL / SENDER_EMAIL) at call time
 
 
 def _jwt_claims(token: str) -> dict:
@@ -21,11 +22,15 @@ def _jwt_claims(token: str) -> dict:
         return {}
 
 
-def _get_delegated_sender_token() -> str | None:
+def _get_delegated_sender_token(sender: str | None = None, tenant_code: str | None = None) -> str | None:
     """Get a delegated Mail.Send token for the sender mailbox (e.g. drivesupport)
     from the dashboard OAuth session files (.sessions/onedrive_*.json).
     Delegated tokens are not subject to the app-only (workload identity) block."""
-    sender = (os.getenv("DELEGATED_SENDER_EMAIL") or _DEFAULT_DELEGATED_SENDER).lower()
+    if not sender:
+        sender = tenant_env(tenant_code, "DELEGATED_SENDER_EMAIL", "SENDER_EMAIL", default=_DEFAULT_DELEGATED_SENDER).lower()
+    else:
+        sender = sender.lower()
+
     base = Path(__file__).parent
     session_dirs = [base / ".sessions", base / "file-classification-" / ".sessions", Path.cwd() / ".sessions"]
     files = []
@@ -37,9 +42,9 @@ def _get_delegated_sender_token() -> str | None:
 
     client_id = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET")
-    tenant_id = os.getenv("AZURE_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID") or "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae"
-    if tenant_id.strip().lower() in ("common", "organizations", "consumers"):
-        tenant_id = "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae"
+    tenant_id = get_app_tenant_id(tenant_code)
+    if not tenant_id:
+        warn_missing("Delegated mail token refresh", "SYSTEM_MAIL_TENANT_ID", "MICROSOFT_TENANT_ID")
 
     for f in files:
         try:
@@ -80,15 +85,15 @@ def _get_delegated_sender_token() -> str | None:
     return None
 
 
-def _get_graph_access_token() -> str | None:
+def _get_graph_access_token(tenant_code: str | None = None) -> str | None:
     client_id = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET")
-    tenant_id = os.getenv("SYSTEM_MAIL_TENANT_ID") or os.getenv("AZURE_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID")
+    tenant_id = get_app_tenant_id(tenant_code)
     
     # Client Credentials Flow requires a specific Azure tenant ID (e.g. GUID or domain).
     # 'common', 'organizations', and 'consumers' are strictly rejected by MS Identity Platform for client_credentials.
-    if not tenant_id or tenant_id.strip().lower() in ("common", "organizations", "consumers"):
-        tenant_id = os.getenv("SYSTEM_MAIL_TENANT_ID") or os.getenv("AZURE_TENANT_ID") or "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae"
+    if not tenant_id:
+        warn_missing("MS Graph app-only mail token", "SYSTEM_MAIL_TENANT_ID", "MICROSOFT_TENANT_ID")
 
     if not all([client_id, client_secret, tenant_id]):
         return None
@@ -107,17 +112,17 @@ def _get_graph_access_token() -> str | None:
         print(f"[MS Graph Auth] Exception during token acquisition: {e}")
     return None
 
-def _send_graph_mail(recipient_email: str, subject: str, html_content: str, tag: str = "EMAIL") -> bool:
-    # 1. Preferred: delegated token of the sender mailbox (drivesupport) via /me/sendMail
-    d_token = _get_delegated_sender_token()
+def _send_graph_mail(recipient_email: str, subject: str, html_content: str, tag: str = "EMAIL", tenant_code: str | None = None) -> bool:
+    # 1. Preferred: delegated token of the sender mailbox via /me/sendMail
+    d_token = _get_delegated_sender_token(tenant_code=tenant_code)
     if d_token:
         if _post_graph_send("https://graph.microsoft.com/v1.0/me/sendMail", d_token,
                             recipient_email, subject, html_content, tag):
             return True
 
     # 2. Fallback: app-only token
-    token = _get_graph_access_token()
-    sender_email = os.getenv("SENDER_EMAIL") or os.getenv("SMTP_USER")
+    token = _get_graph_access_token(tenant_code=tenant_code)
+    sender_email = tenant_env(tenant_code, "SENDER_EMAIL", "SMTP_USER", default=os.getenv("SENDER_EMAIL") or os.getenv("SMTP_USER") or "")
     if not token or not sender_email:
         return False
 
@@ -174,11 +179,11 @@ def _post_graph_send(endpoint: str, token: str, recipient_email: str, subject: s
         print(f"[{tag}] MS Graph (delegated) Exception: {e}")
     return False
 
-def _send_smtp_mail(recipient_email: str, subject: str, html_content: str, tag: str = "EMAIL") -> bool:
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = os.getenv("SMTP_PORT")
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASS")
+def _send_smtp_mail(recipient_email: str, subject: str, html_content: str, tag: str = "EMAIL", tenant_code: str | None = None) -> bool:
+    smtp_host = tenant_env(tenant_code, "SMTP_HOST", default=os.getenv("SMTP_HOST") or "")
+    smtp_port = tenant_env(tenant_code, "SMTP_PORT", default=os.getenv("SMTP_PORT") or "")
+    smtp_user = tenant_env(tenant_code, "SMTP_USER", default=os.getenv("SMTP_USER") or "")
+    smtp_pass = tenant_env(tenant_code, "SMTP_PASS", default=os.getenv("SMTP_PASS") or "")
 
     if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
         print(f"[{tag}] No SMTP config found.")
@@ -202,7 +207,13 @@ def _send_smtp_mail(recipient_email: str, subject: str, html_content: str, tag: 
         print(f"[{tag}] Failed to send email via SMTP to {recipient_email}. Error: {e}")
         return False
 
-def send_otp_email(recipient_email: str, otp_code: str, purpose: str = "login"):
+def _get_default_login_url(explicit_url: str | None = None) -> str:
+    if explicit_url and explicit_url.strip():
+        return explicit_url.strip()
+    base = get_env("APP_BASE_URL", default="http://localhost:5173").rstrip("/")
+    return f"{base}/login"
+
+def send_otp_email(recipient_email: str, otp_code: str, purpose: str = "login", tenant_code: str | None = None) -> bool:
     html_content = f"""
     <html>
       <body style="font-family: Arial, sans-serif; color: #333;">
@@ -221,24 +232,30 @@ def send_otp_email(recipient_email: str, otp_code: str, purpose: str = "login"):
     subject = f"Your Verification Code: {otp_code}"
 
     # 1. Try Microsoft Graph API
-    if _send_graph_mail(recipient_email, subject, html_content, tag="LOGIN OTP"):
-        return
+    if _send_graph_mail(recipient_email, subject, html_content, tag="LOGIN OTP", tenant_code=tenant_code):
+        return True
 
     # 2. Fallback to SMTP
-    if _send_smtp_mail(recipient_email, subject, html_content, tag="LOGIN OTP"):
-        return
+    if _send_smtp_mail(recipient_email, subject, html_content, tag="LOGIN OTP", tenant_code=tenant_code):
+        return True
 
-    # 3. Fallback to console print if both fail
-    print(f"[LOGIN OTP] MOCKING EMAIL TO {recipient_email}: {otp_code}")
+    # 3. Fallback to console print if both fail (non-production only)
+    if get_env("ENV", default="development").lower() != "production":
+        print(f"[LOGIN OTP] MOCKING EMAIL TO {recipient_email}: {otp_code}")
+    return False
 
 def send_access_granted_email(
     recipient_email: str,
     recipient_name: str,
     granted_by: str,
-    login_url: str = "http://localhost:5173/login",
+    login_url: str | None = None,
     role: str = "USER",
-    allowed_modules: any = "ALL"
-):
+    allowed_modules: any = "ALL",
+    tenant_code: str | None = None
+) -> bool:
+    resolved_login_url = _get_default_login_url(login_url)
+    brand_name = tenant_env(tenant_code, "PRODUCT_NAME", default=get_env("PRODUCT_NAME", default="Drive Agent Workspace"))
+
     MODULE_LABELS = {
         "INVOICE": "Invoice Processing",
         "SBC": "SBC Parity Analysis",
@@ -283,7 +300,7 @@ def send_access_granted_email(
           
           <!-- Header Banner -->
           <div style="background: linear-gradient(135deg, #0057FF 0%, #1E40AF 100%); padding: 26px 30px; text-align: left;">
-            <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">Drive Agent Workspace</h1>
+            <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">{brand_name}</h1>
             <p style="color: #DBEAFE; margin: 6px 0 0 0; font-size: 14px;">Access Granted Invitation</p>
           </div>
           <div style="padding: 30px;">
@@ -319,7 +336,7 @@ def send_access_granted_email(
 
             <!-- CTA Button -->
             <div style="text-align: center; margin: 26px 0 16px 0;">
-              <a href="{login_url}" style="background-color: #0057FF; color: #ffffff; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 15px; display: inline-block;">
+              <a href="{resolved_login_url}" style="background-color: #0057FF; color: #ffffff; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 15px; display: inline-block;">
                 Go to App
               </a>
             </div>
@@ -333,39 +350,44 @@ def send_access_granted_email(
     </html>
     """
 
-    subject = "Welcome! You have been granted access"
+    subject = f"Welcome to {brand_name}! You have been granted access"
 
     # 1. Try Microsoft Graph API
-    if _send_graph_mail(recipient_email, subject, html_content, tag="ACCESS EMAIL"):
-        return
+    if _send_graph_mail(recipient_email, subject, html_content, tag="ACCESS EMAIL", tenant_code=tenant_code):
+        return True
 
     # 2. Fallback to SMTP
-    if _send_smtp_mail(recipient_email, subject, html_content, tag="ACCESS EMAIL"):
-        return
+    if _send_smtp_mail(recipient_email, subject, html_content, tag="ACCESS EMAIL", tenant_code=tenant_code):
+        return True
 
     # 3. Fallback to console print if both fail
-    print(f"[ACCESS EMAIL] MOCKING EMAIL TO {recipient_email}")
+    if get_env("ENV", default="development").lower() != "production":
+        print(f"[ACCESS EMAIL] MOCKING EMAIL TO {recipient_email}")
+    return False
 
 def send_tenant_welcome_email(
     recipient_email: str,
     tenant_name: str,
     tenant_code: str,
     otp_code: str,
-    login_url: str = "http://localhost:5173/login"
-):
+    login_url: str | None = None
+) -> bool:
+    resolved_login_url = _get_default_login_url(login_url)
+    brand_name = tenant_env(tenant_code, "PRODUCT_NAME", default=get_env("PRODUCT_NAME", default="Drive360 Enterprise"))
+
     html_content = f"""
     <html>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; background-color: #f8fafc; margin: 0; padding: 24px;">
         <div style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
           <div style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); padding: 28px 32px; text-align: left;">
-            <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">Drive360 Enterprise</h1>
+            <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">{brand_name}</h1>
             <p style="color: #e0f2fe; margin: 6px 0 0 0; font-size: 14px;">Tenant Workspace Onboarding</p>
           </div>
           
           <div style="padding: 32px;">
             <h2 style="color: #0f172a; margin-top: 0; font-size: 18px; font-weight: 600;">Welcome, Tenant Administrator!</h2>
             <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-              A new organization workspace has been created for <strong>{tenant_name}</strong> on the Drive360 platform.
+              A new organization workspace has been created for <strong>{tenant_name}</strong> on the {brand_name} platform.
             </p>
             
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 18px 0;">
@@ -386,7 +408,7 @@ def send_tenant_welcome_email(
             </p>
 
             <div style="text-align: center; margin: 28px 0 10px 0;">
-              <a href="{login_url}" style="background-color: #0284c7; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">
+              <a href="{resolved_login_url}" style="background-color: #0284c7; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">
                 Access Your Workspace
               </a>
             </div>
@@ -402,15 +424,17 @@ def send_tenant_welcome_email(
     </html>
     """
 
-    subject = f"Welcome to Drive360 - Workspace Setup for {tenant_name} (OTP: {otp_code})"
+    subject = f"Welcome to {brand_name} - Workspace Setup for {tenant_name} (OTP: {otp_code})"
 
     # 1. Try Microsoft Graph API
-    if _send_graph_mail(recipient_email, subject, html_content, tag="TENANT ONBOARDING"):
-        return
+    if _send_graph_mail(recipient_email, subject, html_content, tag="TENANT ONBOARDING", tenant_code=tenant_code):
+        return True
 
     # 2. Fallback to SMTP
-    if _send_smtp_mail(recipient_email, subject, html_content, tag="TENANT ONBOARDING"):
-        return
+    if _send_smtp_mail(recipient_email, subject, html_content, tag="TENANT ONBOARDING", tenant_code=tenant_code):
+        return True
 
     # 3. Fallback to console print if both fail
-    print(f"[TENANT ONBOARDING] MOCKING EMAIL TO {recipient_email}: OTP is {otp_code}")
+    if get_env("ENV", default="development").lower() != "production":
+        print(f"[TENANT ONBOARDING] MOCKING EMAIL TO {recipient_email}: OTP is {otp_code}")
+    return False

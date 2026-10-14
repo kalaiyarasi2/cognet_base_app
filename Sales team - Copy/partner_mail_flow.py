@@ -38,7 +38,8 @@ logger = logging.getLogger("PartnerMailFlow")
 
 # Load environment configurations
 from dotenv import load_dotenv
-load_dotenv(WORKSPACE_DIR / ".env")
+from core.env_loader import load_workspace_env, get_env
+load_workspace_env()
 
 # Core imports
 from core.submission.submission_service import SubmissionService
@@ -230,7 +231,7 @@ def _send_failure_notification(
     client_id     = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET")
     ms_tenant_id  = os.getenv("AZURE_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID")
-    sender_acct   = from_mailbox or os.getenv("SENDER_EMAIL") or os.getenv("PARTNER_POC_MONITOR_EMAIL") or "drivesupport@cognethro.com"
+    sender_acct   = from_mailbox or os.getenv("SENDER_EMAIL") or os.getenv("PARTNER_POC_MONITOR_EMAIL") or get_env("DELEGATED_SENDER_EMAIL")
 
     if sender_acct and client_id and client_secret:
         try:
@@ -326,7 +327,10 @@ class PartnerMailFlowOrchestrator:
     Orchestrates dedicated email intake, extraction, and partner submission.
     """
 
-    def __init__(self, tenant_folder: str = "client_a", max_concurrent: int = 3):
+    def __init__(self, tenant_folder: Optional[str] = None, max_concurrent: int = 3):
+        tenant_folder = tenant_folder or get_env("DEFAULT_TENANT")
+        if not tenant_folder:
+            raise ValueError("No tenant given: pass tenant_folder / --tenant or set DEFAULT_TENANT in .env")
         self.tenant_folder = tenant_folder
         self.submission_service = SubmissionService(workspace_dir=WORKSPACE_DIR)
         self.config_loader = TenantConfigLoader(base_dir=WORKSPACE_DIR)
@@ -1009,6 +1013,20 @@ class PartnerMailFlowOrchestrator:
             or None
         )
         self.monitored_email = resolved_email
+
+        # Loopback prevention prefixes: generic alert markers + the [TENANT] subject prefix of every
+        # configured tenant (so alerts produced by any tenant's flow are never re-ingested).
+        loopback_prefixes = ["Exception Alert", "Submission Processed", "⚠️"]
+        try:
+            _tenants_dir = WORKSPACE_DIR / "config" / "tenants"
+            for _d in sorted(_tenants_dir.iterdir()) if _tenants_dir.exists() else []:
+                if _d.is_dir():
+                    loopback_prefixes.append(f"[{_d.name.upper()}]")
+                    loopback_prefixes.append(f"[{_d.name.upper().replace('_', ' ')}]")
+        except Exception:
+            pass
+        loopback_prefixes.append(f"[{self.tenant_folder.upper()}]")
+        loopback_prefixes.append(f"[{self.tenant_folder.upper().replace('_', ' ')}]")
         
         logger.info(
             "Starting Partner Mail Flow Listener for Tenant: '%s' | Monitored Mailbox: %s (Interval: %ds)",
@@ -1044,7 +1062,7 @@ class PartnerMailFlowOrchestrator:
 
                             subject = str(email.get("subject", ""))
                             is_self_sender = resolved_email and sender_str == resolved_email.lower()
-                            is_system_alert = any(prefix in subject for prefix in ["[WCUW]", "Exception Alert", "Submission Processed", "⚠️"])
+                            is_system_alert = any(prefix in subject for prefix in loopback_prefixes)
 
                             if is_self_sender or is_system_alert:
                                 self._processed_msg_ids.add(msg_id)
@@ -1112,7 +1130,7 @@ class PartnerMailFlowOrchestrator:
 
 def main():
     parser = argparse.ArgumentParser(description="Dedicated Partner Mail Ingestion & Submission Flow")
-    parser.add_argument("--tenant", default="client_a", help="Tenant configuration code (default: client_a)")
+    parser.add_argument("--tenant", default=get_env("DEFAULT_TENANT") or None, help="Tenant folder/code (default: DEFAULT_TENANT from .env)")
     parser.add_argument("--interval", type=int, default=30, help="Polling interval in seconds (default: 60)")
     parser.add_argument("--concurrency", type=int, default=3, help="Max emails to process simultaneously (default: 3)")
     parser.add_argument("--email", default=None, help="Target mailbox to monitor")

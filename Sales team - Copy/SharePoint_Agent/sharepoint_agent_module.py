@@ -11,6 +11,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from universal_trash import move_to_trash
 
+_WS_ROOT = str(Path(__file__).resolve().parent.parent)
+if _WS_ROOT not in sys.path:
+    sys.path.append(_WS_ROOT)
+from core.env_loader import get_env, get_app_tenant_id, get_login_authority
+
 load_dotenv()
 
 # Setup logging
@@ -28,8 +33,10 @@ class SharePointAgent:
     """
 
     def __init__(self):
-        self.tenant_id = os.getenv("MICROSOFT_TENANT_ID", "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae")
-        self.client_id = os.getenv("MICROSOFT_CLIENT_ID", "430f21c4-c059-42b4-8baa-e69de387932e")
+        # App-only (client credentials) needs a real tenant id; delegated refresh uses the login authority.
+        self.tenant_id = get_app_tenant_id() or get_env("MICROSOFT_TENANT_ID")
+        self.login_authority = get_login_authority()
+        self.client_id = get_env("SHAREPOINT_CLIENT_ID", "MICROSOFT_CLIENT_ID")
         self.client_secret = os.getenv("MICROSOFT_CLIENT_SECRET", "")
         self.hostname = os.getenv("SHAREPOINT_HOSTNAME", "cognet.sharepoint.com")
         self.site_name = os.getenv("SHAREPOINT_SITE_NAME", "CognetStorage")
@@ -51,8 +58,8 @@ class SharePointAgent:
         self.processed_history: List[Dict[str, Any]] = []
 
         # Current config
-        self.input_folder = "Clients/Active/PEO Velocity/Sales Support (PEO Velocity)/Invoice To Census Automation"
-        self.output_folder = "Clients/Active/PEO Velocity/Sales Support (PEO Velocity)/Processed_Outputs"
+        self.input_folder = get_env("SHAREPOINT_INPUT_FOLDER")
+        self.output_folder = get_env("SHAREPOINT_OUTPUT_FOLDER")
         self.poc_engine = "converter" # converter, parity-setup, renewal-process, resourcing-edge, rpve, drive-gpu
         self.poll_interval = 10 # seconds
 
@@ -190,7 +197,7 @@ class SharePointAgent:
                     # Try refresh token if access_token is expired
                     if refresh_token:
                         import msal
-                        authority = f"https://login.microsoftonline.com/{self.tenant_id}"
+                        authority = f"https://login.microsoftonline.com/{self.login_authority}"
                         scopes = ["Files.ReadWrite.All", "Sites.ReadWrite.All", "User.Read"]
 
                         app = msal.ConfidentialClientApplication(

@@ -45,7 +45,8 @@ if str(WORKSPACE_DIR) not in sys.path:
 # 1b. Environment & Global OCR Configuration & Logger Deduplication
 # ─────────────────────────────────────────────────────────────────────────────
 from dotenv import load_dotenv
-load_dotenv(WORKSPACE_DIR / ".env")
+from core.env_loader import load_workspace_env
+load_workspace_env()
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 
 import logging
@@ -275,11 +276,16 @@ async def unified_lifespan(a: FastAPI):
         print("[INIT] Shared SQLite DB tables initialized successfully.")
 
         # ── Bootstrap Super Admins (always ensure these are ADMIN) ──
-        SUPER_ADMINS = [
-            ("kalaiyarasig@cognethro.com", "Kalaiyarasi G",    "ADMIN"),
-            ("admin@local",               "Super Administrator", "ADMIN"),
-            ("admin@company.com",         "Enterprise Admin",    "ADMIN"),
-        ]
+        admin_emails_env = os.getenv("SUPER_ADMIN_EMAILS", "").strip()
+        if admin_emails_env:
+            raw_admins = [e.strip() for e in admin_emails_env.split(",") if e.strip()]
+            SUPER_ADMINS = [(email, email.split("@")[0].replace(".", " ").title(), "ADMIN") for email in raw_admins]
+        else:
+            SUPER_ADMINS = [
+                ("kalaiyarasig@cognethro.com", "Kalaiyarasi G",    "ADMIN"),
+                ("admin@local",               "Super Administrator", "ADMIN"),
+                ("admin@company.com",         "Enterprise Admin",    "ADMIN"),
+            ]
         for _email, _name, _role in SUPER_ADMINS:
             _poc_db.grant_user_access(_email, _name, _role, "MANUAL", "SYSTEM")
         print(f"[INIT] Bootstrapped {len(SUPER_ADMINS)} super admin account(s).")

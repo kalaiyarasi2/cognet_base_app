@@ -33,7 +33,9 @@ session_db = sys.modules["database.session_db"]
 
 router = APIRouter(prefix="/api", tags=["Authentication & Access Control"])
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "fc_sales_team_super_secret_jwt_key_2026")
+from core.env_loader import get_env
+
+SECRET_KEY = get_env("JWT_SECRET_KEY", default="fc_sales_team_super_secret_jwt_key_2026")
 ALGORITHM = "HS256"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -348,7 +350,8 @@ async def check_email(req: CheckEmailRequest):
     if not perm.get("password_hash"):
         # First time setup
         otp_code = poc_db.store_otp(clean_email, "setup")
-        send_otp_email(clean_email, otp_code, "account setup")
+        t_code = perm.get("tenant_code") if perm else None
+        send_otp_email(clean_email, otp_code, "account setup", tenant_code=t_code)
         return {"status": "first_time_setup", "message": "OTP sent to your email for account setup."}
     else:
         return {"status": "existing_user"}
@@ -411,7 +414,8 @@ async def direct_login(req: LoginRequest, request: Request):
         
     # After password verification succeeds, send OTP
     otp_code = poc_db.store_otp(clean_email, "login")
-    send_otp_email(clean_email, otp_code, "login")
+    t_code = perm.get("tenant_code") if perm else None
+    send_otp_email(clean_email, otp_code, "login", tenant_code=t_code)
 
     return {
         "status": "otp_required",
@@ -472,7 +476,8 @@ async def request_otp(req: RequestOtpRequest):
         raise HTTPException(status_code=404, detail=f"No active account found for '{clean_email}'.")
         
     otp_code = poc_db.store_otp(clean_email, "reset")
-    send_otp_email(clean_email, otp_code, "reset password")
+    t_code = perm.get("tenant_code") if perm else None
+    send_otp_email(clean_email, otp_code, "reset password", tenant_code=t_code)
     return {"status": "ok", "message": "OTP sent to your email."}
 
 @router.post("/auth/forgot-password")
@@ -545,9 +550,9 @@ async def admin_grant_access(req: GrantAccessRequest, background_tasks: Backgrou
         tenant_code=tenant_code or "GLOBAL"
     )
     
-    frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+    frontend_origin = os.getenv("APP_BASE_URL") or os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
     encoded_email = urllib.parse.quote(req.email)
-    login_url = f"{frontend_origin}/login?email={encoded_email}"
+    login_url = f"{frontend_origin.rstrip('/')}/login?email={encoded_email}"
     
     background_tasks.add_task(
         send_access_granted_email,
@@ -556,7 +561,8 @@ async def admin_grant_access(req: GrantAccessRequest, background_tasks: Backgrou
         admin_email,
         login_url,
         req.role,
-        req.allowed_modules or "ALL"
+        req.allowed_modules or "ALL",
+        tenant_code
     )
     
     return {
@@ -667,7 +673,7 @@ async def create_tenant_endpoint(req: CreateTenantRequest):
                 full_name=f"{req.tenant_name} Admin",
                 role="TENANT_ADMIN",
                 source="MANUAL",
-                granted_by="admin@local",
+                granted_by=admin_email or "SYSTEM",
                 allowed_modules=req.enabled_modules or "ALL",
                 tenant_code=req.tenant_code
             )

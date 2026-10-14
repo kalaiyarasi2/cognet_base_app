@@ -18,4 +18,5 @@ storage/
 monitor/universal_token_summary.json
 monitor/monitor.log
 monitor/*.log
-config/
+config/.env.bak
+.env.*

@@ -49,8 +49,9 @@ async def run_test():
         "receivedDateTime": "2026-09-11T12:00:00Z"
     }
 
-    # 3. Initialize Orchestrator for client_a
-    orchestrator = PartnerMailFlowOrchestrator(tenant_folder="client_a")
+    # 3. Initialize Orchestrator for tenant
+    tenant = os.getenv("DEFAULT_TENANT", "wcuw")
+    orchestrator = PartnerMailFlowOrchestrator(tenant_folder=tenant)
 
     # 4. Run end-to-end processing package
     print("\n--> Processing package through AI Classifier, Extractor & Transformer...\n")

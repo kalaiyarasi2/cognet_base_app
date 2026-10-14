@@ -52,8 +52,9 @@ for path in [OUTLOOK_AGENT_DIR, CLASSIFIER_DIR, GPU_SERVER_DIR, UNIFIED_PLATFORM
 os.makedirs(WORKSPACE_DIR / "monitor", exist_ok=True)
 
 # Load environment configurations: prioritize workspace root, then classifier
-load_dotenv(WORKSPACE_DIR / ".env")
-load_dotenv(CLASSIFIER_DIR / ".env")
+from core.env_loader import load_workspace_env, get_app_tenant_id, get_login_authority, warn_missing  # central .env loader (root -> Gpu_server -> classifier)
+load_workspace_env()
+# (classifier .env is now loaded by load_workspace_env above)
 
 tess_path = os.getenv("Tesseract_path")
 if tess_path:
@@ -135,7 +136,7 @@ if OutlookAgentModule is not None:
     from typing import Optional
     
     def patched_get_access_token(self, refresh_token: Optional[str] = None, allow_device_flow: bool = True) -> str:
-        authority = "https://login.microsoftonline.com/common"
+        authority = f"https://login.microsoftonline.com/{get_login_authority()}"
         scopes = [
             "https://graph.microsoft.com/Mail.Read",
             "https://graph.microsoft.com/Mail.ReadWrite",
@@ -144,6 +145,9 @@ if OutlookAgentModule is not None:
             "https://graph.microsoft.com/Files.ReadWrite",
             "https://graph.microsoft.com/User.Read",
         ]
+        _custom_scopes = [s for s in re.split(r"[,\s]+", os.getenv("MICROSOFT_SCOPES", "")) if s]
+        if _custom_scopes:
+            scopes = _custom_scopes
         
         simple_cache_name = f"ms_simple_cache_{self.sanitized_user_email}.json" if getattr(self, "sanitized_user_email", None) else "ms_simple_cache.json"
         simple_cache_path = os.path.join(os.path.dirname(self.token_cache_path), simple_cache_name)
@@ -306,18 +310,22 @@ if OutlookAgentModule is not None:
         client_cred_error = None
         if self.azure_client_secret:
             logger.info("Attempting Client Credentials Flow (App-Only)...")
-            app_tenant = self.azure_tenant_id if getattr(self, "azure_tenant_id", None) and self.azure_tenant_id != "common" else (os.getenv("SYSTEM_MAIL_TENANT_ID") or "4858c3ed-d305-48b4-80e0-0bcdbf8ff3ae")
-            app = msal.ConfidentialClientApplication(
+            app_tenant = self.azure_tenant_id if getattr(self, "azure_tenant_id", None) and self.azure_tenant_id.lower() not in ("common", "organizations", "consumers") else get_app_tenant_id()
+            if not app_tenant:
+                warn_missing("App-only (client credentials) token", "SYSTEM_MAIL_TENANT_ID", "MICROSOFT_TENANT_ID")
+                client_cred_error = "Missing tenant id for client credentials flow"
+            else:
+              app = msal.ConfidentialClientApplication(
                 self.azure_client_id,
                 authority=f"https://login.microsoftonline.com/{app_tenant}",
                 client_credential=self.azure_client_secret,
-            )
-            result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-            if "access_token" in result:
+              )
+              result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+              if "access_token" in result:
                 logger.info("Token acquired successfully via Client Credentials Flow.")
                 return result["access_token"]
-            client_cred_error = result.get('error_description') or str(result)
-            logger.warning("Client Credentials failed: %s", client_cred_error)
+              client_cred_error = result.get('error_description') or str(result)
+              logger.warning("Client Credentials failed: %s", client_cred_error)
 
         if not allow_device_flow:
             raise RuntimeError(
@@ -1292,7 +1300,7 @@ def execute_flow(
                                     acord_data=acord_d,
                                     loss_run_data=loss_d,
                                     pdf_file_paths=[str(dest_pdf_path.resolve())],
-                                    email_address=user_email or sender_info or "system@cognethro.com",
+                                    email_address=user_email or sender_info or os.getenv("SYSTEM_EMAIL") or os.getenv("SENDER_EMAIL") or "no-reply@company.com",
                                     extra_metadata={"source_file": filename, "category": category}
                                 )
                                 logger.info("[AUTO-SUBMISSION] Tenant '%s' Submission Status: %s (HTTP %s)", t_path.name, sub_res.get("status"), sub_res.get("status_code"))

@@ -1,9 +1,14 @@
 import os
+import sys
 from pathlib import Path
 from start_flow import fetch_outlook_attachments
 
 def check_live_inbox():
-    email_user = "kalaiyarasig@cognethro.com"
+    email_user = sys.argv[1] if len(sys.argv) > 1 else (
+        os.getenv("TEST_MONITOR_EMAIL") 
+        or os.getenv("WCUW_MONITOR_EMAIL") 
+        or "kalaiyarasig@cognethro.com"
+    )
     print(f"Connecting to Outlook mailbox for: {email_user}...")
     temp_dir = Path("./temp_test_inbox")
     temp_dir.mkdir(parents=True, exist_ok=True)

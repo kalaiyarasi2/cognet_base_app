@@ -96,7 +96,7 @@ function WcuwPage() {
   const [extractionState, setExtractionState] = useState<ExtractionState | null>(null);
 
   // View state
-  const [activeMainTab, setActiveMainTab] = useState<"table" | "json" | "summary" | "exceptions">("table");
+  const [activeMainTab, setActiveMainTab] = useState<"table" | "json" | "summary" | "exceptions" | "verifications">("table");
   const [activeTableSubTab, setActiveTableSubTab] = useState<"all" | "claims" | "rating" | "locations" | "contacts" | "priors">("all");
   const [activeJsonSubTab, setActiveJsonSubTab] = useState<"unified" | "loss_run" | "acord" | "modifier">("unified");
   const [tableSearch, setTableSearch] = useState("");
@@ -407,6 +407,13 @@ function WcuwPage() {
     const schema = extractionState.acordSchema;
     const wcData = schema?.data || schema;
     return wcData?.generalQuestions || schema?.generalQuestions || {};
+  })();
+
+  const verificationsData: Record<string, any> = (() => {
+    if (!extractionState?.acordSchema) return {};
+    const schema = extractionState.acordSchema;
+    const wcData = schema?.data || schema;
+    return wcData?.verifications || schema?.verifications || {};
   })();
 
   const filteredLocations = locationsList.filter((item) => {
@@ -1190,11 +1197,212 @@ function WcuwPage() {
                 <Brain className="w-3.5 h-3.5" />
                 AI SUMMARY
               </TabsTrigger>
+              <TabsTrigger value="verifications" className="text-xs font-semibold gap-1.5 data-[state=active]:bg-card shadow-xs text-blue-600 data-[state=active]:text-blue-700">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                VERIFICATIONS
+                {Object.keys(verificationsData).length > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0 h-4 bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200">
+                    {Object.keys(verificationsData).length}
+                  </Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="exceptions" className="text-xs font-semibold gap-1.5 data-[state=active]:bg-card shadow-xs text-red-600 data-[state=active]:text-red-700">
                 <AlertCircle className="w-3.5 h-3.5" />
                 EXCEPTIONS
               </TabsTrigger>
             </TabsList>
+
+            {/* TAB: VERIFICATIONS VIEW (Underwriting Lookups: FEIN & Secretary of State) */}
+            <TabsContent value="verifications" className="space-y-4">
+              <div className="p-4 rounded-xl border border-blue-500/20 bg-gradient-to-r from-blue-500/5 via-indigo-500/5 to-transparent flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-blue-600" />
+                    <h3 className="text-sm font-bold text-foreground">Underwriting Verifications & Entity Lookups</h3>
+                    <Badge variant="outline" className="text-[10px] font-semibold bg-blue-500/10 text-blue-700 border-blue-500/30">
+                      Live Checks
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Automated multi-source validation against IRS FEIN Registry and State Corporate Records (Secretary of State).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">Target FEIN:</span>
+                  <span className="font-mono bg-muted px-2 py-0.5 rounded">{acordDemographics.fein || "Not Extracted"}</span>
+                  <span className="font-semibold text-foreground ml-2">Prospect:</span>
+                  <span className="font-mono bg-muted px-2 py-0.5 rounded truncate max-w-[150px]">{acordDemographics.applicantName || "Not Extracted"}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* 1. EIN Search / FEIN Verification */}
+                <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+                        <CheckCircle2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-foreground">FEIN Registry Lookup</h4>
+                        <p className="text-[10px] text-muted-foreground">dev.einsearch.com (Search By EIN)</p>
+                      </div>
+                    </div>
+                    {(() => {
+                      const feinRes = verificationsData.fein_search;
+                      if (!feinRes) return <Badge variant="outline" className="text-[10px]">Pending</Badge>;
+                      if (feinRes.status === "Success") return <Badge className="bg-emerald-600 text-white text-[10px]">Verified</Badge>;
+                      if (feinRes.message?.includes("IP Address disallowed")) {
+                        return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px]">IP Authorization Required</Badge>;
+                      }
+                      return <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30 text-[10px]">{feinRes.status || "Error"}</Badge>;
+                    })()}
+                  </div>
+
+                  {(() => {
+                    const feinRes = verificationsData.fein_search;
+                    if (!feinRes) {
+                      return (
+                        <div className="p-6 text-center text-xs text-muted-foreground">
+                          No FEIN search result available. Upload an ACORD 130 document to trigger verification.
+                        </div>
+                      );
+                    }
+                    if (feinRes.message?.includes("IP Address disallowed")) {
+                      return (
+                        <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-500/20 space-y-2">
+                          <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                            Server IP Whitelisting Needed
+                          </p>
+                          <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
+                            {feinRes.message}
+                          </p>
+                          <div className="text-[10px] bg-background/80 p-2 rounded border border-border font-mono text-muted-foreground">
+                            Go to <span className="font-bold text-foreground">dev.einsearch.com</span> &gt; My Accounts &gt; API Access and whitelist server IP: <span className="font-bold text-primary">115.240.213.106</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (Array.isArray(feinRes.data) && feinRes.data.length > 0) {
+                      return (
+                        <div className="space-y-2">
+                          {feinRes.data.map((item: any, idx: number) => (
+                            <div key={idx} className="p-3 rounded-lg bg-muted/40 border border-border/80 space-y-2 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-foreground text-sm">{item.companyName}</span>
+                                <Badge variant="outline" className="text-[10px] font-mono">{item.state}</Badge>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                                <div><span className="font-medium text-foreground">City/Zip:</span> {item.city}, {item.zipCode}</div>
+                                <div><span className="font-medium text-foreground">Acquired:</span> {item.dateAcquired || "N/A"}</div>
+                                <div><span className="font-medium text-foreground">Company ID:</span> {item.companyId}</div>
+                                <div><span className="font-medium text-foreground">Search Log:</span> {feinRes.searchLogID || "N/A"}</div>
+                              </div>
+                              {item.otherPossibleNames && (
+                                <p className="text-[10px] text-muted-foreground border-t border-border/40 pt-1">
+                                  <span className="font-semibold text-foreground">Aliases:</span> {item.otherPossibleNames}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="p-3 rounded-lg bg-muted/30 text-xs font-mono">
+                        <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground">{JSON.stringify(feinRes, null, 2)}</pre>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* 2. Secretary of State Verification */}
+                <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-foreground">Secretary of State (SOS) Search</h4>
+                        <p className="text-[10px] text-muted-foreground">Cobalt Intelligence Secretary of State Gateway</p>
+                      </div>
+                    </div>
+                    {(() => {
+                      const sosRes = verificationsData.secretary_of_state;
+                      if (!sosRes) return <Badge variant="outline" className="text-[10px]">Pending</Badge>;
+                      if (sosRes.status === "Complete" || sosRes.statusCode === 200) {
+                        return <Badge className="bg-emerald-600 text-white text-[10px]">Complete</Badge>;
+                      }
+                      return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px]">{sosRes.status || "Pending"}</Badge>;
+                    })()}
+                  </div>
+
+                  {(() => {
+                    const sosRes = verificationsData.secretary_of_state;
+                    if (!sosRes) {
+                      return (
+                        <div className="p-6 text-center text-xs text-muted-foreground">
+                          No SOS entity result available. Upload an ACORD 130 document to trigger verification.
+                        </div>
+                      );
+                    }
+                    const results = sosRes.results || [];
+                    const altResults = sosRes.alternativeResults || [];
+                    if (results.length > 0) {
+                      const primary = results[0];
+                      return (
+                        <div className="p-3.5 rounded-lg bg-muted/40 border border-border/80 space-y-2.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-foreground text-sm">{primary.businessName || primary.legalName || acordDemographics.applicantName}</span>
+                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 text-[10px] font-mono">
+                              SOS ID: {primary.sosId || primary.filingNumber || "Active"}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                            <div><span className="font-medium text-foreground">Filing Date:</span> {primary.filingDate || "N/A"}</div>
+                            <div><span className="font-medium text-foreground">Formation State:</span> {primary.stateOfFormation || primary.state || "N/A"}</div>
+                            <div><span className="font-medium text-foreground">Registered Agent:</span> {primary.agentName || primary.agentStreetAddress || "N/A"}</div>
+                            <div><span className="font-medium text-foreground">Agent City/State:</span> {primary.agentCity || ""}, {primary.agentState || ""}</div>
+                          </div>
+                          {primary.agentStreetAddress && (
+                            <div className="text-[11px] text-muted-foreground bg-background/50 p-2 rounded border border-border/40">
+                              <span className="font-semibold text-foreground">Registered Address:</span> {primary.agentStreetAddress}, {primary.agentCity} {primary.agentState}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    if (altResults.length > 0) {
+                      return (
+                        <div className="space-y-2">
+                          <p className="text-[11px] text-muted-foreground italic">
+                            {sosRes.message || "Alternative matching entities found in Secretary of State registry:"}
+                          </p>
+                          <div className="space-y-1.5 max-h-[160px] overflow-y-auto">
+                            {altResults.map((alt: any, idx: number) => (
+                              <div key={idx} className="p-2 rounded bg-muted/30 border border-border/60 flex items-center justify-between text-xs">
+                                <span className="font-semibold text-foreground truncate max-w-[220px]">{alt.businessName}</span>
+                                {alt.url && (
+                                  <a href={alt.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-[10px] flex items-center gap-1">
+                                    Official Record <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="p-3 rounded-lg bg-muted/30 text-xs font-mono">
+                        <pre className="whitespace-pre-wrap text-[11px] text-muted-foreground">{JSON.stringify(sosRes, null, 2)}</pre>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </TabsContent>
 
             {/* TAB 4: EXCEPTIONS VIEW */}
             <TabsContent value="exceptions" className="space-y-4">

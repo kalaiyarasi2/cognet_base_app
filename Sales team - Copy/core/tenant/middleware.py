@@ -40,6 +40,27 @@ def verify_module_access(module_code: str) -> None:
         )
 
 
+def extract_tenant_from_request(request: Request) -> Optional[str]:
+    """Helper to extract tenant_code from HTTP headers or Bearer JWT token."""
+    tenant = request.headers.get("x-tenant-code") or request.headers.get("x-tenant-id")
+    if tenant and tenant.upper() != "GLOBAL":
+        return tenant.strip().lower()
+
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth.split(" ", 1)[1].strip()
+        try:
+            import jwt
+            unverified = jwt.decode(token, options={"verify_signature": False})
+            t_code = unverified.get("tenant_code")
+            if t_code and t_code.upper() != "GLOBAL":
+                return t_code.strip().lower()
+        except Exception:
+            pass
+
+    return None
+
+
 class TenantAccessMiddleware(BaseHTTPMiddleware):
     """
     Middleware intercepting sub-app routes to enforce tenant module permissions.
@@ -57,7 +78,8 @@ class TenantAccessMiddleware(BaseHTTPMiddleware):
     }
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        provider = SingleTenantProvider.get_instance()
+        tenant_code = extract_tenant_from_request(request)
+        provider = SingleTenantProvider.get_instance(tenant_folder=tenant_code)
         path = request.url.path
 
         for prefix, module_code in self.ROUTE_MODULE_MAP.items():

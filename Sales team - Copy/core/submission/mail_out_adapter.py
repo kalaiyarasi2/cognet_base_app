@@ -350,9 +350,11 @@ def _build_exception_alert_html(
     subject: str,
     received_at: str,
     exceptions: List[Dict[str, str]],
-    subject_prefix: str = "[WCUW]",
+    subject_prefix: Optional[str] = None,
 ) -> str:
     """Build the exception alert email HTML."""
+    if not subject_prefix:
+        subject_prefix = f"[{tenant_folder.upper()}]"
     exc_rows = "".join(
         f"""<tr>
           <td style="padding:10px 14px;border-bottom:1px solid #fecaca;font-size:13px;color:#991b1b;font-weight:600;">{e['id']}</td>
@@ -597,13 +599,13 @@ class MailOutAdapter:
         # ── Resolve addresses ────────────────────────────────────────────────
         result_to  = _resolve(mail_cfg.result_to)
         exc_to     = _resolve(mail_cfg.exception_recipient)
-        prefix     = mail_cfg.subject_prefix or "[COGNET]"
+        tenant_folder = payload.get("tenant_folder") or extra.get("tenant_folder", "wcuw")
+        prefix     = mail_cfg.subject_prefix or f"[{tenant_folder.upper()}]"
         graph_token = extra.get("graph_token", "")
         from_mailbox = extra.get("from_mailbox", os.getenv("SENDER_EMAIL", ""))
         sender_email = extra.get("sender_email", extra.get("email_address", "unknown@sender"))
-        subject      = extra.get("subject", "WCUW Submission")
+        subject      = extra.get("subject", f"{tenant_folder.upper()} Submission")
         received_at  = extra.get("received_at", datetime.now().isoformat())
-        tenant_folder = payload.get("tenant_folder", "wcuw")
 
         if not result_to:
             logger.error("[MailOut] result_to address is empty — check WCUW_CLIENT_OUTPUT_EMAIL env var.")

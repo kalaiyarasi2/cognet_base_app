@@ -1,10 +1,28 @@
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 from core.tenant.models import TenantSettings, ModuleConfig, TenantSubmissionConfig
 
 logger = logging.getLogger(__name__)
+
+
+def default_tenant_folder(base_dir: Path) -> str:
+    """Default tenant folder when the caller doesn't name one.
+
+    Order: PLATFORM_TENANT env -> first (alphabetical) folder under config/tenants with a tenant.json
+    -> 'default'. (The old hardcoded 'client_a'/'c1754' folders don't exist on disk.)
+    """
+    env_val = (os.getenv("PLATFORM_TENANT") or "").strip()
+    if env_val:
+        return env_val
+    tenants_dir = Path(base_dir) / "config" / "tenants"
+    if tenants_dir.exists():
+        for sub in sorted(tenants_dir.iterdir()):
+            if sub.is_dir() and (sub / "tenant.json").exists():
+                return sub.name
+    return "default"
 
 
 class TenantConfigLoader:
@@ -13,7 +31,8 @@ class TenantConfigLoader:
     def __init__(self, base_dir: Path):
         self.base_dir = Path(base_dir).resolve()
 
-    def load_submission_config(self, tenant_folder: str = "client_a") -> TenantSubmissionConfig:
+    def load_submission_config(self, tenant_folder: Optional[str] = None) -> TenantSubmissionConfig:
+        tenant_folder = tenant_folder or default_tenant_folder(self.base_dir)
         config_path = self.base_dir / "config" / "tenants" / tenant_folder / "submission.json"
         if not config_path.exists():
             return TenantSubmissionConfig(enabled=False)
@@ -113,7 +132,8 @@ class TenantConfigLoader:
             with open(sbc_schema, "w", encoding="utf-8") as f:
                 json.dump({"title": "SBCSchema", "type": "object", "required": ["plan_name"]}, f, indent=2)
 
-    def load_tenant(self, tenant_folder: str = "c1754") -> TenantSettings:
+    def load_tenant(self, tenant_folder: Optional[str] = None) -> TenantSettings:
+        tenant_folder = tenant_folder or default_tenant_folder(self.base_dir)
         tenants_dir = self.base_dir / "config" / "tenants"
         tenant_path = tenants_dir / tenant_folder / "tenant.json"
         
@@ -139,7 +159,8 @@ class TenantConfigLoader:
             data = json.load(f)
         return TenantSettings(**data)
 
-    def load_module_config(self, module_code: str, tenant_folder: str = "c1754") -> ModuleConfig:
+    def load_module_config(self, module_code: str, tenant_folder: Optional[str] = None) -> ModuleConfig:
+        tenant_folder = tenant_folder or default_tenant_folder(self.base_dir)
         module_file = f"{module_code.lower()}.json"
         config_path = self.base_dir / "config" / "tenants" / tenant_folder / module_file
         if not config_path.exists():
@@ -160,7 +181,8 @@ class PromptLoader:
     def __init__(self, base_dir: Path):
         self.base_dir = Path(base_dir).resolve()
 
-    def load_prompt(self, relative_prompt_path: str, tenant_folder: str = "client_a") -> str:
+    def load_prompt(self, relative_prompt_path: str, tenant_folder: Optional[str] = None) -> str:
+        tenant_folder = tenant_folder or default_tenant_folder(self.base_dir)
         prompt_path = self.base_dir / "config" / "tenants" / tenant_folder / relative_prompt_path
         if not prompt_path.exists():
             TenantConfigLoader(self.base_dir)._bootstrap_tenant(tenant_folder)
@@ -177,7 +199,8 @@ class SchemaLoader:
     def __init__(self, base_dir: Path):
         self.base_dir = Path(base_dir).resolve()
 
-    def load_schema(self, relative_schema_path: str, tenant_folder: str = "client_a") -> Dict[str, Any]:
+    def load_schema(self, relative_schema_path: str, tenant_folder: Optional[str] = None) -> Dict[str, Any]:
+        tenant_folder = tenant_folder or default_tenant_folder(self.base_dir)
         schema_path = self.base_dir / "config" / "tenants" / tenant_folder / relative_schema_path
         if not schema_path.exists():
             TenantConfigLoader(self.base_dir)._bootstrap_tenant(tenant_folder)
