@@ -103,10 +103,9 @@ def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
     parent_dir = str(file_path.parent.resolve())
     sys.path.insert(0, parent_dir)
 
-    # Snapshot which 'common' modules are already cached before loading this sub-app
-    # so we can evict any that got bound to the sub-app's own local packages.
+    # Snapshot & temporarily pop 'common' modules so sub-app local modules with the same name can resolve
     _SHARED_NAMES = {"database", "database.db", "config", "models", "utils", "main"}
-    _pre_snapshot = {k for k in sys.modules if k in _SHARED_NAMES}
+    _saved_shared = {k: sys.modules.pop(k) for k in list(sys.modules.keys()) if k in _SHARED_NAMES or any(k.startswith(s + ".") for s in _SHARED_NAMES)}
 
     try:
         spec.loader.exec_module(module)
@@ -143,6 +142,9 @@ def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
             mod_file = getattr(mod, "__file__", None) or ""
             if mod_file and (parent_dir.lower() in mod_file.lower() or top_sub_dir in mod_file.lower()):
                 del sys.modules[mod_name]
+
+        # Restore original shared modules
+        sys.modules.update(_saved_shared)
 
     sub_app = getattr(module, "app", FastAPI())
     print(f"[INFO] Loaded sub-app '{module_name}' from {file_path.name} ({len(sub_app.routes)} routes)")
@@ -429,12 +431,18 @@ async def get_config():
     return {"status": "ok", "version": "1.0", "environment": "production"}
 
 @app.get("/api/automation/status", tags=["Automation"])
-async def automation_status(user_email: str = None):
+async def automation_status(request: Request, user_email: str = None):
     """
-    Automation heartbeat endpoint polled by the frontend after login.
-    Returns idle status when no automation jobs are active.
+    Delegate to classifier_app's get_automation_status which returns:
+    outlook_connected, gmail_connected, running, active_provider, pid, started_at, user_email.
     """
-    return {"status": "idle", "user_email": user_email, "active_jobs": 0}
+    try:
+        classifier_mod = sys.modules.get("classifier_api")
+        if classifier_mod and hasattr(classifier_mod, "get_automation_status"):
+            return classifier_mod.get_automation_status(request=request, user_email=user_email)
+    except Exception as e:
+        pass
+    return {"status": "idle", "user_email": user_email, "active_jobs": 0, "outlook_connected": False, "gmail_connected": False, "running": False}
 
 @app.get("/api/gpu/api/drive/status", tags=["GPU Drive"])
 @app.get("/api/gpu/drive/status", tags=["GPU Drive"])
@@ -523,6 +531,12 @@ async def gpu_extract_proxy(request: Request, file: UploadFile = File(...)):
         except Exception:
             pass
         return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
+
+@app.get("/api/download/{filepath:path}", tags=["GPU Download"])
+async def download_proxy(filepath: str):
+    """Bridge proxy for direct GPU download paths."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=f"/api/gpu/api/download/{filepath}")
 
 @app.get("/api/token-usage", tags=["Token Usage"])
 async def get_token_usage(

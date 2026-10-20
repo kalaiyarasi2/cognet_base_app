@@ -44,7 +44,7 @@ EMAIL_PIPELINE_DIR = GPU_SERVER_DIR / "Email_pipeline"
 UNIFIED_PLATFORM_DIR = GPU_SERVER_DIR / "Unified_PDF_Platform"
 
 # Add directories to sys.path
-for path in [OUTLOOK_AGENT_DIR, CLASSIFIER_DIR, GPU_SERVER_DIR, UNIFIED_PLATFORM_DIR, EMAIL_PIPELINE_DIR]:
+for path in [OUTLOOK_AGENT_DIR, CLASSIFIER_DIR, GPU_SERVER_DIR, UNIFIED_PLATFORM_DIR]:
     if str(path) not in sys.path:
         sys.path.append(str(path))
 
@@ -183,8 +183,21 @@ if OutlookAgentModule is not None:
                 with open(simple_cache_path) as fh:
                     cached_data = json.load(fh)
                 if cached_data.get("expires_at", 0) > time.time() + 60:
-                    logger.info("Token obtained from simple cache.")
-                    return cached_data["access_token"]
+                    tok = cached_data.get("access_token", "")
+                    # Validate cached token belongs to self.user_email if specified
+                    if getattr(self, "user_email", None) and tok:
+                        try:
+                            import jwt
+                            decoded = jwt.decode(tok, options={"verify_signature": False})
+                            cached_email = decoded.get("upn") or decoded.get("unique_name") or ""
+                            if cached_email and cached_email.lower() != self.user_email.lower():
+                                logger.warning("[AUTH] Discarding simple cache: belongs to %s, but user_email is %s", cached_email, self.user_email)
+                                cached_data = {}
+                        except Exception:
+                            pass
+                    if cached_data.get("access_token"):
+                        logger.info("Token obtained from simple cache.")
+                        return cached_data["access_token"]
                 
                 # If expired but has refresh token, try to refresh
                 r_token = cached_data.get("refresh_token")
@@ -230,6 +243,7 @@ if OutlookAgentModule is not None:
                 session_files.extend(glob.glob(str(sdir / "onedrive_*.json")))
         session_files = list(dict.fromkeys(session_files))
         session_files.sort(key=os.path.getmtime, reverse=True)
+        fallback_res = None
         for s_file in session_files:
             try:
                 import json
@@ -310,7 +324,8 @@ if OutlookAgentModule is not None:
         client_cred_error = None
         if self.azure_client_secret:
             logger.info("Attempting Client Credentials Flow (App-Only)...")
-            app_tenant = self.azure_tenant_id if getattr(self, "azure_tenant_id", None) and self.azure_tenant_id.lower() not in ("common", "organizations", "consumers") else get_app_tenant_id()
+            user_domain = self.user_email.split("@")[-1].strip() if getattr(self, "user_email", None) and "@" in self.user_email else None
+            app_tenant = user_domain or (self.azure_tenant_id if getattr(self, "azure_tenant_id", None) and self.azure_tenant_id.lower() not in ("common", "organizations", "consumers") else get_app_tenant_id())
             if not app_tenant:
                 warn_missing("App-only (client credentials) token", "SYSTEM_MAIL_TENANT_ID", "MICROSOFT_TENANT_ID")
                 client_cred_error = "Missing tenant id for client credentials flow"
@@ -322,7 +337,7 @@ if OutlookAgentModule is not None:
               )
               result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
               if "access_token" in result:
-                logger.info("Token acquired successfully via Client Credentials Flow.")
+                logger.info("Token acquired successfully via Client Credentials Flow for tenant authority '%s'.", app_tenant)
                 return result["access_token"]
               client_cred_error = result.get('error_description') or str(result)
               logger.warning("Client Credentials failed: %s", client_cred_error)
@@ -471,6 +486,9 @@ def get_active_refresh_token(user_email: str | None = None) -> str | None:
     session_files = list(dict.fromkeys(session_files))
     session_files.sort(key=os.path.getmtime, reverse=True)
 
+    first_valid_refresh = None
+    first_valid_email = None
+
     for s_file in session_files:
         try:
             with open(s_file, 'r') as f:
@@ -489,10 +507,12 @@ def get_active_refresh_token(user_email: str | None = None) -> str | None:
                                 logger.warning("[AUTH] Skipping session %s: issued for appid %s, but current client_id is %s", Path(s_file).name, sess_appid, current_client_id)
                                 continue
                             ms_email = decoded.get('upn') or decoded.get('unique_name') or 'unknown'
-                            if user_email and ms_email.lower() != user_email.lower():
-                                continue
-                            logger.info("[AUTH] Using dashboard session for Microsoft account: %s (requested by: %s)", ms_email, user_email or 'default')
-                            return refresh
+                            if user_email and ms_email.lower() == user_email.lower():
+                                logger.info("[AUTH] Using dashboard session for Microsoft account: %s (requested by: %s)", ms_email, user_email)
+                                return refresh
+                            if not first_valid_refresh:
+                                first_valid_refresh = refresh
+                                first_valid_email = ms_email
                     except Exception:
                         pass
                     
@@ -501,6 +521,10 @@ def get_active_refresh_token(user_email: str | None = None) -> str | None:
                         return refresh
         except Exception:
             pass
+
+    if not user_email and first_valid_refresh:
+        logger.info("[AUTH] Using active Microsoft dashboard session for '%s' (default)", first_valid_email)
+        return first_valid_refresh
     return None
 
 def fetch_outlook_attachments(dest_folder: Path, mark_read: bool = True, user_email: str | None = None) -> tuple[list[Path], str]:
@@ -607,8 +631,16 @@ def fetch_gmail_attachments(dest_folder: Path, mark_read: bool = True) -> list[P
     try:
         # Run inside Gpu_server/Email_pipeline working directory so credentials.json is resolved
         with change_working_dir(EMAIL_PIPELINE_DIR):
-            from main import agent_phase
-            new_pdf_paths = agent_phase(mark_read=mark_read)
+            _added_ep = False
+            if str(EMAIL_PIPELINE_DIR) not in sys.path:
+                sys.path.insert(0, str(EMAIL_PIPELINE_DIR))
+                _added_ep = True
+            try:
+                from main import agent_phase
+                new_pdf_paths = agent_phase(mark_read=mark_read)
+            finally:
+                if _added_ep and str(EMAIL_PIPELINE_DIR) in sys.path:
+                    sys.path.remove(str(EMAIL_PIPELINE_DIR))
 
             # Move files from Email_pipeline/downloads to our dest_folder
             for path_str in new_pdf_paths:

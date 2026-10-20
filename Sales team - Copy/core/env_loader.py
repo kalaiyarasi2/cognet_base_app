@@ -62,7 +62,7 @@ def get_app_tenant_id(tenant: str | None = None) -> str:
     Returns '' when nothing valid is configured.
     """
     t = tenant_key(tenant)
-    keys = ([f"{t}_MICROSOFT_TENANT_ID"] if t else []) + [
+    keys = ([f"{t}_MICROSOFT_TENANT_ID", f"{t}_TENANT_ID"] if t else []) + [
         "SYSTEM_MAIL_TENANT_ID", "AZURE_TENANT_ID", "MICROSOFT_TENANT_ID",
     ]
     for k in keys:

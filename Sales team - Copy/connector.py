@@ -38,15 +38,9 @@ CLASSIFIER_DIR = WORKSPACE_DIR / "file-classification-"
 GPU_SERVER_DIR = WORKSPACE_DIR / "Gpu_server"
 UNIFIED_PLATFORM_DIR = GPU_SERVER_DIR / "Unified_PDF_Platform"
 
-for path in [OUTLOOK_AGENT_DIR, CLASSIFIER_DIR, GPU_SERVER_DIR, UNIFIED_PLATFORM_DIR, GPU_SERVER_DIR / "Email_pipeline"]:
+for path in [OUTLOOK_AGENT_DIR, CLASSIFIER_DIR, GPU_SERVER_DIR, UNIFIED_PLATFORM_DIR]:
     if str(path) not in sys.path:
         sys.path.append(str(path))
-
-# Mock 'auth' module to prevent Gmail auth error on imports
-from unittest.mock import MagicMock
-class MockAuth:
-    gmail = MagicMock()
-sys.modules['auth'] = MockAuth
 
 # Load environment configurations: prioritize workspace root, then classifier
 load_dotenv(WORKSPACE_DIR / ".env")

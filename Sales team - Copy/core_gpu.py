@@ -16,12 +16,16 @@ Features:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import subprocess
 import sys
+import tempfile
 import threading
 import time
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("GPU_ENGINE")
 
@@ -77,24 +81,31 @@ class GPUEngine:
         except Exception:
             self._detect_cpu_brand()
 
-        # 2. PaddlePaddle CUDA inspection
+        # 2. PaddlePaddle CUDA inspection (safe probe to prevent pybind11 type collision with PyTorch)
         try:
-            import paddle
-            self.paddle_cuda_available = bool(
-                hasattr(paddle, "is_compiled_with_cuda") and paddle.is_compiled_with_cuda()
-            )
-            # Paddle GPU build + visible device => enable GPU even if torch is CPU-only
-            if (
-                not self.has_cuda
-                and self.paddle_cuda_available
-                and paddle.device.cuda.device_count() > 0
-            ):
-                self.has_cuda = True
-                self.device = "cuda"
+            if "torch" in sys.modules:
                 try:
-                    self.device_name = paddle.device.cuda.get_device_name(0)
+                    import importlib.metadata
+                    installed = {d.metadata["Name"].lower() for d in importlib.metadata.distributions()}
+                    self.paddle_cuda_available = "paddlepaddle-gpu" in installed
                 except Exception:
-                    self.device_name = "NVIDIA GPU (Paddle)"
+                    self.paddle_cuda_available = self.has_cuda
+            else:
+                import paddle
+                self.paddle_cuda_available = bool(
+                    hasattr(paddle, "is_compiled_with_cuda") and paddle.is_compiled_with_cuda()
+                )
+                if (
+                    not self.has_cuda
+                    and self.paddle_cuda_available
+                    and paddle.device.cuda.device_count() > 0
+                ):
+                    self.has_cuda = True
+                    self.device = "cuda"
+                    try:
+                        self.device_name = paddle.device.cuda.get_device_name(0)
+                    except Exception:
+                        self.device_name = "NVIDIA GPU (Paddle)"
         except Exception:
             self.paddle_cuda_available = False
 
@@ -200,30 +211,24 @@ class GPUEngine:
         **extra_kwargs: Any,
     ) -> Any:
         """
-        Returns a warm, singleton PaddleOCR instance.
-        Loads once into memory and reuses across calls.
+        Returns a crash-safe SafePaddleOCREngine instance.
+        Delegates to shared GPU worker pool (GPU) or isolated subprocess,
+        preventing pybind11 symbol collisions with PyTorch on Windows.
         """
         cache_key = f"{lang}_{use_angle_cls}"
         if cache_key not in self._paddle_ocr_models:
-            from paddleocr import PaddleOCR
             use_gpu = self.has_cuda and self.paddle_cuda_available
             logger.info(
-                "[GPU ENGINE] Initializing Warm PaddleOCR (lang='%s', use_gpu=%s)...",
+                "[GPU ENGINE] Initializing Safe PaddleOCR Engine (lang='%s', use_gpu=%s)...",
                 lang,
                 use_gpu,
             )
-            kwargs = {
-                "lang": lang,
-                "use_angle_cls": use_angle_cls,
-                "use_gpu": use_gpu,
+            self._paddle_ocr_models[cache_key] = SafePaddleOCREngine(
+                lang=lang,
+                use_angle_cls=use_angle_cls,
+                use_gpu=use_gpu,
                 **extra_kwargs,
-            }
-            try:
-                self._paddle_ocr_models[cache_key] = PaddleOCR(**kwargs)
-            except TypeError:
-                # Some newer versions of paddleocr deprecate use_gpu in kwargs
-                kwargs.pop("use_gpu", None)
-                self._paddle_ocr_models[cache_key] = PaddleOCR(**kwargs)
+            )
 
         return self._paddle_ocr_models[cache_key]
 
@@ -279,3 +284,257 @@ def log_ocr_audit(
 
 def get_hardware_device_string() -> str:
     return gpu_engine.get_device_string()
+
+
+class SafePaddleOCREngine:
+    """
+    Crash-safe, cross-process PaddleOCR engine wrapper.
+    On Windows, when PyTorch is loaded, direct in-process imports of PaddleOCR fail due to
+    pybind11 _gpuDeviceProperties symbol clashes. This wrapper delegates inference to the
+    shared persistent GPU worker pool (Gpu_server/GPU) or an isolated subprocess worker.
+    """
+
+    def __init__(
+        self,
+        lang: str = "en",
+        use_angle_cls: bool = True,
+        use_gpu: bool = True,
+        **extra_kwargs: Any,
+    ) -> None:
+        self.lang = lang
+        self.use_angle_cls = use_angle_cls
+        self.use_gpu = use_gpu
+        self.extra_kwargs = extra_kwargs
+        self._in_process_engine = None
+
+        # Only attempt in-process PaddleOCR if PyTorch has not been loaded in this process
+        if "torch" not in sys.modules:
+            try:
+                from paddleocr import PaddleOCR
+                kwargs = {
+                    "lang": lang,
+                    "use_angle_cls": use_angle_cls,
+                    "use_gpu": use_gpu,
+                    **extra_kwargs,
+                }
+                try:
+                    self._in_process_engine = PaddleOCR(**kwargs)
+                except TypeError:
+                    kwargs.pop("use_gpu", None)
+                    self._in_process_engine = PaddleOCR(**kwargs)
+            except Exception as e:
+                logger.debug("In-process PaddleOCR init bypassed: %s", e)
+                self._in_process_engine = None
+
+    def ocr(self, img: Any, det: bool = True, rec: bool = True, cls: bool = True) -> List[Any]:
+        """
+        Runs OCR on a single image (numpy array, PIL Image, or file path).
+        Returns raw PaddleOCR result structure: [ [ [box, (text, conf)], ... ] ]
+        """
+        if self._in_process_engine is not None:
+            return self._in_process_engine.ocr(img, det=det, rec=rec, cls=cls)
+
+        temp_file = None
+        if isinstance(img, (str, Path)):
+            img_path = str(img)
+        elif hasattr(img, "__array__"):
+            from PIL import Image
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                temp_file = tf.name
+            Image.fromarray(img).save(temp_file)
+            img_path = temp_file
+        elif hasattr(img, "save"):
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                temp_file = tf.name
+            img.save(temp_file)
+            img_path = temp_file
+        else:
+            raise ValueError(f"Unsupported image type for PaddleOCR: {type(img)}")
+
+        try:
+            # 1. Try shared persistent GPU pool first
+            if self.use_gpu:
+                try:
+                    gpu_server_dir = str(Path(__file__).resolve().parent / "Gpu_server")
+                    if gpu_server_dir not in sys.path:
+                        sys.path.insert(0, gpu_server_dir)
+                    import GPU
+                    if GPU.gpu_ocr_available():
+                        profile = {
+                            "kind": "basic",
+                            "cls": cls,
+                            "kwargs": {
+                                "use_angle_cls": self.use_angle_cls,
+                                "lang": self.lang,
+                                **self.extra_kwargs,
+                            },
+                        }
+                        raw_results = GPU.ocr_images_parallel([img_path], profile)
+                        if raw_results and raw_results[0] is not None:
+                            return raw_results[0]
+                except Exception as exc:
+                    logger.warning("[GPU ENGINE] Shared GPU pool OCR fallback: %s", exc)
+
+            # 2. Fallback: isolated subprocess worker
+            return self._run_isolated_subprocess(img_path, cls=cls)
+
+        finally:
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception:
+                    pass
+
+    def ocr_batch(self, images: List[Any], cls: bool = True) -> List[Any]:
+        """
+        Runs OCR on a list of images in parallel across available GPU workers.
+        Returns a list of raw PaddleOCR outputs, one per image.
+        """
+        if not images:
+            return []
+
+        temp_files: List[Optional[str]] = []
+        img_paths: List[str] = []
+
+        try:
+            for img in images:
+                if isinstance(img, (str, Path)):
+                    img_paths.append(str(img))
+                    temp_files.append(None)
+                elif hasattr(img, "__array__"):
+                    from PIL import Image
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                        t_name = tf.name
+                    Image.fromarray(img).save(t_name)
+                    img_paths.append(t_name)
+                    temp_files.append(t_name)
+                elif hasattr(img, "save"):
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                        t_name = tf.name
+                    img.save(t_name)
+                    img_paths.append(t_name)
+                    temp_files.append(t_name)
+                else:
+                    raise ValueError(f"Unsupported image type: {type(img)}")
+
+            if self.use_gpu:
+                try:
+                    gpu_server_dir = str(Path(__file__).resolve().parent / "Gpu_server")
+                    if gpu_server_dir not in sys.path:
+                        sys.path.insert(0, gpu_server_dir)
+                    import GPU
+                    if GPU.gpu_ocr_available():
+                        profile = {
+                            "kind": "basic",
+                            "cls": cls,
+                            "kwargs": {
+                                "use_angle_cls": self.use_angle_cls,
+                                "lang": self.lang,
+                                **self.extra_kwargs,
+                            },
+                        }
+                        raw_results = GPU.ocr_images_parallel(img_paths, profile)
+                        if raw_results and len(raw_results) == len(images):
+                            return raw_results
+                except Exception as exc:
+                    logger.warning("[GPU ENGINE] Shared GPU pool batch fallback: %s", exc)
+
+            # Fallback: sequential single-image OCR
+            return [self.ocr(p, cls=cls) for p in img_paths]
+
+        finally:
+            for tf in temp_files:
+                if tf and os.path.exists(tf):
+                    try:
+                        os.remove(tf)
+                    except Exception:
+                        pass
+
+    def _run_isolated_subprocess(self, img_path: str, cls: bool = True) -> List[Any]:
+        """Runs PaddleOCR inside an isolated child process to avoid DLL/pybind11 collisions."""
+        worker_script = Path(__file__).resolve()
+        cmd = [
+            sys.executable,
+            str(worker_script),
+            "--paddle-ocr-worker",
+            img_path,
+            self.lang,
+            str(self.use_angle_cls),
+            str(self.use_gpu),
+            str(cls),
+        ]
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if res.returncode != 0:
+            err = res.stderr.strip() or f"exit code {res.returncode}"
+            logger.error("[PaddleOCR Subprocess] Failed: %s", err)
+            raise RuntimeError(f"PaddleOCR subprocess error: {err}")
+
+        stdout = res.stdout.strip()
+        start_tag = "__PADDLE_JSON_START__"
+        end_tag = "__PADDLE_JSON_END__"
+        if start_tag in stdout and end_tag in stdout:
+            json_str = stdout.split(start_tag)[1].split(end_tag)[0].strip()
+            return json.loads(json_str)
+
+        raise RuntimeError(f"PaddleOCR subprocess returned invalid output: {stdout[:200]}")
+
+
+def _paddle_ocr_worker_main() -> None:
+    """CLI worker entrypoint for isolated PaddleOCR inference."""
+    if len(sys.argv) < 7 or sys.argv[1] != "--paddle-ocr-worker":
+        return
+
+    img_path = sys.argv[2]
+    lang = sys.argv[3]
+    use_angle_cls = sys.argv[4].lower() == "true"
+    use_gpu = sys.argv[5].lower() == "true"
+    cls_flag = sys.argv[6].lower() == "true"
+
+    try:
+        import numpy as np
+        from PIL import Image
+        from paddleocr import PaddleOCR
+
+        im = Image.open(img_path).convert("RGB")
+        img_arr = np.array(im)
+
+        ocr = PaddleOCR(
+            lang=lang,
+            use_angle_cls=use_angle_cls,
+            use_gpu=use_gpu,
+            show_log=False,
+        )
+        raw = ocr.ocr(img_arr, cls=cls_flag)
+
+        def _to_json_safe(o):
+            if isinstance(o, np.ndarray):
+                return o.tolist()
+            if isinstance(o, (np.floating, float)):
+                return float(o)
+            if isinstance(o, (np.integer, int)):
+                return int(o)
+            if isinstance(o, (list, tuple)):
+                return [_to_json_safe(x) for x in o]
+            if isinstance(o, dict):
+                return {k: _to_json_safe(v) for k, v in o.items()}
+            return o
+
+        safe_raw = _to_json_safe(raw)
+        print("__PADDLE_JSON_START__" + json.dumps(safe_raw) + "__PADDLE_JSON_END__")
+        sys.exit(0)
+    except Exception as e:
+        sys.stderr.write(f"Worker error: {e}\n")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--paddle-ocr-worker":
+        _paddle_ocr_worker_main()
+

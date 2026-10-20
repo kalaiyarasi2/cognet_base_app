@@ -51,7 +51,7 @@ lmdb>=1.4.0
 
 # ── 5. PDF, Document Parsing & Extraction Engines ────────────────────────────
 pdfplumber==0.11.7
-PyMuPDF>=1.23.0,<1.25.0
+PyMuPDF==1.28.2  # 1.24.x corrupts some fillable ACORD PDFs on save; 2.x pulls protobuf>=4 (breaks Paddle)
 PyPDF2>=3.0.0
 pypdf>=4.0.0
 pdfminer.six>=20231228

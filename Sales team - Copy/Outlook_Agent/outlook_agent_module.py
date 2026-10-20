@@ -161,18 +161,70 @@ def _graph_get(token: str, url: str, params: Optional[dict] = None) -> dict:
     return resp.json()
 
 
-def _mark_read(token: str, email_id: str) -> None:
-    """Mark an Outlook message as read via Graph API."""
+def _get_fresh_app_token(user_email: Optional[str] = None) -> Optional[str]:
+    """Acquires a fresh application token via client credentials if the token expired."""
+    try:
+        import msal
+        client_id = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
+        client_secret = os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET")
+        email_domain = user_email.split("@")[-1].strip() if user_email and "@" in user_email else None
+        tenant_id = (
+            email_domain
+            or os.getenv("SYSTEM_MAIL_TENANT_ID")
+            or os.getenv("AZURE_TENANT_ID")
+            or (os.getenv("MICROSOFT_TENANT_ID") if os.getenv("MICROSOFT_TENANT_ID") != "common" else None)
+            or "common"
+        )
+        if client_id and client_secret and tenant_id:
+            app = msal.ConfidentialClientApplication(
+                client_id,
+                authority=f"https://login.microsoftonline.com/{tenant_id}",
+                client_credential=client_secret,
+            )
+            res = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+            return res.get("access_token")
+    except Exception as e:
+        logger.warning("Could not acquire fresh app token: %s", e)
+    return None
+
+
+def _mark_read(token: str, email_id: str, user_email: Optional[str] = None) -> bool:
+    """Mark an Outlook message as read via Graph API. Returns True on success, False on failure."""
     try:
         sess = _get_graph_session()
-        sess.patch(
-            f"https://graph.microsoft.com/v1.0/me/messages/{email_id}",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"isRead": True},
-            timeout=15,
-        )
+        endpoints = []
+        if user_email:
+            endpoints.append(f"https://graph.microsoft.com/v1.0/users/{user_email}/messages/{email_id}")
+        endpoints.append(f"https://graph.microsoft.com/v1.0/me/messages/{email_id}")
+
+        current_token = token
+        for ep in endpoints:
+            resp = sess.patch(
+                ep,
+                headers={"Authorization": f"Bearer {current_token}", "Content-Type": "application/json"},
+                json={"isRead": True},
+                timeout=15,
+            )
+            # If token expired or lifetime became invalid during long processing, refresh and retry once
+            if resp.status_code == 401:
+                fresh_token = _get_fresh_app_token(user_email=user_email)
+                if fresh_token:
+                    current_token = fresh_token
+                    resp = sess.patch(
+                        ep,
+                        headers={"Authorization": f"Bearer {current_token}", "Content-Type": "application/json"},
+                        json={"isRead": True},
+                        timeout=15,
+                    )
+
+            if resp.status_code in (200, 204):
+                logger.info(f"Marked email {email_id} as READ via {ep}.")
+                return True
+            else:
+                logger.warning(f"Graph mark_read via {ep} returned {resp.status_code}: {resp.text}")
     except Exception as exc:
         logger.warning(f"Could not mark email as read: {exc}")
+    return False
 
 
 def _parse_filter(user_filter: str) -> List[str]:
@@ -532,6 +584,7 @@ def _node_download_and_store(state: _EmailAgentState) -> dict:
     processed_ids   = set(state.get("_processed_ids", []))
     excel_log_path  = state["_excel_log_path"]
     id_file         = state["_processed_ids_file"]
+    user_email      = state.get("user_email")
     new_records:    List[dict] = []
 
     for email in state.get("filtered_emails", []):
@@ -541,7 +594,7 @@ def _node_download_and_store(state: _EmailAgentState) -> dict:
 
         if not attachments:
             logger.info("  No attachments in email -- skipping.")
-            _mark_read(token, email_id)
+            _mark_read(token, email_id, user_email=user_email)
             processed_ids.add(email_id)
             continue
 
@@ -588,7 +641,7 @@ def _node_download_and_store(state: _EmailAgentState) -> dict:
                 logger.error(err)
                 errors.append(err)
 
-        _mark_read(token, email_id)
+        _mark_read(token, email_id, user_email=user_email)
         processed_ids.add(email_id)
 
     _save_processed_ids(processed_ids, id_file)
@@ -756,6 +809,25 @@ class OutlookAgentModule:
                 )
             logger.info("Token obtained via refresh_token.")
             return result["access_token"]
+
+        # Client Credentials path (app-only background service)
+        if self.azure_client_secret:
+            email_domain = self.user_email.split("@")[-1].strip() if self.user_email and "@" in self.user_email else None
+            app_tenant = (
+                email_domain
+                or os.getenv("SYSTEM_MAIL_TENANT_ID")
+                or (self.azure_tenant_id if self.azure_tenant_id and self.azure_tenant_id.lower() not in ("common", "organizations", "consumers") else None)
+                or "common"
+            )
+            app = msal.ConfidentialClientApplication(
+                self.azure_client_id,
+                authority=f"https://login.microsoftonline.com/{app_tenant}",
+                client_credential=self.azure_client_secret,
+            )
+            result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+            if "access_token" in result:
+                logger.info("Token obtained via Client Credentials Flow for tenant '%s'.", app_tenant)
+                return result["access_token"]
 
         # Device-code path (interactive once, then cached)
         cache = msal.SerializableTokenCache()
@@ -1027,17 +1099,26 @@ class OutlookAgentModule:
             _load_processed_ids(self.processed_ids_file) if skip_processed else set()
         )
         emails = []
-
         base_url = f"https://graph.microsoft.com/v1.0/users/{self.user_email}" if self.user_email else "https://graph.microsoft.com/v1.0/me"
-        data = _graph_get(
-            token,
-            f"{base_url}/messages",
-            params={
-                "$filter": "isRead eq false",
-                "$top":    limit,
-                "$select": "id,subject,from,receivedDateTime,body,hasAttachments",
-            },
-        )
+        try:
+            data = _graph_get(
+                token,
+                f"{base_url}/messages",
+                params={
+                    "$filter": "isRead eq false",
+                    "$top":    limit,
+                    "$select": "id,subject,from,receivedDateTime,body,hasAttachments",
+                },
+            )
+        except _requests.exceptions.HTTPError as http_err:
+            if http_err.response is not None and http_err.response.status_code == 404:
+                logger.error(
+                    "Mailbox '%s' was not found in Microsoft 365 tenant (HTTP 404). "
+                    "Verify this email address exists in the configured Azure AD tenant.",
+                    self.user_email
+                )
+                return []
+            raise
         messages = data.get("value", []) if isinstance(data, dict) else []
         # Reverse to process oldest emails first (FIFO)
         messages.reverse()

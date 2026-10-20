@@ -110,6 +110,7 @@ const sidebarGroups = [
       { type: "agentNode", label: "SBC plan summary", icon: Bot, data: { label: "SBC plan summary" } },
       { type: "agentNode", label: "Census Creation", icon: Bot, data: { label: "Census Creation" } },
       { type: "payrollAgentNode", label: "Payroll Register Extraction", icon: Bot, data: { label: "Payroll Register Extraction" } },
+      { type: "agentNode", label: "Notice Extraction", icon: FileCheck, data: { label: "Notice Extraction" } },
     ],
   },
   {
@@ -496,7 +497,7 @@ function CoPilotPage() {
     } finally {
       setIsRunning(false);
     }
-  }, [nodes, edges]);
+  }, [nodes, edges, uploadedFiles]);
 
   /* ── Keep nodes wired to the run handler and path change ───── */
   const nodesWithHandlers = useMemo(() => {

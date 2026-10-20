@@ -191,47 +191,74 @@ def _send_failure_notification(
                 },
                 "saveToSentItems": "false",
             }
-            # Delegated token -> /me/sendMail (token already scoped to the user)
-            # App token -> /users/{mailbox}/sendMail
+            # Build prioritized endpoints:
+            # If mailbox is specified, prefer /users/{mailbox}/sendMail (required for Application tokens).
+            # Also include /me/sendMail as fallback (required for Delegated tokens).
+            endpoints_to_try = []
             if mailbox:
-                endpoint = f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail"
-            else:
-                endpoint = "https://graph.microsoft.com/v1.0/me/sendMail"
+                endpoints_to_try.append((f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail", f"from: {mailbox}"))
+            endpoints_to_try.append(("https://graph.microsoft.com/v1.0/me/sendMail", "/me"))
 
-            resp = _req.post(
-                endpoint,
-                headers={"Authorization": f"Bearer {access_token}",
-                         "Content-Type": "application/json"},
-                json=graph_payload,
-                timeout=30,
-            )
-            if resp.status_code in (200, 202):
-                logger.info(
-                    "[FailureNotify] Sent failure email to '%s' via Graph (%s | tenant: %s)",
-                    recipient,
-                    f"from: {mailbox}" if mailbox else "/me",
-                    tenant_folder,
-                )
-                return True
-            else:
-                logger.warning(
-                    "[FailureNotify] Graph sendMail returned %s: %s", resp.status_code, resp.text
-                )
+            for endpoint, desc in endpoints_to_try:
+                try:
+                    resp = _req.post(
+                        endpoint,
+                        headers={"Authorization": f"Bearer {access_token}",
+                                 "Content-Type": "application/json"},
+                        json=graph_payload,
+                        timeout=30,
+                    )
+                    if resp.status_code in (200, 202):
+                        logger.info(
+                            "[FailureNotify] Sent failure email to '%s' via Graph (%s | tenant: %s)",
+                            recipient,
+                            desc,
+                            tenant_folder,
+                        )
+                        return True
+                    else:
+                        logger.warning(
+                            "[FailureNotify] Graph sendMail via %s returned %s: %s",
+                            desc, resp.status_code, resp.text
+                        )
+                except Exception as req_exc:
+                    logger.warning("[FailureNotify] Graph send attempt to %s failed: %s", desc, req_exc)
+            return False
         except Exception as exc:
             logger.warning("[FailureNotify] Graph send attempt failed: %s", exc)
         return False
 
-    # --- Priority 1: Reuse the already-obtained Outlook delegated token (/me/sendMail) ---
+    # Resolve sender account dynamically across environment and tenant
+    # System notifications prioritize dedicated sender / system email over personal user mailboxes
+    clean_tenant = tenant_folder.upper().replace(" ", "_").replace("-", "_")
+    sender_acct = (
+        getattr(submission_config, "sender_email", None)
+        or os.getenv(f"{clean_tenant}_SENDER_EMAIL")
+        or os.getenv("SENDER_EMAIL")
+        or os.getenv("SYSTEM_EMAIL")
+        or os.getenv("DELEGATED_SENDER_EMAIL")
+        or os.getenv("SMTP_USER")
+        or from_mailbox
+        or os.getenv(f"{clean_tenant}_MONITOR_EMAIL")
+        or os.getenv("PARTNER_POC_MONITOR_EMAIL")
+        or ""
+    )
+
+    # --- Priority 1: Reuse the already-obtained Outlook token ---
     if graph_token:
-        logger.info("[FailureNotify] Using existing Outlook session token (/me/sendMail) to send failure email.")
-        if _graph_send(graph_token):  # no mailbox needed — delegated token
+        logger.info("[FailureNotify] Using existing Outlook session token to send failure email (target: %s).", sender_acct or "/me")
+        if _graph_send(graph_token, mailbox=sender_acct):
             return True
 
     # --- Priority 1b: Use dedicated sender account session (e.g. drivesupport@cognethro.com) ---
     client_id     = os.getenv("AZURE_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID")
     client_secret = os.getenv("AZURE_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET")
-    ms_tenant_id  = os.getenv("AZURE_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID")
-    sender_acct   = from_mailbox or os.getenv("SENDER_EMAIL") or os.getenv("PARTNER_POC_MONITOR_EMAIL") or get_env("DELEGATED_SENDER_EMAIL")
+    ms_tenant_id  = (
+        os.getenv("SYSTEM_MAIL_TENANT_ID")
+        or os.getenv("AZURE_TENANT_ID")
+        or (os.getenv("MICROSOFT_TENANT_ID") if os.getenv("MICROSOFT_TENANT_ID") != "common" else None)
+        or os.getenv("MICROSOFT_TENANT_ID")
+    )
 
     if sender_acct and client_id and client_secret:
         try:
@@ -246,7 +273,7 @@ def _send_failure_notification(
                 )
                 if "access_token" in s_res:
                     logger.info("[FailureNotify] Using sender account (%s) token to send failure email.", sender_acct)
-                    if _graph_send(s_res["access_token"]):
+                    if _graph_send(s_res["access_token"], mailbox=sender_acct):
                         return True
         except Exception as s_err:
             logger.warning("[FailureNotify] Sending via sender account delegated token failed: %s", s_err)
@@ -257,7 +284,8 @@ def _send_failure_notification(
     if all([client_id, client_secret, ms_tenant_id, sender_acct]):
         try:
             import msal
-            authority = f"https://login.microsoftonline.com/{ms_tenant_id}"
+            sender_domain = sender_acct.split("@")[-1].strip() if sender_acct and "@" in sender_acct else ms_tenant_id
+            authority = f"https://login.microsoftonline.com/{sender_domain}"
             app = msal.ConfidentialClientApplication(
                 client_id, authority=authority, client_credential=client_secret
             )
@@ -265,7 +293,7 @@ def _send_failure_notification(
                 scopes=["https://graph.microsoft.com/.default"]
             )
             if "access_token" in token_result:
-                if _graph_send(token_result["access_token"], sender_acct):
+                if _graph_send(token_result["access_token"], mailbox=sender_acct):
                     return True
             else:
                 logger.warning("[FailureNotify] MSAL token error: %s", token_result.get("error"))
@@ -337,11 +365,263 @@ class PartnerMailFlowOrchestrator:
         self.submission_config = self.config_loader.load_submission_config(tenant_folder)
         self.staging_dir = WORKSPACE_DIR / "temp_partner_staging"
         self.staging_dir.mkdir(parents=True, exist_ok=True)
-        self._processed_msg_ids = set()
+        clean_name = self.tenant_folder.lower().replace(" ", "_").replace("-", "_")
+        self._processed_ids_file = self.staging_dir / f"processed_ids_{clean_name}.json"
+        self._processed_msg_ids = self._load_processed_msg_ids()
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._max_concurrent = max_concurrent
-        self.monitored_email: Optional[str] = None
-        logger.info("Parallel processing enabled: max %d concurrent emails.", max_concurrent)
+        clean_tenant = self.tenant_folder.upper().replace(" ", "_")
+        self.monitored_email = (
+            os.getenv(f"{clean_tenant}_MONITOR_EMAIL")
+            or os.getenv(f"{clean_tenant.replace('_TEAM', '')}_MONITOR_EMAIL")
+            or os.getenv("PARTNER_POC_MONITOR_EMAIL")
+            or os.getenv("SENDER_EMAIL")
+            or os.getenv("SMTP_USER")
+            or None
+        )
+        logger.info("Parallel processing enabled: max %d concurrent emails. Monitored mailbox: %s", max_concurrent, self.monitored_email)
+
+    def _load_processed_msg_ids(self) -> set:
+        """Load persistent record of processed message IDs from staging JSON file."""
+        try:
+            if self._processed_ids_file.exists():
+                with open(self._processed_ids_file, "r", encoding="utf-8") as _f:
+                    data = json.load(_f)
+                    if isinstance(data, list):
+                        return set(data)
+        except Exception as _e:
+            logger.warning("Could not load processed message IDs for tenant '%s': %s", self.tenant_folder, _e)
+        return set()
+
+    def _save_processed_msg_id(self, msg_id: str) -> None:
+        """Add message ID to processed set and persist to disk (retains last 2000 entries)."""
+        if not msg_id:
+            return
+        self._processed_msg_ids.add(msg_id)
+        try:
+            ids_list = list(self._processed_msg_ids)[-2000:]
+            with open(self._processed_ids_file, "w", encoding="utf-8") as _f:
+                json.dump(ids_list, _f)
+        except Exception as _e:
+            logger.warning("Could not persist processed message ID: %s", _e)
+
+    def _resolve_system_sender(self) -> str:
+        """
+        Dynamically resolves the system sender mailbox across tenant config and environment.
+        Prioritizes dedicated system senders over personal monitored inboxes.
+        """
+        clean_t = self.tenant_folder.upper().replace(" ", "_").replace("-", "_")
+        return (
+            getattr(self.submission_config, "sender_email", None)
+            or os.getenv(f"{clean_t}_SENDER_EMAIL")
+            or os.getenv("SENDER_EMAIL")
+            or os.getenv("SYSTEM_EMAIL")
+            or os.getenv("DELEGATED_SENDER_EMAIL")
+            or os.getenv("SMTP_USER")
+            or self.monitored_email
+            or ""
+        )
+
+    # ── Extraction Quality Guard ──────────────────────────────────────────────
+    # Values that only appear when the LLM had no real document text and fell
+    # back to prompt examples / generic dummy data.
+    _PLACEHOLDER_NAMES = {
+        "macias sheet metal", "macias", "thomas & thomas", "thomas and thomas",
+        "abc company", "abc corp", "acme", "acme corp", "acme inc", "john doe",
+        "jane doe", "sample company", "test company", "company name",
+        "applicant name", "unknown", "n/a", "na", "none", "null", "-",
+    }
+    _PLACEHOLDER_FEINS = {"123456789", "12-3456789", "000000000", "00-0000000", "987654321"}
+
+    @classmethod
+    def _validate_extraction_quality(cls, category: str, json_content: Any) -> List[str]:
+        """
+        Returns a list of human-readable reasons why this extraction should NOT
+        be submitted. Empty list = looks OK.
+        """
+        reasons: List[str] = []
+        cat = (category or "").upper()
+
+        if not json_content or not isinstance(json_content, dict):
+            return ["Extraction returned no structured data (document could not be read)."]
+
+        if cat not in ("WORK_COMP", "WORK_COMPENSATION", "ACORD"):
+            return reasons  # Only ACORD/WC has reliable placeholder signals today
+
+        data = json_content.get("data") if isinstance(json_content.get("data"), dict) else json_content
+        demo = data.get("demographics") or data.get("Demographics") or {}
+        if not isinstance(demo, dict):
+            demo = {}
+
+        def _s(key: str) -> str:
+            return str(demo.get(key) or "").strip()
+
+        name = _s("applicantName")
+        if not name:
+            reasons.append("Applicant name is empty.")
+        elif name.lower() in cls._PLACEHOLDER_NAMES:
+            reasons.append(f"Applicant name '{name}' is a known placeholder / prompt example.")
+
+        # Secondary dummy-data signals (need 2+ to flag on their own)
+        signals: List[str] = []
+        fein_digits = _s("fein")
+        if fein_digits and fein_digits in cls._PLACEHOLDER_FEINS:
+            signals.append(f"FEIN '{fein_digits}'")
+        street = _s("mailingStreet").lower()
+        if street.startswith("123 main"):
+            signals.append(f"street '{_s('mailingStreet')}'")
+        if _s("mailingCity").lower() in ("anytown", "anycity", "somewhere"):
+            signals.append(f"city '{_s('mailingCity')}'")
+        for ph_key in ("officePhone", "mobilePhone"):
+            ph = _s(ph_key).replace("(", "").replace(")", "").replace(" ", "")
+            if ph.startswith("555-") or ph.startswith("555.") or ph.startswith("1-555"):
+                signals.append(f"{ph_key} '{_s(ph_key)}'")
+        email_val = _s("email").lower()
+        if email_val.endswith("@example.com") or "maciasmetal" in email_val:
+            signals.append(f"email '{_s('email')}'")
+
+        if len(signals) >= 2:
+            reasons.append("Dummy/placeholder values detected: " + ", ".join(signals) + ".")
+
+        return reasons
+
+    def _send_extraction_exception_email(
+        self,
+        failures: List[Dict[str, Any]],
+        sender_email: str,
+        subject: str,
+        token: str = "",
+    ) -> bool:
+        """Send an exception email (Graph first, SMTP fallback) with the failed PDFs attached."""
+        import base64 as _b64
+        import html as _html
+        import requests as _req
+
+        fn_cfg = self.submission_config.failure_notification
+        recipient = fn_cfg.notify_email or sender_email
+        prefix = fn_cfg.subject_prefix or f"[{self.tenant_folder.upper().replace('_', ' ')}]"
+        mail_subject = f"{prefix} Extraction Exception — Submission Halted — Sent by {sender_email}"
+
+        rows = ""
+        attachments: List[Dict[str, str]] = []
+        for f in failures:
+            p = Path(f["file"])
+            reasons_html = "<br>".join(_html.escape(r) for r in f["reasons"])
+            rows += (
+                f'<tr><td style="padding:6px;border:1px solid #fecaca;">{_html.escape(p.name)}</td>'
+                f'<td style="padding:6px;border:1px solid #fecaca;">{_html.escape(str(f.get("category")))}</td>'
+                f'<td style="padding:6px;border:1px solid #fecaca;color:#b91c1c;">{reasons_html}</td></tr>'
+            )
+            if p.exists():
+                attachments.append({"path": str(p.resolve()), "name": p.name})
+
+        body_html = f"""
+        <html><body style="font-family: Arial, sans-serif; color:#1e293b; background:#fef2f2; padding:24px;">
+          <div style="max-width:680px;margin:0 auto;background:#fff;border-radius:10px;border:1px solid #fecaca;overflow:hidden;">
+            <div style="background:linear-gradient(135deg,#dc2626 0%,#991b1b 100%);padding:22px 28px;">
+              <h1 style="color:#fff;margin:0;font-size:18px;">&#9888; Extraction Failed — Submission Halted</h1>
+              <p style="color:#fee2e2;margin:4px 0 0 0;font-size:13px;">Tenant: <strong>{_html.escape(self.tenant_folder)}</strong></p>
+            </div>
+            <div style="padding:28px;">
+              <p style="font-size:15px;font-weight:600;margin:0 0 12px 0;">Hi Team,</p>
+              <p style="font-size:14px;line-height:1.6;">
+                An email from <strong>{_html.escape(sender_email)}</strong> (subject: <em>{_html.escape(subject)}</em>)
+                could not be extracted reliably. To avoid pushing inaccurate records,
+                <strong>nothing was submitted to the partner API</strong>.
+              </p>
+              <table style="width:100%;border-collapse:collapse;font-size:13px;margin:16px 0;">
+                <tr style="background:#fee2e2;">
+                  <th style="padding:6px;border:1px solid #fecaca;text-align:left;">File</th>
+                  <th style="padding:6px;border:1px solid #fecaca;text-align:left;">Category</th>
+                  <th style="padding:6px;border:1px solid #fecaca;text-align:left;">Reason</th>
+                </tr>{rows}
+              </table>
+              <p style="font-size:13px;line-height:1.6;">
+                Please review the attached original document(s) and process this submission manually,
+                or ask the sender to re-send a clean copy.
+              </p>
+            </div>
+            <div style="background:#fef2f2;border-top:1px solid #fecaca;padding:14px 28px;text-align:center;">
+              <p style="font-size:12px;color:#991b1b;margin:0;">Automated exception notification from the CogNet Submission Engine.</p>
+            </div>
+          </div>
+        </body></html>
+        """
+
+        # 1) Graph API
+        if token:
+            try:
+                graph_atts = []
+                for att in attachments:
+                    with open(att["path"], "rb") as af:
+                        graph_atts.append({
+                            "@odata.type": "#microsoft.graph.fileAttachment",
+                            "name": att["name"],
+                            "contentType": "application/pdf",
+                            "contentBytes": _b64.b64encode(af.read()).decode("utf-8"),
+                        })
+                payload = {
+                    "message": {
+                        "subject": mail_subject,
+                        "body": {"contentType": "HTML", "content": body_html},
+                        "toRecipients": [{"emailAddress": {"address": recipient}}],
+                        "attachments": graph_atts,
+                    },
+                    "saveToSentItems": "false",
+                }
+                mailbox = self._resolve_system_sender()
+                endpoints = []
+                if mailbox:
+                    endpoints.append(f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail")
+                endpoints.append("https://graph.microsoft.com/v1.0/me/sendMail")
+                for ep in endpoints:
+                    try:
+                        resp = _req.post(
+                            ep,
+                            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                            json=payload,
+                            timeout=30,
+                        )
+                        if resp.status_code in (200, 202):
+                            logger.info("[QUALITY GUARD] Exception email sent to '%s' via %s.", recipient, ep)
+                            return True
+                        logger.warning("[QUALITY GUARD] Graph send via %s returned %s: %s", ep, resp.status_code, resp.text)
+                    except Exception as _re:
+                        logger.warning("[QUALITY GUARD] Graph send to %s failed: %s", ep, _re)
+            except Exception as _ge:
+                logger.warning("[QUALITY GUARD] Graph send failed: %s", _ge)
+
+        # 2) SMTP fallback
+        import smtplib
+        from email.mime.multipart import MIMEMultipart as _MMP
+        from email.mime.text import MIMEText as _MMT
+        from email.mime.base import MIMEBase as _MMB
+        from email import encoders as _enc
+        host, port = os.getenv("SMTP_HOST"), os.getenv("SMTP_PORT")
+        user, pwd = os.getenv("SMTP_USER"), os.getenv("SMTP_PASS")
+        if all([host, port, user, pwd]):
+            try:
+                msg = _MMP()
+                msg["Subject"], msg["From"], msg["To"] = mail_subject, user, recipient
+                msg.attach(_MMT(body_html, "html"))
+                for att in attachments:
+                    with open(att["path"], "rb") as af:
+                        part = _MMB("application", "octet-stream")
+                        part.set_payload(af.read())
+                        _enc.encode_base64(part)
+                        part.add_header("Content-Disposition", f'attachment; filename="{att["name"]}"')
+                        msg.attach(part)
+                with smtplib.SMTP(host, int(port)) as srv:
+                    srv.starttls()
+                    srv.login(user, pwd)
+                    srv.sendmail(user, recipient, msg.as_string())
+                logger.info("[QUALITY GUARD] Exception email sent via SMTP to '%s'.", recipient)
+                return True
+            except Exception as _se:
+                logger.error("[QUALITY GUARD] SMTP exception email failed: %s", _se)
+
+        logger.error("[QUALITY GUARD] Could not deliver exception email to '%s'.", recipient)
+        return False
 
     def is_submission_enabled(self) -> bool:
         return self.submission_config.enabled
@@ -397,6 +677,7 @@ class PartnerMailFlowOrchestrator:
         loss_run_file = None
         acord_file = None
         modifier_file = None
+        quality_failures: List[Dict[str, Any]] = []  # files whose extraction is unusable
 
         for pdf_path in downloaded_pdfs:
             if not pdf_path.exists() or not pdf_path.name.lower().endswith(".pdf"):
@@ -621,33 +902,39 @@ class PartnerMailFlowOrchestrator:
                                     },
                                     "saveToSentItems": "false",
                                 }
-                                endpoint = (
-                                    f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail"
-                                    if mailbox
-                                    else "https://graph.microsoft.com/v1.0/me/sendMail"
-                                )
-                                resp = _req.post(
-                                    endpoint,
-                                    headers={"Authorization": f"Bearer {access_token}",
-                                             "Content-Type": "application/json"},
-                                    json=g_payload,
-                                    timeout=30,
-                                )
-                                if resp.status_code in (200, 202):
-                                    logger.info(
-                                        "[POC WHITELIST] Exception email sent to '%s' for file '%s' (tenant: %s).",
-                                        exc_recipient, pdf_path.name, self.tenant_folder,
-                                    )
-                                    return True
-                                else:
-                                    logger.warning("[POC WHITELIST] Graph returned %s: %s", resp.status_code, resp.text)
+                                endpoints_to_try = []
+                                if mailbox:
+                                    endpoints_to_try.append((f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail", f"from: {mailbox}"))
+                                endpoints_to_try.append(("https://graph.microsoft.com/v1.0/me/sendMail", "/me"))
+
+                                for endpoint, desc in endpoints_to_try:
+                                    try:
+                                        resp = _req.post(
+                                            endpoint,
+                                            headers={"Authorization": f"Bearer {access_token}",
+                                                     "Content-Type": "application/json"},
+                                            json=g_payload,
+                                            timeout=30,
+                                        )
+                                        if resp.status_code in (200, 202):
+                                            logger.info(
+                                                "[POC WHITELIST] Exception email sent to '%s' for file '%s' (tenant: %s | %s).",
+                                                exc_recipient, pdf_path.name, self.tenant_folder, desc,
+                                            )
+                                            return True
+                                        else:
+                                            logger.warning("[POC WHITELIST] Graph send via %s returned %s: %s", desc, resp.status_code, resp.text)
+                                    except Exception as _re:
+                                        logger.warning("[POC WHITELIST] Graph send attempt to %s failed: %s", desc, _re)
+                                return False
                             except Exception as _ge:
                                 logger.warning("[POC WHITELIST] Graph send failed: %s", _ge)
                             return False
 
                         exc_sent = False
                         if token:
-                            exc_sent = _exc_graph_send(token)
+                            dyn_exc_mailbox = self._resolve_system_sender()
+                            exc_sent = _exc_graph_send(token, mailbox=dyn_exc_mailbox)
 
                         if not exc_sent:
                             # SMTP fallback
@@ -768,6 +1055,21 @@ class PartnerMailFlowOrchestrator:
                 logger.warning("Failed to enrich payload with TenantEngine in MailFlow: %s", e)
             # --------------------------------------------------------
 
+            # ── Quality guard: never forward empty / hallucinated extractions ──
+            if cat_upper in ("INSURANCE", "INSURANCE_CLAIMS", "LOSS_RUN", "WORK_COMP", "WORK_COMPENSATION", "ACORD"):
+                q_reasons = self._validate_extraction_quality(cat_upper, json_content)
+                if q_reasons:
+                    logger.error(
+                        "[QUALITY GUARD] File '%s' (%s) failed validation: %s",
+                        pdf_path.name, cat_upper, " | ".join(q_reasons),
+                    )
+                    quality_failures.append({
+                        "file": str(pdf_path),
+                        "category": cat_upper,
+                        "reasons": q_reasons,
+                    })
+                    continue  # do NOT add this payload
+
             if json_content and isinstance(json_content, dict):
                 extracted_payloads[cat_upper].append(json_content)
                 
@@ -783,7 +1085,7 @@ class PartnerMailFlowOrchestrator:
         # nothing to submit — skip the partner API call entirely so we don't send
         # a spurious "Submission Failed" email on top of the exception email that
         # was already sent per-file above.
-        if has_exception and not extracted_payloads:
+        if has_exception and not extracted_payloads and not quality_failures:
             logger.info(
                 "[POC WHITELIST] All documents in this email were rejected by the "
                 "whitelist for tenant '%s'. Skipping partner submission entirely. "
@@ -810,11 +1112,60 @@ class PartnerMailFlowOrchestrator:
             # Mark the email as read so it isn't re-processed next poll
             if token and message_id and _mark_read:
                 try:
-                    _mark_read(token, message_id)
-                    logger.info("Marked message %s as READ in mailbox.", message_id)
+                    marked = _mark_read(token, message_id, user_email=self.monitored_email)
+                    if marked:
+                        logger.info("Marked message %s as READ in mailbox (%s).", message_id, self.monitored_email)
+                    else:
+                        logger.warning("Failed to mark message %s as READ in mailbox (%s) via Graph API.", message_id, self.monitored_email)
                 except Exception as e:
                     logger.warning("Could not mark message as read: %s", e)
+            self._save_processed_msg_id(message_id)
             return {"status": "SKIPPED_WHITELIST_REJECTION", "reason": "All documents rejected by POC whitelist"}
+
+        # ── Quality-guard halt ────────────────────────────────────────────────
+        # If ANY extracted document is unreadable / hallucinated, stop the whole
+        # submission (partial or false data must never reach the partner API)
+        # and send an exception email with the original PDF(s).
+        if quality_failures:
+            logger.error(
+                "[QUALITY GUARD] Halting submission for tenant '%s': %d document(s) failed validation.",
+                self.tenant_folder, len(quality_failures),
+            )
+            exc_sent = self._send_extraction_exception_email(
+                quality_failures, sender_email=sender_email, subject=subject, token=token,
+            )
+            if _poc_db_ok:
+                try:
+                    poc_db.log_universal(
+                        module="PARTNER_SUBMISSION",
+                        action=f"Tenant Submission ({self.tenant_folder})",
+                        file_name=subject,
+                        status="EXCEPTION_EXTRACTION_FAILED",
+                        details=json.dumps({
+                            "sender": sender_email,
+                            "failures": [
+                                {"file": Path(f["file"]).name, "category": f["category"], "reasons": f["reasons"]}
+                                for f in quality_failures
+                            ],
+                            "exception_email_sent": exc_sent,
+                            "pdf_count": len(source_pdf_paths),
+                        }),
+                        processed_by=sender_email,
+                    )
+                except Exception as db_err:
+                    logger.warning("Failed to log EXCEPTION audit entry: %s", db_err)
+            if token and message_id and _mark_read:
+                try:
+                    _mark_read(token, message_id, user_email=self.monitored_email)
+                except Exception as e:
+                    logger.warning("Could not mark message as read: %s", e)
+            self._save_processed_msg_id(message_id)
+            return {
+                "status": "EXCEPTION_EXTRACTION_FAILED",
+                "reason": "One or more documents failed extraction quality checks; submission halted.",
+                "failures": quality_failures,
+                "exception_email_sent": exc_sent,
+            }
 
         # Execute submission via SubmissionService
         clean_tenant = self.tenant_folder.upper().replace(" ", "_")
@@ -872,9 +1223,8 @@ class PartnerMailFlowOrchestrator:
                 tenant_folder=self.tenant_folder,
                 submission_config=self.submission_config,
                 saved_json_path=submission_result.get("saved_submission_path"),
-                pdf_paths=source_pdf_paths,
-                graph_token=token,        # reuse the already-working Outlook token
-                from_mailbox="",          # empty = /me/sendMail (delegated token)
+                graph_token=token,
+                from_mailbox=self._resolve_system_sender(),
             )
             if fn_cfg.enabled:
                 if sent:
@@ -914,10 +1264,14 @@ class PartnerMailFlowOrchestrator:
         # Mark Email Read in Outlook once processed
         if token and message_id and _mark_read:
             try:
-                _mark_read(token, message_id)
-                logger.info("Marked message %s as READ in mailbox.", message_id)
+                marked = _mark_read(token, message_id, user_email=self.monitored_email)
+                if marked:
+                    logger.info("Marked message %s as READ in mailbox (%s).", message_id, self.monitored_email)
+                else:
+                    logger.warning("Failed to mark message %s as READ in mailbox (%s) via Graph API.", message_id, self.monitored_email)
             except Exception as e:
                 logger.warning("Could not mark message as read: %s", e)
+        self._save_processed_msg_id(message_id)
 
         return submission_result
 
@@ -1065,21 +1419,21 @@ class PartnerMailFlowOrchestrator:
                             is_system_alert = any(prefix in subject for prefix in loopback_prefixes)
 
                             if is_self_sender or is_system_alert:
-                                self._processed_msg_ids.add(msg_id)
+                                self._save_processed_msg_id(msg_id)
                                 logger.info(
                                     "Skipping system-generated or self-sent email: '%s' from %s",
                                     subject, sender_str or "self"
                                 )
                                 if token and msg_id and _mark_read:
                                     try:
-                                        _mark_read(token, msg_id)
+                                        _mark_read(token, msg_id, user_email=resolved_email or self.monitored_email)
                                     except Exception:
                                         pass
                                 continue
 
                             attachments = email.get("attachments", [])
                             if not attachments:
-                                self._processed_msg_ids.add(msg_id)
+                                self._save_processed_msg_id(msg_id)
                                 logger.info(
                                     "Email '%s' has no attachments. Skipping.",
                                     email.get("subject", "No Subject")
@@ -1098,12 +1452,12 @@ class PartnerMailFlowOrchestrator:
                                     downloaded.append(fpath)
 
                             if downloaded:
-                                self._processed_msg_ids.add(msg_id)
+                                self._save_processed_msg_id(msg_id)
                                 tasks.append(
                                     self._process_email_with_limit(email, downloaded, token=token)
                                 )
                             else:
-                                self._processed_msg_ids.add(msg_id)
+                                self._save_processed_msg_id(msg_id)
                                 logger.info(
                                     "Email '%s' has no valid PDF attachments. Skipping.",
                                     email.get("subject", "No Subject")

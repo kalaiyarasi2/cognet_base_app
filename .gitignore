@@ -33,6 +33,8 @@ uploads/
 **/uploads/
 temp_*/
 **/temp_*/
+temp/
+**/temp/
 
 # Extra non-project directories
 multiple agent/

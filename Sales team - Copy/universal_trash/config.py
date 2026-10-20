@@ -5,8 +5,10 @@ from dotenv import load_dotenv
 # We assume this is loaded inside the Sales team - Copy workspace
 WORKSPACE_DIR = Path(__file__).resolve().parent.parent
 
-# Look for .env in WORKSPACE_DIR, then its parent
+# Look for .env in WORKSPACE_DIR, Gpu_server, then parent
 env_path = WORKSPACE_DIR / ".env"
+if not env_path.exists():
+    env_path = WORKSPACE_DIR / "Gpu_server" / ".env"
 if not env_path.exists():
     env_path = WORKSPACE_DIR.parent / ".env"
 if env_path.exists():
