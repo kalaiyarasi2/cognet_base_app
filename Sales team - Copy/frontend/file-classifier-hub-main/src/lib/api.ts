@@ -559,7 +559,85 @@ export const api = {
       file_summaries?: TokenFileSummaryRecord[];
     }>("/api/token-usage", undefined, query);
   },
+
+  benefitsUwProcess: (formData: FormData) =>
+    request<BenefitsUwPipelineResponse>("/api/benefits-uw/api/process", {
+      method: "POST",
+      body: formData,
+    }),
+
+  benefitsUwTestFolder: (folder_path: string) =>
+    request<BenefitsUwPipelineResponse>("/api/benefits-uw/api/test-folder", {
+      method: "POST",
+      body: JSON.stringify({ folder_path }),
+    }),
+
+  benefitsUwTestSample: () =>
+    request<BenefitsUwPipelineResponse>("/api/benefits-uw/api/test-sample", {
+      method: "POST",
+    }),
+
+  benefitsUwGetExtractedText: (filename: string) =>
+    request<{ success: boolean; filename: string; path: string; content: string }>(
+      `/api/benefits-uw/api/extracted-text/${encodeURIComponent(filename)}`
+    ),
 };
+
+export interface BenefitsUwPipelineResponse {
+  success: boolean;
+  output_filename: string;
+  txt_filename: string;
+  download_xlsx_url: string;
+  download_txt_url: string;
+  sbu_filename?: string | null;
+  download_sbu_url?: string | null;
+  email_filename?: string | null;
+  download_email_url?: string | null;
+  email_text?: string;
+  carrier: string;
+  state: string;
+  company?: string;
+  prospect_name?: string;
+  routing?: Record<string, any>;
+  summary: string;
+  audit?: {
+    out_employees?: number;
+    out_dependents?: number;
+    src_employees?: number;
+    src_dependents?: number;
+    missing_employees?: number;
+    output_employees?: number;
+    output_dependents?: number;
+    source_employees?: number;
+    source_dependents?: number;
+    [key: string]: any;
+  };
+  counters?: {
+    missing_invoice?: number;
+    missing_census?: number;
+    tier_mismatch?: number;
+    tier_mismatches?: number;
+    duplicate_employees?: number;
+    unassigned_dependents?: number;
+    coverage_mismatch?: number;
+    eligibility_conflict?: number;
+    most_used?: number;
+    [key: string]: any;
+  };
+  notes?: string[];
+  classified_docs?: Array<{
+    name?: string;
+    filename?: string;
+    role: string;
+    mode?: string;
+    extraction_method?: string;
+    char_count?: number;
+    chars?: number;
+    [key: string]: any;
+  }>;
+  extracted_text_dir?: string;
+  source_folder?: string | null;
+}
 
 export interface UserSessionRecord {
   id: number;

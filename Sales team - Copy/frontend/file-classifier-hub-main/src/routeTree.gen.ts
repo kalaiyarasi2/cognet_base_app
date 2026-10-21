@@ -43,6 +43,7 @@ import { Route as ConverterRouteImport } from './routes/converter'
 import { Route as ConfigurationRouteImport } from './routes/configuration'
 import { Route as CoPilotRouteImport } from './routes/co-pilot'
 import { Route as ClassificationRouteImport } from './routes/classification'
+import { Route as BenefitsUwRouteImport } from './routes/benefits-uw'
 import { Route as AccessRouteImport } from './routes/access'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
@@ -218,6 +219,11 @@ const ClassificationRoute = ClassificationRouteImport.update({
   path: '/classification',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BenefitsUwRoute = BenefitsUwRouteImport.update({
+  id: '/benefits-uw',
+  path: '/benefits-uw',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AccessRoute = AccessRouteImport.update({
   id: '/access',
   path: '/access',
@@ -243,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/access': typeof AccessRoute
+  '/benefits-uw': typeof BenefitsUwRoute
   '/classification': typeof ClassificationRoute
   '/co-pilot': typeof CoPilotRoute
   '/configuration': typeof ConfigurationRoute
@@ -283,6 +290,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/access': typeof AccessRoute
+  '/benefits-uw': typeof BenefitsUwRoute
   '/classification': typeof ClassificationRoute
   '/co-pilot': typeof CoPilotRoute
   '/configuration': typeof ConfigurationRoute
@@ -324,6 +332,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/access': typeof AccessRoute
+  '/benefits-uw': typeof BenefitsUwRoute
   '/classification': typeof ClassificationRoute
   '/co-pilot': typeof CoPilotRoute
   '/configuration': typeof ConfigurationRoute
@@ -366,6 +375,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/access'
+    | '/benefits-uw'
     | '/classification'
     | '/co-pilot'
     | '/configuration'
@@ -406,6 +416,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/access'
+    | '/benefits-uw'
     | '/classification'
     | '/co-pilot'
     | '/configuration'
@@ -446,6 +457,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/access'
+    | '/benefits-uw'
     | '/classification'
     | '/co-pilot'
     | '/configuration'
@@ -487,6 +499,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   AccessRoute: typeof AccessRoute
+  BenefitsUwRoute: typeof BenefitsUwRoute
   ClassificationRoute: typeof ClassificationRoute
   CoPilotRoute: typeof CoPilotRoute
   ConfigurationRoute: typeof ConfigurationRoute
@@ -764,6 +777,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClassificationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/benefits-uw': {
+      id: '/benefits-uw'
+      path: '/benefits-uw'
+      fullPath: '/benefits-uw'
+      preLoaderRoute: typeof BenefitsUwRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/access': {
       id: '/access'
       path: '/access'
@@ -799,6 +819,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   AccessRoute: AccessRoute,
+  BenefitsUwRoute: BenefitsUwRoute,
   ClassificationRoute: ClassificationRoute,
   CoPilotRoute: CoPilotRoute,
   ConfigurationRoute: ConfigurationRoute,

@@ -1,0 +1,480 @@
+{
+  "tenant": "WCUW",
+  "defaultModifier": 1.0,
+  "modifier": 1.0,
+  "email": "test_broker@cognethro.com",
+  "opportunity": {
+    "recordType": "PEO",
+    "stage": "First Meeting",
+    "closeDate": "12/08/2026",
+    "estimatedFirstPayrollDate": "12/08/2026",
+    "opportunityGeneratedBy": "Channel Partner",
+    "channelPartner": "TBD",
+    "firstMeetingDate": "10/09/2026",
+    "opportunityName": "EkS Ventures Inc.",
+    "modifier": "1.0"
+  },
+  "acord": {
+    "data": {
+      "demographics": {
+        "applicantName": "EkS Ventures Inc.",
+        "businessDescription": "The insured is a FedEx Line Haul Services Company. Max radius is 50 miles. Please include a specific waiver of subrogation for Federal Express Corporation.",
+        "email": "hemarlou@gmail.com",
+        "fein": "88-3671488",
+        "mailingStreet": "1633 Aster Lane",
+        "mailingCity": "Cupertino",
+        "mailingState": "CA",
+        "mailingZip": "95014",
+        "officePhone": "4084762464",
+        "mobilePhone": "",
+        "website": "",
+        "yearsInBusiness": 2,
+        "sicCode": "",
+        "naicsCode": "",
+        "proposedEffectiveDate": "06/22/2026",
+        "proposedExpirationDate": "06/22/2027",
+        "wcStates": "CA",
+        "agencyCustomerId": "109675"
+      },
+      "generalQuestions": {
+        "q1": "N",
+        "q2": "N",
+        "q3": "N",
+        "q4": "N",
+        "q5": "N",
+        "q6": "N",
+        "q7": "N",
+        "q8": "Y",
+        "q9": "N",
+        "q10": "N",
+        "q11": "N",
+        "q12": "N",
+        "q13": "N",
+        "q14": "N",
+        "q15": "N",
+        "q16": "N",
+        "q17": "N",
+        "q18": "N",
+        "q19": "N",
+        "q20": "N",
+        "q21": "N",
+        "q22": "N",
+        "q23": "N",
+        "q24": "N"
+      },
+      "priorCarriers": [
+        {
+          "year": 2025,
+          "carrierName": "Pennsylvania Manufacturers' Association Insurance",
+          "policyNumber": "2025011621093",
+          "experienceMod": 1.27,
+          "annualPremium": 113597.0,
+          "numberOfClaims": 5.0,
+          "amountPaid": 17939.0,
+          "reserveAmount": 24643.0
+        },
+        {
+          "year": 2024,
+          "carrierName": "Clear Spring Property and Casualty Company",
+          "policyNumber": "CSWC02625701",
+          "experienceMod": 1.28,
+          "annualPremium": 103971.0,
+          "numberOfClaims": 6.0,
+          "amountPaid": 73264.94,
+          "reserveAmount": 107556.13
+        }
+      ],
+      "ratingByState": [
+        {
+          "state": "CA",
+          "classCode": 7198,
+          "fullTimeEmployees": 20,
+          "partTimeEmployees": 0,
+          "estAnnualPayroll": 1000000,
+          "ratePer100Payroll": 0.0,
+          "estAnnualPremium": 0.0
+        },
+        {
+          "state": "CA",
+          "classCode": 8810,
+          "fullTimeEmployees": 0,
+          "partTimeEmployees": 0,
+          "estAnnualPayroll": 0,
+          "ratePer100Payroll": 0.0,
+          "estAnnualPremium": 0.0
+        }
+      ],
+      "individuals": [
+        {
+          "name": "Hamid Emarlou",
+          "title": "President",
+          "ownershipPercentage": 100.0,
+          "included": "EXC"
+        }
+      ],
+      "premiumCalculation": {
+        "totalEstimatedAnnualPremium": 0.0,
+        "experienceModification": 0.0,
+        "minimumPremium": 0.0,
+        "depositPremium": 0.0
+      },
+      "locations": [
+        {
+          "loc_number": 1,
+          "location_type": "PRIMARY",
+          "highest_floor": "",
+          "street": "1633 Aster Lane",
+          "city": "Cupertino",
+          "county": "",
+          "state": "CA",
+          "zip": "95014",
+          "operations": ""
+        }
+      ],
+      "contact_information": {
+        "inspection": {
+          "name": "Hamid Emarlou",
+          "office_phone": "(888)888-8888",
+          "mobile_phone": "",
+          "email": "hemarlou@gmail.com"
+        },
+        "acctng_record": {
+          "name": "",
+          "office_phone": "",
+          "mobile_phone": "",
+          "email": ""
+        },
+        "claims_info": {
+          "name": "",
+          "office_phone": "",
+          "mobile_phone": "",
+          "email": ""
+        }
+      },
+      "verifications": {
+        "fein_search": {
+          "status": "Error",
+          "message": "IP Address disallowed - 115.240.213.106"
+        },
+        "secretary_of_state": {
+          "status": "Complete",
+          "statusCode": 200,
+          "results": [
+            {
+              "status": "Active",
+              "documents": [
+                {
+                  "url": "https://bizfileonline.sos.ca.gov/api/report/GetImageByNum/021122244172047081255005193180161202240134082252",
+                  "agentChange": false,
+                  "mergersAndAcquisitions": false,
+                  "revenue": false,
+                  "headquartersChange": false,
+                  "officerChange": false,
+                  "outOfBusiness": false,
+                  "name": "Statement of Information",
+                  "date": "10/27/2025"
+                },
+                {
+                  "agentChange": false,
+                  "outOfBusiness": false,
+                  "name": "Statement of Information",
+                  "revenue": false,
+                  "url": "https://bizfileonline.sos.ca.gov/api/report/GetImageByNum/105019161047161167218066078140034021009009046161",
+                  "headquartersChange": false,
+                  "mergersAndAcquisitions": false,
+                  "date": "5/22/2024",
+                  "officerChange": false
+                },
+                {
+                  "agentChange": false,
+                  "name": "Initial Filing",
+                  "revenue": false,
+                  "outOfBusiness": false,
+                  "url": "https://bizfileonline.sos.ca.gov/api/report/GetImageByNum/134233247012094061001109209186079019114048186095",
+                  "date": "8/5/2022",
+                  "headquartersChange": false,
+                  "officerChange": false,
+                  "mergersAndAcquisitions": false
+                }
+              ],
+              "history": [
+                {
+                  "name": "Statement of Information",
+                  "changes": [
+                    {
+                      "name": "Annual Report Due Date",
+                      "changedFrom": "8/31/2025 12:00:00 AM",
+                      "changedTo": "8/31/2026 12:00:00 AM"
+                    }
+                  ],
+                  "date": "10/27/2025"
+                },
+                {
+                  "name": "Statement of Information",
+                  "date": "5/22/2024",
+                  "changes": [
+                    {
+                      "changedTo": "8/31/2025 12:00:00 AM",
+                      "changedFrom": "8/31/2024 12:00:00 AM",
+                      "name": "Annual Report Due Date"
+                    }
+                  ]
+                },
+                {
+                  "name": "Initial Filing",
+                  "date": "8/5/2022",
+                  "changes": []
+                }
+              ],
+              "stateOfSosRegistration": "CA",
+              "agentIsCommercial": false,
+              "stateOfFormation": "CA",
+              "sosId": "5189289",
+              "filingDate": "08-05-2022",
+              "agentState": "CA",
+              "normalizedStatus": "Active",
+              "physicalAddressZip": "95014",
+              "entityType": "Stock Corporation - CA - Professional",
+              "agentCity": "CUPERTINO",
+              "title": "EKS Ventures Inc",
+              "nextReportDueDate": "08-31-2026",
+              "mailingAddressZip": "95014",
+              "mailingAddressState": "CA",
+              "agentStreetAddress": "1633 ASTER LN",
+              "agentName": "hamid k emarlou",
+              "physicalAddressStreet": "1633 ASTER LN",
+              "normalizedFilingDate": "2022-08-05T00:00:00.000Z",
+              "mailingAddressCity": "CUPERTINO",
+              "physicalAddressCity": "CUPERTINO",
+              "agentResigned": false,
+              "agentZip": "95014",
+              "mailingAddressStreet": "P.O BOX 696",
+              "confidenceLevel": 1,
+              "physicalAddressState": "CA"
+            }
+          ],
+          "possibleAlternatives": []
+        }
+      }
+    },
+    "verifications": {
+      "fein_search": {
+        "status": "Error",
+        "message": "IP Address disallowed - 115.240.213.106"
+      },
+      "secretary_of_state": {
+        "status": "Complete",
+        "statusCode": 200,
+        "results": [
+          {
+            "status": "Active",
+            "documents": [
+              {
+                "url": "https://bizfileonline.sos.ca.gov/api/report/GetImageByNum/021122244172047081255005193180161202240134082252",
+                "agentChange": false,
+                "mergersAndAcquisitions": false,
+                "revenue": false,
+                "headquartersChange": false,
+                "officerChange": false,
+                "outOfBusiness": false,
+                "name": "Statement of Information",
+                "date": "10/27/2025"
+              },
+              {
+                "agentChange": false,
+                "outOfBusiness": false,
+                "name": "Statement of Information",
+                "revenue": false,
+                "url": "https://bizfileonline.sos.ca.gov/api/report/GetImageByNum/105019161047161167218066078140034021009009046161",
+                "headquartersChange": false,
+                "mergersAndAcquisitions": false,
+                "date": "5/22/2024",
+                "officerChange": false
+              },
+              {
+                "agentChange": false,
+                "name": "Initial Filing",
+                "revenue": false,
+                "outOfBusiness": false,
+                "url": "https://bizfileonline.sos.ca.gov/api/report/GetImageByNum/134233247012094061001109209186079019114048186095",
+                "date": "8/5/2022",
+                "headquartersChange": false,
+                "officerChange": false,
+                "mergersAndAcquisitions": false
+              }
+            ],
+            "history": [
+              {
+                "name": "Statement of Information",
+                "changes": [
+                  {
+                    "name": "Annual Report Due Date",
+                    "changedFrom": "8/31/2025 12:00:00 AM",
+                    "changedTo": "8/31/2026 12:00:00 AM"
+                  }
+                ],
+                "date": "10/27/2025"
+              },
+              {
+                "name": "Statement of Information",
+                "date": "5/22/2024",
+                "changes": [
+                  {
+                    "changedTo": "8/31/2025 12:00:00 AM",
+                    "changedFrom": "8/31/2024 12:00:00 AM",
+                    "name": "Annual Report Due Date"
+                  }
+                ]
+              },
+              {
+                "name": "Initial Filing",
+                "date": "8/5/2022",
+                "changes": []
+              }
+            ],
+            "stateOfSosRegistration": "CA",
+            "agentIsCommercial": false,
+            "stateOfFormation": "CA",
+            "sosId": "5189289",
+            "filingDate": "08-05-2022",
+            "agentState": "CA",
+            "normalizedStatus": "Active",
+            "physicalAddressZip": "95014",
+            "entityType": "Stock Corporation - CA - Professional",
+            "agentCity": "CUPERTINO",
+            "title": "EKS Ventures Inc",
+            "nextReportDueDate": "08-31-2026",
+            "mailingAddressZip": "95014",
+            "mailingAddressState": "CA",
+            "agentStreetAddress": "1633 ASTER LN",
+            "agentName": "hamid k emarlou",
+            "physicalAddressStreet": "1633 ASTER LN",
+            "normalizedFilingDate": "2022-08-05T00:00:00.000Z",
+            "mailingAddressCity": "CUPERTINO",
+            "physicalAddressCity": "CUPERTINO",
+            "agentResigned": false,
+            "agentZip": "95014",
+            "mailingAddressStreet": "P.O BOX 696",
+            "confidenceLevel": 1,
+            "physicalAddressState": "CA"
+          }
+        ],
+        "possibleAlternatives": []
+      }
+    },
+    "tenant": "WCUW"
+  },
+  "lossRuns": {
+    "claims": [
+      {
+        "employee_name": "Santos-Aguilar, Pedro",
+        "carrier_name": "StarNet Insurance Company",
+        "policy_number": "BNUWC0163527",
+        "claim_number": "BNET WC 000000059413",
+        "injury_date_time": "2024-09-13",
+        "claim_year": 2024,
+        "status": "Open",
+        "reopen": "False",
+        "injury_description": "Multiple",
+        "body_part": null,
+        "injury_type": null,
+        "claim_class": null,
+        "medical_paid": 1838.0,
+        "medical_reserve": 8161.0,
+        "indemnity_paid": 0.0,
+        "indemnity_reserve": 15000.0,
+        "expense_paid": 6915.0,
+        "expense_reserve": 12084.0,
+        "total_paid": 8753.0,
+        "total_reserve": 35245.0,
+        "total_incurred": 43998.0,
+        "litigation": "No"
+      },
+      {
+        "employee_name": "Guevara, Maria Escobedo",
+        "carrier_name": "StarNet Insurance Company",
+        "policy_number": "BNUWC0163527",
+        "claim_number": "BNET WC 000000059881",
+        "injury_date_time": "2024-10-07",
+        "claim_year": 2024,
+        "status": "Open",
+        "reopen": "False",
+        "injury_description": "Left Hand Strain",
+        "body_part": null,
+        "injury_type": null,
+        "claim_class": null,
+        "medical_paid": 4840.0,
+        "medical_reserve": 10159.0,
+        "indemnity_paid": 10508.0,
+        "indemnity_reserve": 11668.0,
+        "expense_paid": 1074.0,
+        "expense_reserve": 9925.0,
+        "total_paid": 16422.0,
+        "total_reserve": 31752.0,
+        "total_incurred": 48174.0,
+        "litigation": "No"
+      },
+      {
+        "employee_name": "Cordova, Antonio",
+        "carrier_name": "StarNet Insurance Company",
+        "policy_number": "BNUWC0163527",
+        "claim_number": "BNET WC 000000060388",
+        "injury_date_time": "2025-01-04",
+        "claim_year": 2025,
+        "status": "Closed",
+        "reopen": "False",
+        "injury_description": "Left Knee Contusion: IW was on his knee buffing the floor when his left knee started to get swollen.",
+        "body_part": null,
+        "injury_type": null,
+        "claim_class": null,
+        "medical_paid": 1115.0,
+        "medical_reserve": 0.0,
+        "indemnity_paid": 965.0,
+        "indemnity_reserve": 0.0,
+        "expense_paid": 37.0,
+        "expense_reserve": 0.0,
+        "total_paid": 2117.0,
+        "total_reserve": 0.0,
+        "total_incurred": 2117.0,
+        "litigation": "No"
+      }
+    ],
+    "SummaryLevel": [
+      {
+        "estimated_annual": 0.0,
+        "year": "2024",
+        "policy_number": "BNUWC0163527",
+        "carrier_name": "StarNet Insurance Company"
+      },
+      {
+        "estimated_annual": 0.0,
+        "year": "2025",
+        "policy_number": "BNUWC0163527",
+        "carrier_name": "StarNet Insurance Company"
+      }
+    ],
+    "claimsCount": {
+      "lastFiveYears": 3,
+      "olderThanFiveYears": 0,
+      "total": 3
+    },
+    "report_metadata": {
+      "report_created_date": "",
+      "valuation_date": "05/04/2025",
+      "carrier_name": "StarNet Insurance Company",
+      "date_label_found": "Valued as of"
+    },
+    "tenant": "WCUW"
+  },
+  "metadata": {
+    "generatedAt": "2026-10-09T13:17:23.574702+00:00",
+    "lossRunFile": "BerkleyNet 24-25.pdf",
+    "acordFile": "EKS Ventures, Inc. - Acord.pdf",
+    "modifierFile": null,
+    "defaultModifier": 1.0,
+    "experienceMod": 1.0,
+    "totalClaims": 3,
+    "totalRatingEntries": 2,
+    "totalLocations": 1
+  }
+}
