@@ -24,6 +24,7 @@ const groups: NavGroup[] = [
     label: "Sales",
     items: [
       { label: "WCUW", to: "/wcuw", icon: ShieldCheck, moduleCode: "WCUW" },
+      { label: "BenefitsUW", to: "/benefits-uw", icon: FileSpreadsheet, moduleCode: "BENEFITS_UW" },
       { label: "Accord 130", to: "/drive-gpu?pipeline=WORK_COMP", icon: FileText, moduleCode: "WORK_COMP" },
       { label: "Loss Run", to: "/drive-gpu?pipeline=INSURANCE", icon: Shield, moduleCode: "LOSS_RUN" },
     ],

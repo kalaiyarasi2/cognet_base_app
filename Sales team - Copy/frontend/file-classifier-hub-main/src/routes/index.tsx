@@ -54,6 +54,7 @@ function Dashboard() {
           "RPVE": "/rpve",
           "RE": "/resourcing-edge",
           "WCUW": "/wcuw",
+          "BENEFITS_UW": "/benefits-uw",
           "LOSS_RUN": "/drive-gpu?pipeline=INSURANCE",
           "WORK_COMP": "/drive-gpu?pipeline=WORK_COMP",
           "BANK_STATEMENT": "/drive-gpu?pipeline=BANK_STATEMENT",

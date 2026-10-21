@@ -84,7 +84,11 @@ function getDownloadUrl(path: string | null | undefined): string {
   if (!path) return "#";
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
   const base = getBackendUrl();
-  return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+  const clean = path.startsWith("/") ? path : `/${path}`;
+  if (clean.startsWith("/api/benefits-uw/")) {
+    return `${base}${clean}`;
+  }
+  return `${base}/api/benefits-uw${clean}`;
 }
 
 function formatBytes(bytes: number) {
@@ -402,18 +406,6 @@ Est. First Payroll Date: ${oppState.estFirstPayrollDate}`;
     }
   };
 
-  const backendBase = getBackendUrl();
-  const getDownloadUrl = (pathOrName: string) => {
-    if (!pathOrName) return "#";
-    if (pathOrName.startsWith("http://") || pathOrName.startsWith("https://")) return pathOrName;
-    const clean = pathOrName.startsWith("/") ? pathOrName : `/${pathOrName}`;
-    return `${backendBase}/api/benefits-uw${clean}`;
-  };
-
-  const detectedProspectName =
-    result?.prospect_name ||
-    result?.company ||
-    (result?.output_filename ? extractProspectFromFilename(result.output_filename) : "");
 
   return (
     <div className="space-y-6 pb-12">

@@ -37,3 +37,9 @@
 [submodule "Sales team - Copy/Modifier_Poc"]
 	path = Sales team - Copy/Modifier_Poc
 	url = https://github.com/althafcoder/Modifier_Poc
+[submodule "File_identifier"]
+	path = File_identifier
+	url = https://github.com/althafcoder/File_identifier
+[submodule "Sales team - Copy/agent-census-creation"]
+	path = Sales team - Copy/agent-census-creation
+	url = https://github.com/althafcoder/agent_census_creation

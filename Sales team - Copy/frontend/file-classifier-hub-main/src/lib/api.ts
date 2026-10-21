@@ -560,6 +560,10 @@ export const api = {
     }>("/api/token-usage", undefined, query);
   },
 
+  // BenefitsUW Agent Endpoints
+  benefitsUwHealth: () =>
+    request<BenefitsUwHealthResponse>("/api/benefits-uw/api/health"),
+
   benefitsUwProcess: (formData: FormData) =>
     request<BenefitsUwPipelineResponse>("/api/benefits-uw/api/process", {
       method: "POST",
@@ -578,7 +582,7 @@ export const api = {
     }),
 
   benefitsUwGetExtractedText: (filename: string) =>
-    request<{ success: boolean; filename: string; path: string; content: string }>(
+    request<BenefitsUwExtractedContentResponse>(
       `/api/benefits-uw/api/extracted-text/${encodeURIComponent(filename)}`
     ),
 };
@@ -702,3 +706,34 @@ export interface TokenFileSummaryRecord {
   models?: string[];
   calls?: TokenCallRecord[];
 }
+
+export interface BenefitsUwHealthResponse {
+  status: string;
+  provider: string;
+  model: string;
+  anthropic_model: string;
+  anthropic_configured: boolean;
+  workspace_configured: boolean;
+  poppler_configured: boolean;
+  output_dir: string;
+}
+
+export interface BenefitsUwClassifiedDoc {
+  filename: string;
+  role: string;
+  is_digital?: boolean;
+  mode?: string;
+  char_count?: number;
+  chars?: number;
+  extracted_txt?: string;
+  [key: string]: any;
+}
+
+
+export interface BenefitsUwExtractedContentResponse {
+  success: boolean;
+  filename: string;
+  path: string;
+  content: string;
+}
+
