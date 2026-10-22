@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Calendar,
   Sparkles,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { api, getBackendUrl, type BenefitsUwPipelineResponse } from "@/lib/api";
+import { useAuth } from "@/lib/store";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/benefits-uw")({
@@ -216,6 +218,22 @@ function parseAuditMetrics(result: BenefitsUwPipelineResponse | null) {
 }
 
 function BenefitsUWPage() {
+  const { user } = useAuth();
+
+  // Dynamic User Access Permission Check
+  const rawModules = user?.allowed_modules;
+  const isAllowed = useMemo(() => {
+    if (!user) return true;
+    if (user.role === "ADMIN" || rawModules === "ALL") return true;
+    if (Array.isArray(rawModules)) {
+      return rawModules.map((m) => m.toUpperCase()).includes("BENEFITS_UW");
+    }
+    if (typeof rawModules === "string") {
+      return rawModules.split(",").map((m) => m.trim().toUpperCase()).includes("BENEFITS_UW");
+    }
+    return false;
+  }, [user, rawModules]);
+
   const [ingestMode, setIngestMode] = useState<"upload" | "folder">("upload");
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [folderPath, setFolderPath] = useState<string>("input");
@@ -346,7 +364,7 @@ Est. First Payroll Date: ${oppState.estFirstPayrollDate}`;
         fd.append("files", f.file);
       });
 
-      const res = await api.benefitsUwProcess(fd);
+      const res = await api.benefitsUwProcess(fd, user?.email);
       setResult(res);
       toast.success("BenefitsUW census comparison pipeline completed successfully!");
     } catch (err: any) {
@@ -406,6 +424,19 @@ Est. First Payroll Date: ${oppState.estFirstPayrollDate}`;
     }
   };
 
+  if (!isAllowed) {
+    return (
+      <div className="p-8 max-w-2xl mx-auto my-12 rounded-2xl border border-destructive/30 bg-destructive/5 text-center space-y-4">
+        <div className="w-14 h-14 rounded-full bg-destructive/10 text-destructive mx-auto flex items-center justify-center">
+          <ShieldAlert className="w-7 h-7" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Access Restricted</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Your account does not currently have permission to access the <strong>Benefits Underwriting</strong> module. Please contact your administrator to request module access.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-12">

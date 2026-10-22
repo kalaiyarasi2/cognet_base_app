@@ -29,9 +29,10 @@ _DB_PATH     = _MONITOR_DIR / "universal_token_usage.db"
 _JSON_PATH   = _MONITOR_DIR / "universal_token_summary.json"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# OpenAI Pricing (USD per token — updated as of 2025)
+# Model Pricing (USD per token — OpenAI & Anthropic Claude)
 # ──────────────────────────────────────────────────────────────────────────────
 MODEL_PRICING: Dict[str, Dict[str, float]] = {
+    # OpenAI Models
     "gpt-4o":          {"prompt": 2.50  / 1_000_000, "completion": 10.00 / 1_000_000},
     "gpt-4o-mini":     {"prompt": 0.15  / 1_000_000, "completion": 0.60  / 1_000_000},
     "gpt-4-turbo":     {"prompt": 10.00 / 1_000_000, "completion": 30.00 / 1_000_000},
@@ -41,7 +42,19 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
     "o1-mini":         {"prompt": 3.00  / 1_000_000, "completion": 12.00 / 1_000_000},
     "o3":              {"prompt": 10.00 / 1_000_000, "completion": 40.00 / 1_000_000},
     "gpt-5.6":         {"prompt": 2.50  / 1_000_000, "completion": 10.00 / 1_000_000},
-    "default":         {"prompt": 2.50  / 1_000_000, "completion": 10.00 / 1_000_000},
+
+    # Anthropic Claude Models
+    "claude-3-5-sonnet": {"prompt": 3.00  / 1_000_000, "completion": 15.00 / 1_000_000},
+    "claude-3-7-sonnet": {"prompt": 3.00  / 1_000_000, "completion": 15.00 / 1_000_000},
+    "claude-3-5-haiku":  {"prompt": 0.80  / 1_000_000, "completion": 4.00  / 1_000_000},
+    "claude-3-haiku":    {"prompt": 0.25  / 1_000_000, "completion": 1.25  / 1_000_000},
+    "claude-3-opus":     {"prompt": 15.00 / 1_000_000, "completion": 75.00 / 1_000_000},
+    "claude-opus-5-5":   {"prompt": 15.00 / 1_000_000, "completion": 75.00 / 1_000_000},
+    "claude-opus":       {"prompt": 15.00 / 1_000_000, "completion": 75.00 / 1_000_000},
+    "claude-sonnet":     {"prompt": 3.00  / 1_000_000, "completion": 15.00 / 1_000_000},
+    "claude-haiku":      {"prompt": 0.80  / 1_000_000, "completion": 4.00  / 1_000_000},
+
+    "default":           {"prompt": 2.50  / 1_000_000, "completion": 10.00 / 1_000_000},
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -120,10 +133,17 @@ except Exception as _init_err:
 # Cost Calculator
 # ──────────────────────────────────────────────────────────────────────────────
 def _calculate_cost(prompt_tokens: int, completion_tokens: int, model: str) -> float:
-    """Calculate USD cost based on model pricing."""
-    # Normalize model name: strip version suffix like -2025-01-01
-    model_lower = model.lower().split("-20")[0]  # e.g. "gpt-4o-mini-2025-07-18" → "gpt-4o-mini"
-    rates = MODEL_PRICING.get(model_lower, MODEL_PRICING["default"])
+    """Calculate USD cost based on model pricing (OpenAI + Anthropic Claude)."""
+    model_clean = (model or "").lower().strip()
+    model_base = model_clean.split("-20")[0]
+    rates = MODEL_PRICING.get(model_base)
+    if not rates:
+        for key, price in MODEL_PRICING.items():
+            if key != "default" and key in model_clean:
+                rates = price
+                break
+    if not rates:
+        rates = MODEL_PRICING["default"]
     cost = (prompt_tokens * rates["prompt"]) + (completion_tokens * rates["completion"])
     return round(cost, 8)
 
@@ -277,17 +297,22 @@ def track_usage(
         dict with token counts and cost info. Never raises exceptions.
     """
     try:
-        # ── Extract token counts ──────────────────────────────────────────────
+        # ── Extract token counts (OpenAI & Anthropic Claude) ──────────────────
         if response_usage is None:
             prompt_tokens = completion_tokens = total_tokens = 0
         elif hasattr(response_usage, "prompt_tokens"):
             prompt_tokens     = getattr(response_usage, "prompt_tokens", 0) or 0
             completion_tokens = getattr(response_usage, "completion_tokens", 0) or 0
             total_tokens      = getattr(response_usage, "total_tokens", 0) or 0
+        elif hasattr(response_usage, "input_tokens"):
+            # Anthropic Claude usage object
+            prompt_tokens     = getattr(response_usage, "input_tokens", 0) or 0
+            completion_tokens = getattr(response_usage, "output_tokens", 0) or 0
+            total_tokens      = prompt_tokens + completion_tokens
         elif isinstance(response_usage, dict):
-            prompt_tokens     = response_usage.get("prompt_tokens", 0) or 0
-            completion_tokens = response_usage.get("completion_tokens", 0) or 0
-            total_tokens      = response_usage.get("total_tokens", 0) or 0
+            prompt_tokens     = response_usage.get("prompt_tokens") or response_usage.get("input_tokens") or 0
+            completion_tokens = response_usage.get("completion_tokens") or response_usage.get("output_tokens") or 0
+            total_tokens      = response_usage.get("total_tokens") or (prompt_tokens + completion_tokens)
         else:
             prompt_tokens = completion_tokens = total_tokens = 0
 

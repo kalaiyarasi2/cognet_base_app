@@ -638,7 +638,7 @@ async def list_tenants_endpoint():
                             tenant_name=t_name,
                             email=f"admin@{t_folder.name.lower()}.com",
                             active=True,
-                            enabled_modules=["ACCORD", "LOSS_RUN", "INVOICE", "SBC"]
+                            enabled_modules=["ACCORD", "LOSS_RUN", "INVOICE", "SBC", "BENEFITS_UW"]
                         )
                     except Exception:
                         pass

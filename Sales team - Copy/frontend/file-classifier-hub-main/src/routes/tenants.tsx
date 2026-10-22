@@ -31,6 +31,7 @@ const ALL_MODULES = [
   // Sales Category
   { code: "ACCORD", name: "Accord 130", desc: "Worker Compensation PDF Processing (Sales)" },
   { code: "LOSS_RUN", name: "Loss Run", desc: "Insurance Claims & Plan Comparison (Sales)" },
+  { code: "BENEFITS_UW", name: "Benefits Underwriting", desc: "Automated Census Creation, Multi-Document Invoice Reconciliation & Carrier Routing" },
   
   // Payroll Category
   { code: "INVOICE", name: "Benefit Invoice Extraction", desc: "Benefit Invoice Processing (Payroll)" },

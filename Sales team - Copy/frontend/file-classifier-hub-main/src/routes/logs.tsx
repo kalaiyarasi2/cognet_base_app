@@ -96,6 +96,7 @@ function LogsPage() {
     GMAIL: "bg-red-500/15 text-red-500 border-red-500/30",
     OUTLOOK: "bg-sky-500/15 text-sky-500 border-sky-500/30",
     DRIVE: "bg-teal-500/15 text-teal-500 border-teal-500/30",
+    BENEFITS_UW: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
   };
 
   return (

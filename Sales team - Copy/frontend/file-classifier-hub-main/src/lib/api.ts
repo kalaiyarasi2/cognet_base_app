@@ -564,11 +564,18 @@ export const api = {
   benefitsUwHealth: () =>
     request<BenefitsUwHealthResponse>("/api/benefits-uw/api/health"),
 
-  benefitsUwProcess: (formData: FormData) =>
-    request<BenefitsUwPipelineResponse>("/api/benefits-uw/api/process", {
-      method: "POST",
-      body: formData,
-    }),
+  benefitsUwProcess: (formData: FormData, userEmail?: string) => {
+    const query: Record<string, any> = {};
+    if (userEmail) query.user_email = userEmail;
+    return request<BenefitsUwPipelineResponse>(
+      "/api/benefits-uw/api/process",
+      {
+        method: "POST",
+        body: formData,
+      },
+      query
+    );
+  },
 
   benefitsUwTestFolder: (folder_path: string) =>
     request<BenefitsUwPipelineResponse>("/api/benefits-uw/api/test-folder", {

@@ -141,6 +141,7 @@ export function UserManagement() {
   const AVAILABLE_MODULES = [
     { id: "CONVERTER", label: "File Converter" },
     { id: "SBC", label: "SBC plan summary" },
+    { id: "BENEFITS_UW", label: "Benefits_UW" },
     { id: "RENEWAL", label: "Census Creation" },
     { id: "RPVE", label: "Invoice to Census" },
     { id: "PIPELINE", label: "File Organiser" },
