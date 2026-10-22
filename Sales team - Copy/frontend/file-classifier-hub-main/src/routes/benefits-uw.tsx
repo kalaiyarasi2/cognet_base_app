@@ -720,7 +720,7 @@ function BenefitsUWPage() {
             <div className="p-3 rounded-lg border border-blue-500/20 bg-blue-500/5 text-xs text-muted-foreground flex items-start gap-2.5">
               <span className="text-base leading-none">💡</span>
               <p className="leading-relaxed">
-                <strong className="text-foreground">REI Preserved Template Logic:</strong> Underwriting columns A–L remain untouched. Comparison section starts at column M.
+                <strong className="text-foreground">Preserved Template Logic:</strong> Underwriting columns A–L remain untouched. Comparison section starts at column M.
               </p>
             </div>
           </div>
