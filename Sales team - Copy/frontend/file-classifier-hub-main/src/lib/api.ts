@@ -609,6 +609,24 @@ export interface BenefitsUwPipelineResponse {
   state: string;
   company?: string;
   prospect_name?: string;
+  company_name?: string;
+  proposed_effective_date?: string;
+  sic_naics_code?: string;
+  address?: string;
+  city_state_zip?: string;
+  prospect?: {
+    proposed_effective_date?: string;
+    sic_naics_code?: string;
+    company_name?: string;
+    address?: string;
+    city_state_zip?: string;
+    effective_date?: string;
+    sic?: string;
+    company?: string;
+    referral?: string;
+    sales_person?: string;
+    [key: string]: any;
+  };
   routing?: Record<string, any>;
   summary: string;
   audit?: {
