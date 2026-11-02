@@ -498,6 +498,19 @@ def _paddle_ocr_worker_main() -> None:
     cls_flag = sys.argv[6].lower() == "true"
 
     try:
+        import os
+        os.environ["FLAGS_allocator_strategy"] = "auto_growth"
+        os.environ["FLAGS_fraction_of_gpu_memory_to_use"] = "0.6"
+        try:
+            import paddle
+            if paddle.device.is_compiled_with_cuda():
+                paddle.set_flags({
+                    "FLAGS_allocator_strategy": "auto_growth",
+                    "FLAGS_fraction_of_gpu_memory_to_use": 0.6,
+                })
+                paddle.device.cuda.empty_cache()
+        except Exception:
+            pass
         import numpy as np
         from PIL import Image
         from paddleocr import PaddleOCR

@@ -221,6 +221,7 @@ summary_app    = load_sub_app("summary_api",    WORKSPACE_DIR / "summary & chatb
 notice_extraction_app = load_sub_app("notice_extraction_api", WORKSPACE_DIR / "Notice-extraction" / "api.py")
 modifier_app   = load_sub_app("modifier_api",   WORKSPACE_DIR / "Modifier_Poc" / "app.py")
 benefits_uw_app = load_sub_app("benefits_uw_api", WORKSPACE_DIR / "agent-census-creation" / "backend" / "api.py")
+file_identifier_app = load_sub_app("file_identifier_api", WORKSPACE_DIR.parent / "File_identifier" / "app.py")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Build the unified ASGI app via PrefixDispatcher
@@ -251,6 +252,8 @@ _dispatcher = PrefixDispatcher(
         ("/api/modifier",   modifier_app),
         ("/api/benefits-uw", benefits_uw_app),
         ("/api/benefits",   benefits_uw_app),
+        ("/api/identify",   file_identifier_app),
+        ("/api/file-identifier", file_identifier_app),
         ("/claim",          claim_app),
     ],
     default=classifier_app,

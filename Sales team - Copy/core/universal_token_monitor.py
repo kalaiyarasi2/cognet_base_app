@@ -72,9 +72,33 @@ if not _log.handlers:
         pass  # If log file fails, still proceed silently
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Thread-safe DB lock
+# Thread-safe DB lock & Dynamic Context
 # ──────────────────────────────────────────────────────────────────────────────
 _db_lock = threading.Lock()
+_context_local = threading.local()
+
+def set_context(file_name: Optional[str] = None, session_id: Optional[str] = None, poc_name: Optional[str] = None):
+    """Dynamically set active file and session context for the current thread."""
+    if file_name is not None:
+        _context_local.file_name = file_name
+    if session_id is not None:
+        _context_local.session_id = session_id
+    if poc_name is not None:
+        _context_local.poc_name = poc_name
+
+def get_context() -> Dict[str, Optional[str]]:
+    """Get active thread context."""
+    return {
+        "file_name": getattr(_context_local, "file_name", None),
+        "session_id": getattr(_context_local, "session_id", None),
+        "poc_name": getattr(_context_local, "poc_name", None),
+    }
+
+def clear_context():
+    """Clear active thread context."""
+    _context_local.file_name = None
+    _context_local.session_id = None
+    _context_local.poc_name = None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -297,6 +321,15 @@ def track_usage(
         dict with token counts and cost info. Never raises exceptions.
     """
     try:
+        # ── Dynamically inherit context if not provided or if placeholder ────
+        ctx = get_context()
+        if (not file_name or file_name in ("unknown", "gpu_doc")) and ctx.get("file_name"):
+            file_name = ctx["file_name"]
+        if not session_id and ctx.get("session_id"):
+            session_id = ctx["session_id"]
+        if (not poc_name or poc_name == "unknown") and ctx.get("poc_name"):
+            poc_name = ctx["poc_name"]
+
         # ── Extract token counts (OpenAI & Anthropic Claude) ──────────────────
         if response_usage is None:
             prompt_tokens = completion_tokens = total_tokens = 0
@@ -513,20 +546,36 @@ def get_file_summaries(limit: int = 100, poc_name: Optional[str] = None) -> list
             for frow in file_rows:
                 fname = frow["file_name"]
                 fpoc  = frow["poc_name"]
+                fsid  = frow.get("session_id")
 
-                cursor.execute("""
-                    SELECT DISTINCT model FROM token_calls
-                    WHERE file_name = ? AND poc_name = ?
-                """, (fname, fpoc))
-                models = [r["model"] for r in cursor.fetchall() if r["model"]]
-                frow["models"] = models
+                if fsid:
+                    cursor.execute("""
+                        SELECT DISTINCT model FROM token_calls
+                        WHERE file_name = ? AND poc_name = ? AND session_id = ?
+                    """, (fname, fpoc, fsid))
+                    models = [r["model"] for r in cursor.fetchall() if r["model"]]
+                    frow["models"] = models
 
-                cursor.execute("""
-                    SELECT * FROM token_calls
-                    WHERE file_name = ? AND poc_name = ?
-                    ORDER BY id ASC
-                """, (fname, fpoc))
-                frow["calls"] = [dict(c) for c in cursor.fetchall()]
+                    cursor.execute("""
+                        SELECT * FROM token_calls
+                        WHERE file_name = ? AND poc_name = ? AND session_id = ?
+                        ORDER BY id ASC
+                    """, (fname, fpoc, fsid))
+                    frow["calls"] = [dict(c) for c in cursor.fetchall()]
+                else:
+                    cursor.execute("""
+                        SELECT DISTINCT model FROM token_calls
+                        WHERE file_name = ? AND poc_name = ?
+                    """, (fname, fpoc))
+                    models = [r["model"] for r in cursor.fetchall() if r["model"]]
+                    frow["models"] = models
+
+                    cursor.execute("""
+                        SELECT * FROM token_calls
+                        WHERE file_name = ? AND poc_name = ?
+                        ORDER BY id ASC
+                    """, (fname, fpoc))
+                    frow["calls"] = [dict(c) for c in cursor.fetchall()]
 
             conn.close()
             return file_rows
