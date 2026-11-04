@@ -2,12 +2,12 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, FileText, Tags,
   Workflow, FolderTree, Cloud, BarChart3, Activity, Terminal, Globe,
-  Settings2, SlidersHorizontal, Info, Shield, ShieldCheck, ChevronLeft, ChevronRight,
+  Settings2, SlidersHorizontal, Info, Shield, ShieldCheck, PanelLeft,
   RefreshCw, Scale, Cpu, FileCheck, HardDrive, Share2, FileSpreadsheet, Building2,
   CreditCard, ReceiptText, Mail, ClipboardCheck, Coins
 } from "lucide-react";
-import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/store";
 
 interface NavItem { label: string; to: string; icon: any; moduleCode?: string; }
 interface NavGroup { label: string; items: NavItem[]; }
@@ -90,12 +90,22 @@ const groups: NavGroup[] = [
   },
 ];
 
-import { useAuth } from "@/lib/store";
-
 export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { pathname, searchStr, search } = useRouterState({
+    select: (s) => ({
+      pathname: s.location.pathname,
+      searchStr: s.location.searchStr || "",
+      search: (s.location.search || {}) as Record<string, any>,
+    }),
+  });
   const { user } = useAuth();
   const rawModules = user?.allowed_modules;
+
+  // Determine current pipeline query param from either parsed search object or raw searchStr
+  const currentPipeline =
+    search?.pipeline ||
+    (searchStr ? new URLSearchParams(searchStr.startsWith("?") ? searchStr.slice(1) : searchStr).get("pipeline") : null) ||
+    null;
 
   function isItemAllowed(item: NavItem): boolean {
     if (item.to === "/tenants") return !!user?.can_manage_tenants || user?.role === "ADMIN";
@@ -126,22 +136,28 @@ export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onTogg
         collapsed ? "w-[60px]" : "w-[230px]"
       )}
     >
-      <div className="h-14 flex items-center gap-2 px-3 border-b border-sidebar-border">
-        <div className="w-7 h-7 rounded-md bg-primary/10 text-primary grid place-items-center shrink-0">
-          <Shield className="w-4 h-4" />
-        </div>
+      <div className={cn("h-14 flex items-center gap-2 px-3 border-b border-sidebar-border", collapsed && "justify-center px-0")}>
         {!collapsed && (
-          <div className="min-w-0">
-            <div className="text-[13px] font-semibold leading-tight truncate">DRIVE</div>
-            <div className="text-[10px] tracking-widest text-muted-foreground">AGENT</div>
-          </div>
+          <>
+            <div className="w-7 h-7 rounded-md bg-primary/10 text-primary grid place-items-center shrink-0">
+              <Shield className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold leading-tight truncate">DRIVE</div>
+              <div className="text-[10px] tracking-widest text-muted-foreground">AGENT</div>
+            </div>
+          </>
         )}
         <button
           onClick={onToggle}
-          className="ml-auto p-1 rounded hover:bg-sidebar-accent text-muted-foreground"
+          className={cn(
+            "p-1.5 rounded-md hover:bg-sidebar-accent text-muted-foreground transition-colors",
+            !collapsed && "ml-auto"
+          )}
           aria-label="Toggle sidebar"
+          title="Toggle sidebar"
         >
-          {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          <PanelLeft className="w-4 h-4" />
         </button>
       </div>
 
@@ -159,12 +175,15 @@ export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onTogg
               )}
               <ul className="space-y-0.5">
                 {visibleItems.map((item) => {
-                  const active = pathname === item.to;
+                  const [itemPath, itemQuery] = item.to.split("?");
+                  const itemPipeline = itemQuery ? new URLSearchParams(itemQuery).get("pipeline") : null;
+                  const active = pathname === itemPath && (itemPipeline || null) === (currentPipeline || null);
                   const Icon = item.icon;
                   return (
                     <li key={item.to}>
                       <Link
-                        to={item.to}
+                        to={itemPath}
+                        search={itemPipeline ? ({ pipeline: itemPipeline } as any) : undefined}
                         className={cn(
                           "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] transition-colors",
                           active

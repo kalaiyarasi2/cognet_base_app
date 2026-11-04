@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import { FileText, Play, RotateCcw, Download, Zap, AlertCircle, History, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel } from "@/components/Panel";
@@ -32,13 +33,13 @@ interface ExtractionResult {
 }
 
 function NoticeExtractionPage() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = usePersistentState<File | null>("notice:file", null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [isComplete, setIsComplete] = useState(false);
-  const [result, setResult] = useState<ExtractionResult | null>(null);
+  const [isComplete, setIsComplete] = usePersistentState( "notice:isComplete", false);
+  const [result, setResult] = usePersistentState<ExtractionResult | null>("notice:result", null);
   const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState<ExtractionResult[]>([]);
+  const [history, setHistory] = usePersistentState<ExtractionResult[]>("notice:history", []);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   const user = useApp((s) => s.user);

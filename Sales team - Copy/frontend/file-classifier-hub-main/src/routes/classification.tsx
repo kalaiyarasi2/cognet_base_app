@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import { Tags, Play, RotateCcw, FileText, Type, Tag, FolderInput } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel } from "@/components/Panel";
@@ -17,12 +18,12 @@ export const Route = createFileRoute("/classification")({ component: Classificat
 
 function ClassificationPage() {
   const [tab, setTab] = useState("pdf");
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = usePersistentState<File | null>("classification:file", null);
   const [text, setText] = useState("");
   const [maxPages, setMaxPages] = useState(3);
   const [model, setModel] = useState("");
   const [threshold, setThreshold] = useState<number | "">("");
-  const [result, setResult] = useState<ClassifyResponse | null>(null);
+  const [result, setResult] = usePersistentState<ClassifyResponse | null>("classification:result", null);
   const [organiseResult, setOrganiseResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const addLog = useApp((s) => s.addLog);

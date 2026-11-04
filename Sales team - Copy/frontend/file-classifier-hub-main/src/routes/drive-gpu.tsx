@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  HardDrive, Play, FileText, CheckCircle2, XCircle, Search, Cpu, Layers, AlertCircle, Loader2, ChevronDown, ChevronUp, Clock
+  HardDrive, Play, FileText, CheckCircle2, XCircle, Search, Cpu, Layers, AlertCircle, Loader2, ChevronDown, ChevronUp, Clock,
+  Shield, ReceiptText, CreditCard
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel, StatCard } from "@/components/Panel";
@@ -11,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, getBackendUrl } from "@/lib/api";
 import { useApp, useSettings, useAuth } from "@/lib/store";
+import { readPersistedState, writePersistedState } from "@/lib/persistentState";
 import { toast } from "sonner";
 import { FolderPickerModal } from "@/components/FolderPickerModal";
 import type { DocumentFile } from "@/types/extractor";
@@ -20,19 +22,139 @@ import ProcessingStages from "@/components/ProcessingStages";
 import MergeJsonButton from "@/components/MergeJsonButton";
 import ClaimSummary from "@/components/ClaimSummary";
 
-export const Route = createFileRoute("/drive-gpu")({ component: DriveGpuPage });
+export const Route = createFileRoute("/drive-gpu")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    pipeline: typeof search.pipeline === "string" ? search.pipeline : undefined,
+  }),
+  component: DriveGpuPage,
+});
+
+interface ModuleConfig {
+  title: string;
+  icon: any;
+  description: string;
+  uploadTitle: string;
+  uploadSubtitle: string;
+  queueDescription: string;
+  resultsDescription: string;
+  emptyQueueHint: string;
+}
+
+const MODULE_CONFIGS: Record<string, ModuleConfig> = {
+  MASTER_GPU: {
+    title: "GPU-Accelerated Drive",
+    icon: HardDrive,
+    description:
+      "Process loss runs, ACORDs, invoices, and bank statements in a local folder or via direct file upload using the high-performance GPU extraction pipeline.",
+    uploadTitle: "Drag & Drop Files for Master GPU Engine",
+    uploadSubtitle: "or click to browse • Auto-classifies & extracts PDF, Excel & CSV (max 50MB each)",
+    queueDescription: "Expand items to view detailed GPU processing checklist stages",
+    resultsDescription: "Detailed parsed data grid, extraction summary, and JSON/Excel files for the selected document",
+    emptyQueueHint: "Upload files or scan a watched folder to start Master GPU extraction.",
+  },
+  WORK_COMP: {
+    title: "Accord 130",
+    icon: FileText,
+    description:
+      "Extract state-by-state rating tables, class codes, employee counts, estimated payrolls, and policy metadata from ACORD 130 Workers' Compensation applications.",
+    uploadTitle: "Drag & Drop ACORD 130 Applications",
+    uploadSubtitle: "or click to browse • Supports ACORD 130 Workers' Compensation PDFs (max 50MB each)",
+    queueDescription: "ACORD 130 applications queued for Workers' Compensation extraction",
+    resultsDescription: "Extracted ACORD 130 state rating breakdown, class codes, payroll grid, and JSON/Excel export",
+    emptyQueueHint: "Upload ACORD 130 PDF documents to extract Workers' Compensation rating data.",
+  },
+  INSURANCE: {
+    title: "Loss Run",
+    icon: Shield,
+    description:
+      "Extract multi-carrier insurance loss run claims, incurred/paid amounts, open reserves, policy periods, and AI-powered claims summaries.",
+    uploadTitle: "Drag & Drop Loss Run Reports",
+    uploadSubtitle: "or click to browse • Supports multi-carrier Loss Run PDFs, Excel & CSV (max 50MB each)",
+    queueDescription: "Loss run reports queued for claims history extraction",
+    resultsDescription: "Detailed parsed loss run claims grid, insurance summary, and JSON/Excel files for the selected report",
+    emptyQueueHint: "Upload carrier Loss Run PDF reports to extract claims history and summaries.",
+  },
+  INVOICE: {
+    title: "Benefit Invoice Extraction",
+    icon: ReceiptText,
+    description:
+      "Extract subscriber-level billing line items, plan coverage tiers, carrier charges, and premium totals from employee benefit invoices.",
+    uploadTitle: "Drag & Drop Benefit Invoices",
+    uploadSubtitle: "or click to browse • Supports carrier benefit billing PDFs, Excel & CSV (max 50MB each)",
+    queueDescription: "Benefit invoices queued for subscriber and premium extraction",
+    resultsDescription: "Extracted subscriber billing table, coverage breakdown, and JSON/Excel files for the selected benefit invoice",
+    emptyQueueHint: "Upload employee benefit invoice PDFs or spreadsheets to extract billing items.",
+  },
+  BANK_STATEMENT: {
+    title: "Bank Statement",
+    icon: CreditCard,
+    description:
+      "Extract account summaries, deposits, withdrawals, daily balances, and structured transaction ledgers from commercial and personal bank statements.",
+    uploadTitle: "Drag & Drop Bank Statements",
+    uploadSubtitle: "or click to browse • Supports commercial and personal bank statement PDFs (max 50MB each)",
+    queueDescription: "Bank statements queued for transaction ledger extraction",
+    resultsDescription: "Parsed bank transaction ledger, account summary, and JSON/Excel files for the selected statement",
+    emptyQueueHint: "Upload bank statement PDFs to extract transaction ledgers and balances.",
+  },
+  VENDOR_INVOICE: {
+    title: "Vendor Invoice",
+    icon: ReceiptText,
+    description:
+      "Extract vendor details, invoice numbers, line-item charges, tax breakdowns, and payment totals from accounts payable vendor invoices.",
+    uploadTitle: "Drag & Drop Vendor Invoices",
+    uploadSubtitle: "or click to browse • Supports accounts payable vendor invoice PDFs & spreadsheets (max 50MB each)",
+    queueDescription: "Vendor invoices queued for line-item and totals extraction",
+    resultsDescription: "Extracted vendor invoice line items, billing summary, and JSON/Excel files for the selected invoice",
+    emptyQueueHint: "Upload vendor invoice PDFs to extract line items and payment details.",
+  },
+};
+
+// Module-level store so each module preserves its own independent state across route transitions
+interface PipelineModuleState {
+  running: boolean;
+  docs: DocumentFile[];
+  activeDocName: string | null;
+  expandedDocName: string | null;
+  mergedSummary: string | null;
+  isMerging: boolean;
+}
+
+const moduleStateCache: Record<string, PipelineModuleState> = {};
+
+function getOrCreateModuleState(key: string): PipelineModuleState {
+  if (!moduleStateCache[key]) {
+    moduleStateCache[key] = readPersistedState<PipelineModuleState>(`drive_gpu:${key}`, () => ({
+      running: false,
+      docs: [],
+      activeDocName: null,
+      expandedDocName: null,
+      mergedSummary: null,
+      isMerging: false,
+    }));
+  }
+  return moduleStateCache[key];
+}
+
+function saveModuleState(key: string) {
+  const st = getOrCreateModuleState(key);
+  writePersistedState(`drive_gpu:${key}`, st);
+}
 
 function DriveGpuPage() {
   const { user } = useAuth();
-  const search = Route.useSearch() as any;
-  const pipeline = search.pipeline || "";
+  const search = Route.useSearch();
+  const routerPipeline = useRouterState({
+    select: (s) => {
+      const p = (s.location.search as any)?.pipeline;
+      if (p) return String(p);
+      const raw = s.location.searchStr || "";
+      return raw ? new URLSearchParams(raw.startsWith("?") ? raw.slice(1) : raw).get("pipeline") || "" : "";
+    },
+  });
 
-  let pageTitle = "GPU-Accelerated Drive";
-  if (pipeline === "INSURANCE") pageTitle = "Loss Run";
-  else if (pipeline === "BANK_STATEMENT") pageTitle = "Bank Statement";
-  else if (pipeline === "INVOICE") pageTitle = "Benefit Invoice Extraction";
-  else if (pipeline === "WORK_COMP") pageTitle = "Accord 130";
-  else if (pipeline === "VENDOR_INVOICE") pageTitle = "Vendor Invoice";
+  const pipeline = search?.pipeline || routerPipeline || "";
+  const pipelineKey = pipeline || "MASTER_GPU";
+  const moduleConfig = MODULE_CONFIGS[pipelineKey] || MODULE_CONFIGS.MASTER_GPU;
 
   const defaultIn = useSettings((s) => s.defaultInputFolder);
   const defaultOut = useSettings((s) => s.defaultOutputFolder);
@@ -42,15 +164,81 @@ function DriveGpuPage() {
   const [maxPages, setMaxPages] = useState(3);
   const [model, setModel] = useState("gpt-4o");
   const [minScore, setMinScore] = useState(3.0);
-  
-  const [running, setRunning] = useState(false);
-  const [processedDocs, setProcessedDocs] = useState<DocumentFile[]>([]);
-  const [activeDocName, setActiveDocName] = useState<string | null>(null);
-  const [expandedDocName, setExpandedDocName] = useState<string | null>(null);
 
-  // Merged state
-  const [mergedSummary, setMergedSummary] = useState<string | null>(null);
-  const [isMerging, setIsMerging] = useState(false);
+  // Trigger re-render when moduleStateCache updates
+  const [, setTick] = useState(0);
+  const forceRender = useCallback(() => setTick((t) => t + 1), []);
+
+  const currentModuleState = getOrCreateModuleState(pipelineKey);
+  const running = currentModuleState.running;
+  const processedDocs = currentModuleState.docs;
+  const activeDocName = currentModuleState.activeDocName;
+  const expandedDocName = currentModuleState.expandedDocName;
+  const mergedSummary = currentModuleState.mergedSummary;
+  const isMerging = currentModuleState.isMerging;
+
+  // Scoped state setters for a specific pipeline key
+  const updateDocsForPipeline = useCallback(
+    (targetKey: string, updater: DocumentFile[] | ((prev: DocumentFile[]) => DocumentFile[])) => {
+      const st = getOrCreateModuleState(targetKey);
+      st.docs = typeof updater === "function" ? updater(st.docs) : updater;
+      saveModuleState(targetKey);
+      forceRender();
+    },
+    [forceRender]
+  );
+
+  const setProcessedDocs = useCallback(
+    (updater: DocumentFile[] | ((prev: DocumentFile[]) => DocumentFile[])) => {
+      updateDocsForPipeline(pipelineKey, updater);
+    },
+    [pipelineKey, updateDocsForPipeline]
+  );
+
+  const setActiveDocName = useCallback(
+    (name: string | null) => {
+      getOrCreateModuleState(pipelineKey).activeDocName = name;
+      saveModuleState(pipelineKey);
+      forceRender();
+    },
+    [pipelineKey, forceRender]
+  );
+
+  const setExpandedDocName = useCallback(
+    (name: string | null) => {
+      getOrCreateModuleState(pipelineKey).expandedDocName = name;
+      saveModuleState(pipelineKey);
+      forceRender();
+    },
+    [pipelineKey, forceRender]
+  );
+
+  const setMergedSummary = useCallback(
+    (summary: string | null) => {
+      getOrCreateModuleState(pipelineKey).mergedSummary = summary;
+      saveModuleState(pipelineKey);
+      forceRender();
+    },
+    [pipelineKey, forceRender]
+  );
+
+  const setRunning = useCallback(
+    (val: boolean) => {
+      getOrCreateModuleState(pipelineKey).running = val;
+      saveModuleState(pipelineKey);
+      forceRender();
+    },
+    [pipelineKey, forceRender]
+  );
+
+  const setIsMerging = useCallback(
+    (val: boolean) => {
+      getOrCreateModuleState(pipelineKey).isMerging = val;
+      saveModuleState(pipelineKey);
+      forceRender();
+    },
+    [pipelineKey, forceRender]
+  );
 
   // Folder Picker States
   const [localPickerOpen, setLocalPickerOpen] = useState(false);
@@ -59,31 +247,24 @@ function DriveGpuPage() {
   const addLog = useApp((s) => s.addLog);
   const addActivity = useApp((s) => s.addActivity);
 
-  // Local Drive Status Query
+  // Local Drive Status Query (only used on Master GPU Engine watched folder mode)
+  const isMasterGpu = pipelineKey === "MASTER_GPU";
   const status = useQuery({
     queryKey: ["gpu-drive-status", input],
     queryFn: () => api.gpuDriveStatus(input || undefined),
-    enabled: !!input,
+    enabled: isMasterGpu && !!input,
     retry: false,
     refetchInterval: 10000, // Poll status every 10 seconds
   });
 
   const isConnected = status.data?.connected ?? false;
   const pdfCount = status.data?.pdf_count ?? 0;
-  const pdfFiles = status.data?.pdf_files || [];
-
-  // Reset document list when input folder changes (to clear stale results)
-  useEffect(() => {
-    setProcessedDocs([]);
-    setActiveDocName(null);
-    setExpandedDocName(null);
-    setMergedSummary(null);
-  }, [input]);
+  const pdfFiles = isMasterGpu ? status.data?.pdf_files || [] : [];
 
   // Extraction processing core for a single file object
-  const processSingleFileObj = async (file: File) => {
+  const processSingleFileObj = async (file: File, targetPipeline: string, targetKey: string) => {
     try {
-      setProcessedDocs((prev) =>
+      updateDocsForPipeline(targetKey, (prev) =>
         prev.map((d) =>
           d.name === file.name
             ? {
@@ -98,7 +279,7 @@ function DriveGpuPage() {
       );
 
       const userEmail = user?.email || "SYSTEM";
-      const res = await api.gpuExtractDirect(file, pipeline, userEmail);
+      const res = await api.gpuExtractDirect(file, targetPipeline, userEmail);
       
       // Fetch JSON contents
       let schema: any = null;
@@ -134,20 +315,20 @@ function DriveGpuPage() {
         completedAt: Date.now()
       };
 
-      setProcessedDocs((prev) =>
+      updateDocsForPipeline(targetKey, (prev) =>
         prev.map((d) => (d.name === file.name ? { ...d, ...docUpdate } : d))
       );
 
       toast.success(`Successfully processed ${file.name}`);
       addActivity({
         kind: "drive",
-        title: "Direct GPU upload complete",
+        title: `${MODULE_CONFIGS[targetKey]?.title || "GPU"} upload complete`,
         detail: `Processed: ${file.name}`,
       });
       addLog("INFO", "drive", `Direct GPU upload classification completed successfully for ${file.name}`, res);
     } catch (err: any) {
       toast.error(`Failed to process ${file.name}: ${err.message || err}`);
-      setProcessedDocs((prev) =>
+      updateDocsForPipeline(targetKey, (prev) =>
         prev.map((d) =>
           d.name === file.name
             ? {
@@ -157,16 +338,19 @@ function DriveGpuPage() {
                 progress: 100,
                 error: err.message || "Failed to process document through GPU pipeline"
               }
-              : d
-          )
-        );
-        addLog("ERROR", "drive", `Direct upload failed for ${file.name}: ${err.message || err}`);
+            : d
+        )
+      );
+      addLog("ERROR", "drive", `Direct upload failed for ${file.name}: ${err.message || err}`);
     }
   };
 
   // Handle files selected via Drag & Drop Upload Area
   const handleFilesSelected = async (files: File[]) => {
     if (files.length === 0) return;
+
+    const currentPipeline = pipeline;
+    const currentKey = pipelineKey;
 
     // Create queue items for files being uploaded
     const newDocs: DocumentFile[] = files.map((file) => ({
@@ -183,12 +367,14 @@ function DriveGpuPage() {
       file: file // Save the raw File object for reprocessing!
     }));
 
-    setProcessedDocs((prev) => [...prev, ...newDocs]);
-    setActiveDocName(files[0].name);
+    updateDocsForPipeline(currentKey, (prev) => [...prev, ...newDocs]);
+    getOrCreateModuleState(currentKey).activeDocName = files[0].name;
+    saveModuleState(currentKey);
+    forceRender();
 
     // Process files sequentially
     for (const file of files) {
-      await processSingleFileObj(file);
+      await processSingleFileObj(file, currentPipeline, currentKey);
     }
   };
 
@@ -285,13 +471,13 @@ function DriveGpuPage() {
     }
   }
 
-  // Clear workspace
+  // Clear workspace for current module
   const handleResetWorkspace = () => {
     setProcessedDocs([]);
     setActiveDocName(null);
     setExpandedDocName(null);
     setMergedSummary(null);
-    toast.success("Workspace reset successfully");
+    toast.success(`${moduleConfig.title} workspace reset`);
   };
 
   // Reprocess a single file
@@ -301,7 +487,7 @@ function DriveGpuPage() {
 
     if (doc.file) {
       toast.info(`Reprocessing uploaded document: ${filename}`);
-      await processSingleFileObj(doc.file);
+      await processSingleFileObj(doc.file, pipeline, pipelineKey);
     } else {
       toast.info(`Reprocessing folder document: ${filename}`);
       // For local files, since the server has the files, we re-run the folder pipeline
@@ -325,14 +511,14 @@ function DriveGpuPage() {
   // Build the unified queue list matching actual directory files (plus uploaded files) with processing status
   const queueDocs: DocumentFile[] = [];
 
-  // 1. Add direct uploads or processed results in status
+  // 1. Add direct uploads or processed results in status for the current module/pipeline
   processedDocs.forEach((d) => {
     if (!queueDocs.some((existing) => existing.name === d.name)) {
       queueDocs.push(d);
     }
   });
 
-  // 2. Add staged files in local watch directory that aren't processed yet
+  // 2. Add staged files in local watch directory that aren't processed yet (Master GPU only)
   pdfFiles.forEach((filename) => {
     if (!queueDocs.some((existing) => existing.name === filename)) {
       queueDocs.push({
@@ -453,27 +639,32 @@ function DriveGpuPage() {
     } finally {
       setIsMerging(false);
     }
-  }, [getAllClaims]);
+  }, [getAllClaims, setIsMerging, setMergedSummary]);
 
   return (
-    <div className="space-y-4">
+    <div key={pipelineKey} className="space-y-4">
       <PageHeader
-        icon={HardDrive}
-        title={pageTitle}
-        description="Process loss runs, ACORDs, invoices, and bank statements in a local folder or via direct file upload using the high-performance GPU extraction pipeline."
+        icon={moduleConfig.icon}
+        title={moduleConfig.title}
+        description={moduleConfig.description}
       />
 
       {/* Top Section: Upload Area */}
       <div className="mb-4">
-        <UploadArea onFilesSelected={handleFilesSelected} disabled={running} />
+        <UploadArea
+          onFilesSelected={handleFilesSelected}
+          disabled={running}
+          title={moduleConfig.uploadTitle}
+          subtitle={moduleConfig.uploadSubtitle}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Left Side: Queue list */}
         <div className="space-y-3">
           <Panel
-            title={`Document Queue (${queueDocs.length})`}
-            description="Expand items to view detailed processing checklist stages"
+            title={`${moduleConfig.title} Queue (${queueDocs.length})`}
+            description={moduleConfig.queueDescription}
           >
             {queueDocs.length > 0 ? (
               <div className="space-y-3">
@@ -569,7 +760,7 @@ function DriveGpuPage() {
             ) : (
               <div className="text-[12px] text-muted-foreground text-center py-12 flex flex-col gap-2 justify-center items-center">
                 <AlertCircle className="w-8 h-8 text-muted-foreground opacity-40" />
-                <span>Upload files or scan a watched folder to get started.</span>
+                <span>{moduleConfig.emptyQueueHint}</span>
               </div>
             )}
           </Panel>
@@ -578,8 +769,8 @@ function DriveGpuPage() {
         {/* Right Side: Execution Results Viewer */}
         <div className="lg:col-span-2 space-y-4">
           <Panel
-            title={activeDoc ? `Results — ${activeDoc.name}` : "Extraction Results"}
-            description="Detailed parsed data grid, insurance summary, and JSON files for the selected document"
+            title={activeDoc ? `Results — ${activeDoc.name}` : `${moduleConfig.title} Results`}
+            description={moduleConfig.resultsDescription}
             className="h-full"
           >
             {!isMergeable && hasMultipleDocs && (
@@ -604,13 +795,13 @@ function DriveGpuPage() {
               />
             ) : (
               <div className="flex flex-col items-center justify-center py-32 text-muted-foreground gap-3">
-                <HardDrive className="w-12 h-12 opacity-30" />
-                <p className="text-sm">Select a processed document from the queue to view details</p>
+                <moduleConfig.icon className="w-12 h-12 opacity-30" />
+                <p className="text-sm">Select a processed document from the {moduleConfig.title} queue to view details</p>
               </div>
             )}
           </Panel>
 
-      {/* Merged AI Claims Analysis Report Panel */}
+          {/* Merged AI Claims Analysis Report Panel */}
           {mergedSummary && (
             <ClaimSummary summary={mergedSummary} onClose={() => setMergedSummary(null)} />
           )}

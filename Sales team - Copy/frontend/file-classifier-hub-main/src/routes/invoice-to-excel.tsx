@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import { 
   FileSpreadsheet, UploadCloud, File, Loader2, X, Download, 
   FileText, CheckCircle2, ChevronRight, AlertCircle, Copy
@@ -29,8 +30,8 @@ interface Batch {
 
 function InvoiceToExcelPage() {
   const { user } = useAuth();
-  const [batches, setBatches] = useState<Batch[]>([]);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [batches, setBatches] = usePersistentState<Batch[]>("invoice_to_excel:batches", []);
+  const [selectedBatchId, setSelectedBatchId] = usePersistentState<string | null>("invoice_to_excel:selectedBatchId", null);
   
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

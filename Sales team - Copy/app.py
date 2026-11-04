@@ -47,7 +47,17 @@ if str(WORKSPACE_DIR) not in sys.path:
 from dotenv import load_dotenv
 from core.env_loader import load_workspace_env
 load_workspace_env()
+try:
+    from core.prompt_cache_manager import enable_global_prompt_caching, get_cache_stats
+    enable_global_prompt_caching()
+except Exception:
+    pass
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+# Propagate prompt caching to every child subprocess (Payroll, Renewal, RPVE, Invoice-to-Excel)
+# via core/_subprocess_boot/sitecustomize.py, auto-imported by Python through PYTHONPATH.
+_PCB_DIR = str(WORKSPACE_DIR.parent / "subprocess_boot")
+if _PCB_DIR not in os.environ.get("PYTHONPATH", "").split(os.pathsep):
+    os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (_PCB_DIR, os.environ.get("PYTHONPATH", "")) if p)
 
 import logging
 logging.basicConfig(
@@ -222,6 +232,219 @@ notice_extraction_app = load_sub_app("notice_extraction_api", WORKSPACE_DIR / "N
 modifier_app   = load_sub_app("modifier_api",   WORKSPACE_DIR / "Modifier_Poc" / "app.py")
 benefits_uw_app = load_sub_app("benefits_uw_api", WORKSPACE_DIR / "agent-census-creation" / "backend" / "api.py")
 file_identifier_app = load_sub_app("file_identifier_api", WORKSPACE_DIR.parent / "File_identifier" / "app.py")
+
+# Patch renewal_api to guarantee subprocesses execute using sys.executable & log to converter.db
+try:
+    renewal_mod = sys.modules.get("renewal_api")
+    if renewal_mod and hasattr(renewal_mod, "run_pipeline_sync"):
+        _orig_run_pipeline = renewal_mod.run_pipeline_sync
+        def _fixed_run_pipeline_sync(job_id, command, out_census_path, log_path):
+            if isinstance(command, list) and len(command) > 0:
+                command[0] = sys.executable
+
+            # Log STARTED to converter.db (Universal POC DB Logs)
+            try:
+                from database.poc_db import log_universal
+                jobs_dict = getattr(renewal_mod, "jobs", {})
+                job_info = jobs_dict.get(job_id, {})
+                c_name = job_info.get("census_name", "census.xlsx")
+                inv_name = job_info.get("invoice_name", "invoice.pdf")
+                log_universal(
+                    module="Renewal Process",
+                    action="extract",
+                    file_name=f"{c_name} & {inv_name}",
+                    status="STARTED",
+                    details="Starting renewal census & invoice audit",
+                    processed_by="kalaiyarasig@cognethro.com"
+                )
+            except Exception:
+                pass
+
+            res = _orig_run_pipeline(job_id, command, out_census_path, log_path)
+
+            # Log SUCCESS/FAILED to converter.db
+            try:
+                from database.poc_db import log_universal
+                jobs_dict = getattr(renewal_mod, "jobs", {})
+                job_info = jobs_dict.get(job_id, {})
+                c_name = job_info.get("census_name", "census.xlsx")
+                inv_name = job_info.get("invoice_name", "invoice.pdf")
+                st = job_info.get("status", "unknown")
+                if st == "success":
+                    log_universal(
+                        module="Renewal Process",
+                        action="extract",
+                        file_name=f"{c_name} & {inv_name}",
+                        status="SUCCESS",
+                        details=f"Census updated successfully: {out_census_path.name}",
+                        processed_by="kalaiyarasig@cognethro.com"
+                    )
+                else:
+                    err = job_info.get("error", "Process exited with error")
+                    log_universal(
+                        module="Renewal Process",
+                        action="extract",
+                        file_name=f"{c_name} & {inv_name}",
+                        status="FAILED",
+                        details=str(err),
+                        processed_by="kalaiyarasig@cognethro.com"
+                    )
+            except Exception:
+                pass
+
+            return res
+
+        renewal_mod.run_pipeline_sync = _fixed_run_pipeline_sync
+        print("[INIT] Patched renewal_api to use sys.executable and log to converter.db")
+except Exception as _r_err:
+    print(f"[WARN] Failed to patch renewal_api: {_r_err}")
+
+# Patch rpve_api and job_worker to unify token logging & write to converter.db
+try:
+    rpve_mod = sys.modules.get("rpve_api")
+    if rpve_mod and hasattr(rpve_mod, "process_invoice_data"):
+        _orig_rpve_process = rpve_mod.process_invoice_data
+        async def _fixed_rpve_process(file_path, original_filename, out_dir=None):
+            import os
+            os.environ["COGNET_ACTIVE_FILE_NAME"] = str(original_filename)
+            try:
+                from core.universal_token_monitor import set_context
+                set_context(poc_name="RPVE", file_name=str(original_filename))
+            except Exception:
+                pass
+            try:
+                from database.poc_db import log_universal
+                log_universal(
+                    module="RPVE Extractor",
+                    action="extract",
+                    file_name=str(original_filename),
+                    status="STARTED",
+                    details="Starting RPVE invoice extraction",
+                    processed_by="kalaiyarasig@cognethro.com"
+                )
+            except Exception:
+                pass
+
+            try:
+                result = await _orig_rpve_process(file_path, original_filename, out_dir=out_dir)
+                try:
+                    from database.poc_db import log_universal
+                    log_universal(
+                        module="RPVE Extractor",
+                        action="extract",
+                        file_name=str(original_filename),
+                        status="SUCCESS",
+                        details="RPVE benefit invoice extracted successfully",
+                        processed_by="kalaiyarasig@cognethro.com"
+                    )
+                except Exception:
+                    pass
+                return result
+            except Exception as e:
+                try:
+                    from database.poc_db import log_universal
+                    log_universal(
+                        module="RPVE Extractor",
+                        action="extract",
+                        file_name=str(original_filename),
+                        status="FAILED",
+                        details=str(e),
+                        processed_by="kalaiyarasig@cognethro.com"
+                    )
+                except Exception:
+                    pass
+                raise e
+
+        rpve_mod.process_invoice_data = _fixed_rpve_process
+
+    # Also patch job_worker._execute_job for async flow pipelines (PartnerMailFlow / /api/process-flow)
+    rpve_dir = WORKSPACE_DIR / "rpve"
+    if str(rpve_dir) not in sys.path:
+        sys.path.insert(0, str(rpve_dir))
+    import job_worker
+    if hasattr(job_worker, "_execute_job"):
+        _orig_execute_job = job_worker._execute_job
+        def _monitored_execute_job(job_id: str):
+            fname = "invoice.pdf"
+            try:
+                job_dir = job_worker.get_job_dir(job_id)
+                input_dir = job_dir / "input"
+                pdf_files = list(input_dir.glob("*.pdf"))
+                if pdf_files:
+                    fname = pdf_files[0].name
+
+                # Unify token logger filename so chunk extractions aren't named 'document'
+                import os
+                os.environ["COGNET_ACTIVE_FILE_NAME"] = fname
+                from core.universal_token_monitor import set_context
+                set_context(poc_name="RPVE", file_name=fname)
+
+                # Log START to converter.db (Universal POC DB Logs)
+                from database.poc_db import log_universal
+                log_universal(
+                    module="RPVE Extractor",
+                    action="extract",
+                    file_name=fname,
+                    status="STARTED",
+                    details=f"Starting RPVE flow pipeline (job={job_id})",
+                    processed_by="kalaiyarasig@cognethro.com"
+                )
+            except Exception:
+                pass
+
+            try:
+                res = _orig_execute_job(job_id)
+                try:
+                    from database.poc_db import log_universal
+                    log_universal(
+                        module="RPVE Extractor",
+                        action="extract",
+                        file_name=fname,
+                        status="SUCCESS",
+                        details=f"RPVE extraction completed for {fname}",
+                        processed_by="kalaiyarasig@cognethro.com"
+                    )
+                except Exception:
+                    pass
+                return res
+            except Exception as _err:
+                try:
+                    from database.poc_db import log_universal
+                    log_universal(
+                        module="RPVE Extractor",
+                        action="extract",
+                        file_name=fname,
+                        status="FAILED",
+                        details=str(_err),
+                        processed_by="kalaiyarasig@cognethro.com"
+                    )
+                except Exception:
+                    pass
+                raise _err
+
+        job_worker._execute_job = _monitored_execute_job
+        print("[INIT] Patched rpve_api & job_worker to log to converter.db & unify token names")
+except Exception as _rp_err:
+    print(f"[WARN] Failed to patch rpve_api / job_worker: {_rp_err}")
+
+# One-time migration: merge split 'document' entries into their real file names
+try:
+    import sqlite3
+    _db_path = WORKSPACE_DIR / "monitor" / "universal_token_usage.db"
+    if _db_path.exists():
+        _c = sqlite3.connect(str(_db_path), timeout=5.0)
+        _c.execute("""
+            UPDATE token_calls 
+            SET file_name = 'BCBS Invoice April 2026_b3ab9bbc-caf6-4d7e-97a8-fdb539714fe9 1 1.pdf' 
+            WHERE file_name = 'document' AND session_id LIKE '%851-1%'
+        """)
+        _c.commit()
+        # Regenerate file summaries
+        from core.universal_token_monitor import _rebuild_file_summary
+        _rebuild_file_summary()
+        _c.close()
+except Exception:
+    pass
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Build the unified ASGI app via PrefixDispatcher
@@ -508,6 +731,22 @@ async def gpu_extract_proxy(request: Request, file: UploadFile = File(...)):
             sys.path.insert(0, gpu_parent)
         if gpu_dir not in sys.path:
             sys.path.insert(0, gpu_dir)
+        try:
+            import importlib.util as _spc_ilu
+            _spc_path = WORKSPACE_DIR / "Gpu_server" / "smart_pdf_connector.py"
+            if _spc_path.exists():
+                _spc_spec = _spc_ilu.spec_from_file_location("smart_pdf_connector", str(_spc_path))
+                _spc_mod = _spc_ilu.module_from_spec(_spc_spec)
+                sys.modules["smart_pdf_connector"] = _spc_mod
+                _spc_spec.loader.exec_module(_spc_mod)
+        except Exception:
+            pass
+        try:
+            import importlib
+            if "shared_configs" in sys.modules:
+                importlib.reload(sys.modules["shared_configs"])
+        except Exception:
+            pass
         from shared_configs import _perform_extraction
         result = await _perform_extraction(file, request)
         
@@ -563,7 +802,8 @@ async def get_token_usage(
             return {"status": "ok", "recent_calls": data, "file_summaries": file_sums}
         data = get_summary(poc_name=poc_name, file_name=file_name)
         file_sums = get_file_summaries(limit=100, poc_name=poc_name)
-        return {"status": "ok", "data": data, "file_summaries": file_sums}
+        from core.prompt_cache_manager import get_cache_stats
+        return {"status": "ok", "data": data, "file_summaries": file_sums, "prompt_cache_stats": get_cache_stats()}
     except Exception as e:
         return {"status": "error", "error": str(e), "data": {}}
 
@@ -601,6 +841,33 @@ except Exception as _sec_err:
 
 
 
+
+
+@app.get("/api/renewal/output/{filename:path}", tags=["Renewal Download"])
+@app.get("/output/{filename:path}", tags=["Renewal Download"])
+async def download_renewal_output(filename: str):
+    import urllib.parse
+    from fastapi.responses import FileResponse
+    from fastapi import HTTPException
+    decoded_name = urllib.parse.unquote(filename).strip("/\\")
+    out_dir = (WORKSPACE_DIR / "Renewal_process" / "output").resolve()
+    file_path = (out_dir / decoded_name).resolve()
+    if not str(file_path).startswith(str(out_dir)) or not file_path.is_file():
+        raise HTTPException(status_code=404, detail=f"File '{decoded_name}' not found")
+
+    media_type = "application/octet-stream"
+    if file_path.suffix.lower() == ".xlsx":
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif file_path.suffix.lower() == ".json":
+        media_type = "application/json"
+    elif file_path.suffix.lower() == ".txt":
+        media_type = "text/plain"
+
+    return FileResponse(
+        path=str(file_path),
+        filename=file_path.name,
+        media_type=media_type
+    )
 
 # Mount the full dispatcher at root — every other request goes through it.
 # We use Starlette's Mount directly so we control path stripping ourselves.

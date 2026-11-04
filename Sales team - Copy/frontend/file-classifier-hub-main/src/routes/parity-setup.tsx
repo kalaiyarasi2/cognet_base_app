@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import {
   UploadCloud, FileText, CheckCircle2, Loader2, Download,
   RotateCw, Trash2, FileCheck, HelpCircle, Activity, Play, Check, RotateCcw, FileJson
@@ -35,7 +36,7 @@ const STAGES = [
 ];
 
 function ParitySetupPage() {
-  const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([]);
+  const [queuedFiles, setQueuedFiles] = usePersistentState<QueuedFile[]>("parity:queuedFiles", []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [currentStageIdx, setCurrentStageIdx] = useState(0);

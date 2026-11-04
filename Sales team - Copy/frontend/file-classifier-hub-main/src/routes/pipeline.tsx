@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import { Workflow, Play, FolderInput, FolderOutput, Cpu, Gauge, Search } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel } from "@/components/Panel";
@@ -30,7 +31,7 @@ function PipelinePage() {
   const [dryRun, setDryRun] = useState(false);
   const [running, setRunning] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
-  const [result, setResult] = useState<PipelineResponse | null>(null);
+  const [result, setResult] = usePersistentState<PipelineResponse | null>("pipeline:result", null);
   const [logs, setLogs] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerType, setPickerType] = useState<"input" | "output">("input");

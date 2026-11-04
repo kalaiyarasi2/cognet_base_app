@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import {
   ShieldCheck, FileText, UploadCloud, Loader2, Download, CheckCircle2,
   AlertCircle, FileJson, Table as TableIcon, Copy, Brain, RefreshCw,
@@ -85,15 +86,15 @@ const getInitialOpportunityData = (applicantName?: string): OpportunityData => {
 
 function WcuwPage() {
   const { user } = useAuth();
-  const [lossRunFile, setLossRunFile] = useState<File | null>(null);
-  const [acordFile, setAcordFile] = useState<File | null>(null);
-  const [modifierFile, setModifierFile] = useState<File | null>(null);
-  const [extractedModifier, setExtractedModifier] = useState<number | null>(null);
-  const [modifierResult, setModifierResult] = useState<any | null>(null);
+  const [lossRunFile, setLossRunFile] = usePersistentState<File | null>("wcuw:lossRunFile", null);
+  const [acordFile, setAcordFile] = usePersistentState<File | null>("wcuw:acordFile", null);
+  const [modifierFile, setModifierFile] = usePersistentState<File | null>("wcuw:modifierFile", null);
+  const [extractedModifier, setExtractedModifier] = usePersistentState<number | null>("wcuw:extractedModifier", null);
+  const [modifierResult, setModifierResult] = usePersistentState<any | null>("wcuw:modifierResult", null);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStageIdx, setCurrentStageIdx] = useState(0);
-  const [extractionState, setExtractionState] = useState<ExtractionState | null>(null);
+  const [extractionState, setExtractionState] = usePersistentState<ExtractionState | null>("wcuw:extractionState", null);
 
   // View state
   const [activeMainTab, setActiveMainTab] = useState<"table" | "json" | "summary" | "exceptions" | "verifications">("table");
@@ -103,7 +104,7 @@ function WcuwPage() {
 
   // AI Summary State
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [summaryText, setSummaryText] = usePersistentState<string | null>("wcuw:summaryText", null);
 
   // Opportunity form state (Option A Intake Setup)
   const [opportunityForm, setOpportunityForm] = useState<OpportunityData>(() => getInitialOpportunityData());

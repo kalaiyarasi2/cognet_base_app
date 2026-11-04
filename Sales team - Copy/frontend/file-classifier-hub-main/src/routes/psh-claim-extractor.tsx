@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useCallback } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import {
   FileText, UploadCloud, Loader2, Download, CheckCircle2, AlertCircle,
   FileJson, Table2, X, Copy, Calendar, Hash, Percent, DollarSign,
@@ -71,10 +72,10 @@ const fmtSize = (b: number) =>
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 function PshClaimExtractorPage() {
-  const [file, setFile]             = useState<File | null>(null);
-  const [status, setStatus]         = useState<Status>("idle");
+  const [file, setFile]             = usePersistentState<File | null>("psh_extractor:file", null);
+  const [status, setStatus]         = usePersistentState<Status>("psh_extractor:status", "idle");
   const [stageIdx, setStageIdx]     = useState(0);
-  const [result, setResult]         = useState<ExtractionResult | null>(null);
+  const [result, setResult]         = usePersistentState<ExtractionResult | null>("psh_extractor:result", null);
   const [error, setError]           = useState<string | null>(null);
   const [viewMode, setViewMode]     = useState<"table" | "json">("table");
   const [selectedPage, setSelectedPage] = useState(0);

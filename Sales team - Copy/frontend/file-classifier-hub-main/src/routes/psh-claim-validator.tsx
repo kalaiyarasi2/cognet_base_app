@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useCallback } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import {
   ClipboardCheck, UploadCloud, FileImage, Loader2, Download,
   CheckCircle2, AlertCircle, FileJson, Table2, X, Copy,
@@ -68,11 +69,11 @@ const fmtSize = (b: number) =>
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 function PshClaimValidatorPage() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = usePersistentState<File | null>("psh_validator:file", null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = usePersistentState<Status>("psh_validator:status", "idle");
   const [stageIdx, setStageIdx] = useState(0);
-  const [result, setResult] = useState<ExtractionResult | null>(null);
+  const [result, setResult] = usePersistentState<ExtractionResult | null>("psh_validator:result", null);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "json">("table");
   const [isDragging, setIsDragging] = useState(false);

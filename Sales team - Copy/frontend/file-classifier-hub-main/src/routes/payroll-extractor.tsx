@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import {
   FileCheck, UploadCloud, FileText, CheckCircle2, Loader2, Download,
   Check, Clock, Code, Table, ShieldCheck, Copy, AlertCircle, FileJson, Layers
@@ -38,10 +39,10 @@ const STEPPER_STAGES = [
 ];
 
 function PayrollExtractorPage() {
-  const [queue, setQueue] = useState<FlowQueueItem[]>([]);
-  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [queue, setQueue] = usePersistentState<FlowQueueItem[]>("payroll:queue", []);
+  const [activeItemId, setActiveItemId] = usePersistentState<string | null>("payroll:activeItemId", null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [viewMode, setViewMode] = useState<"table" | "json">("table");
+  const [viewMode, setViewMode] = usePersistentState<"table" | "json">("payroll:viewMode", "table");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatFileSize = (bytes: number) => {

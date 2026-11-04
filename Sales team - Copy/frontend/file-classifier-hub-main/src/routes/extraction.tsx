@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import { FileText, Play, RotateCcw, Search, Copy, Download } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel } from "@/components/Panel";
@@ -15,12 +16,12 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/extraction")({ component: ExtractionPage });
 
 function ExtractionPage() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = usePersistentState<File | null>("extraction:file", null);
   const [maxPages, setMaxPages] = useState(3);
   const [forceOcr, setForceOcr] = useState(false);
   const [autoRot, setAutoRot] = useState(true);
   const [search, setSearch] = useState("");
-  const [result, setResult] = useState<ExtractResponse | null>(null);
+  const [result, setResult] = usePersistentState<ExtractResponse | null>("extraction:result", null);
   const [loading, setLoading] = useState(false);
   const addLog = useApp((s) => s.addLog);
   const recordExtraction = useApp((s) => s.recordExtraction);

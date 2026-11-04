@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useMemo } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import {
   FileSpreadsheet,
   UploadCloud,
@@ -241,11 +242,11 @@ function BenefitsUWPage() {
   }, [user, rawModules]);
 
   const [ingestMode, setIngestMode] = useState<"upload" | "folder">("upload");
-  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
+  const [stagedFiles, setStagedFiles] = usePersistentState<StagedFile[]>("benefits_uw:stagedFiles", []);
   const [folderPath, setFolderPath] = useState<string>("input");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [activeStep, setActiveStep] = useState<number>(0);
-  const [result, setResult] = useState<BenefitsUwPipelineResponse | null>(null);
+  const [result, setResult] = usePersistentState<BenefitsUwPipelineResponse | null>("benefits_uw:result", null);
 
   // Opportunity & Submission Setup Fields State
   const [oppState, setOppState] = useState(getInitialOpportunityState);

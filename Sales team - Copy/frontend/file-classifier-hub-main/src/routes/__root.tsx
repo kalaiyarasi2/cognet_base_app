@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  Outlet, createRootRouteWithContext, useRouter,
+  Outlet, createRootRouteWithContext, useRouter, useRouterState,
   HeadContent, Scripts,
 } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
@@ -78,7 +78,7 @@ function ThemeApplier() {
 function AuthGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, checkAuth } = useAuth();
   const router = useRouter();
-  const pathname = router.state.location.pathname;
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
     // Don't guard the login page or the auth callback page
@@ -95,8 +95,15 @@ function AuthGuard({ children }: { children: ReactNode }) {
 function Shell() {
   const [collapsed, setCollapsed] = useState(false);
   const animations = useSettings((s) => s.animations);
-  const router = useRouter();
-  const pathname = router.state.location.pathname;
+  const { pathname, routeKey } = useRouterState({
+    select: (s) => {
+      const p = (s.location.search as any)?.pipeline || "";
+      return {
+        pathname: s.location.pathname,
+        routeKey: p ? `${s.location.pathname}?pipeline=${p}` : s.location.pathname,
+      };
+    },
+  });
 
   // On the login page or auth callback, render only the outlet (no sidebar/header)
   if (pathname === "/login" || pathname.startsWith("/auth/callback")) {
@@ -113,7 +120,7 @@ function Shell() {
             {animations ? (
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={pathname}
+                  key={routeKey}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}

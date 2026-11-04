@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import {
   UploadCloud, FileText, CheckCircle2, Loader2, Download,
   RotateCw, Trash2, Sparkles, FileCheck, Shield, CheckSquare,
@@ -67,11 +68,11 @@ function formatFieldValue(val: any, fallback = "N/A"): string {
 }
 
 function SopSummaryPage() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = usePersistentState<File | null>("sop:selectedFile", null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [summaryResult, setSummaryResult] = useState<SopSummaryData | null>(null);
-  const [sessionId, setSessionId] = useState<string>("");
-  const [downloadUrls, setDownloadUrls] = useState<Record<string, string>>({});
+  const [summaryResult, setSummaryResult] = usePersistentState<SopSummaryData | null>("sop:summaryResult", null);
+  const [sessionId, setSessionId] = usePersistentState<string>("sop:sessionId", "");
+  const [downloadUrls, setDownloadUrls] = usePersistentState<Record<string, string>>("sop:downloadUrls", {});
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 

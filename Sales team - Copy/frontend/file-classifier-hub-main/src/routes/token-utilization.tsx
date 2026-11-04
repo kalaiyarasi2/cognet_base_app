@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
   Coins, Activity, RefreshCw, Loader2, Search, Cpu,
-  DollarSign, Hash, Layers, FileText, Filter, ChevronDown, ChevronRight
+  DollarSign, Hash, Layers, FileText, Filter, ChevronDown, ChevronRight, Zap
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel, StatCard } from "@/components/Panel";
@@ -32,6 +32,7 @@ function TokenUtilizationPage() {
   // Data states
   const [grandTotals, setGrandTotals] = useState<any>({
     grand_tokens: 0,
+    grand_cached_tokens: 0,
     grand_cost: 0,
     grand_calls: 0,
     total_pocs: 0,
@@ -50,6 +51,7 @@ function TokenUtilizationPage() {
         const grand = summaryRes.data.grand_totals || {};
         setGrandTotals({
           grand_tokens: grand.grand_tokens || 0,
+          grand_cached_tokens: grand.grand_cached_tokens || 0,
           grand_cost: grand.grand_cost || 0,
           grand_calls: grand.grand_calls || 0,
           total_pocs: grand.total_pocs || 0,
@@ -90,6 +92,12 @@ function TokenUtilizationPage() {
     return tag;
   }
 
+  // Clean display of session_id / date-time
+  function formatRunDateTime(item: TokenFileSummaryRecord) {
+    const raw = item.first_seen || item.last_updated || item.session_id || "";
+    return raw.replace(/\s*\[.*?\]$/, "").replace(/\s*\(#\d+\)$/, "");
+  }
+
   // Unique POC list for filter dropdown
   const uniquePocs = Array.from(new Set([
     ...pocRows.map((r) => r.poc_name),
@@ -97,13 +105,14 @@ function TokenUtilizationPage() {
     ...recentCalls.map((c) => c.poc_name),
   ])).sort();
 
-  // Filtered File Summaries (1 row per file process)
+  // Filtered File Summaries (1 row per file process run)
   const filteredFileSummaries = fileSummaries.filter((f) => {
     const matchPoc = selectedPoc === "ALL" || f.poc_name === selectedPoc;
     const matchSearch =
       !searchTerm ||
       (f.file_name && f.file_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (f.poc_name && f.poc_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (f.last_updated && f.last_updated.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (f.models && f.models.some((m) => m.toLowerCase().includes(searchTerm.toLowerCase())));
     return matchPoc && matchSearch;
   });
@@ -125,7 +134,7 @@ function TokenUtilizationPage() {
       {/* Page Header */}
       <PageHeader
         title="Token Utilization & Cost Analytics"
-        subtitle="Real-time monitoring of OpenAI token consumption and USD costs across all POC engines"
+        subtitle="Real-time monitoring of OpenAI token consumption, Prompt Cache hits (50% discount), and USD costs across all POC engines"
         icon={Coins}
         actions={
           <div className="flex items-center gap-4">
@@ -171,9 +180,9 @@ function TokenUtilizationPage() {
           accent="primary"
         />
         <StatCard
-          label="Total Files Processed"
+          label="Total File Runs"
           value={(grandTotals.total_files || 0).toLocaleString()}
-          hint="Unique documents handled"
+          hint="Individual document executions"
           icon={FileText}
           accent="warning"
         />
@@ -202,7 +211,7 @@ function TokenUtilizationPage() {
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
                   <th className="py-2.5 px-4">POC Name</th>
-                  <th className="py-2.5 px-4 text-center">Processed Files</th>
+                  <th className="py-2.5 px-4 text-center">Processed Runs</th>
                   <th className="py-2.5 px-4 text-center">LLM Calls</th>
                   <th className="py-2.5 px-4 text-right">Total Tokens</th>
                   <th className="py-2.5 px-4 text-right">Estimated Cost ($)</th>
@@ -254,7 +263,7 @@ function TokenUtilizationPage() {
       {/* Section 2: Detailed File & Call Activity Logs */}
       <Panel
         title="LLM Processing Activity & Call Logs"
-        subtitle="Grouped file summaries (1 row per file) and step-by-step transaction details"
+        subtitle="Each file execution is logged separately by Date & Time with all sub-process steps and Prompt Cache hits nested inside"
         icon={Activity}
         actions={
           <div className="flex items-center gap-3">
@@ -268,7 +277,7 @@ function TokenUtilizationPage() {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                📁 Grouped by File
+                📁 Grouped by File Run
               </button>
               <button
                 onClick={() => setViewMode("ALL_CALLS")}
@@ -303,7 +312,7 @@ function TokenUtilizationPage() {
             <div className="relative w-52">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
               <Input
-                placeholder="Filter files..."
+                placeholder="Filter files or date-time..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8 h-8 text-xs"
@@ -312,7 +321,7 @@ function TokenUtilizationPage() {
           </div>
         }
       >
-        {/* MODE 1: Grouped 1-Row Per File View */}
+        {/* MODE 1: Grouped 1-Row Per File Run View */}
         {viewMode === "FILE_SUMMARY" && (
           filteredFileSummaries.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground text-sm">
@@ -331,23 +340,29 @@ function TokenUtilizationPage() {
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
                     <th className="w-10 py-3 px-3 text-center"></th>
-                    <th className="py-3 px-3 min-w-[150px]">Last Updated (UTC)</th>
+                    <th className="py-3 px-3 min-w-[175px]">Processed Date & Time (UTC)</th>
                     <th className="py-3 px-3 min-w-[140px]">POC Engine</th>
                     <th className="py-3 px-3 min-w-[240px]">File / Document Name</th>
-                    <th className="py-3 px-3 text-center min-w-[100px]">LLM Calls</th>
+                    <th className="py-3 px-3 text-center min-w-[100px]">Sub-Processes</th>
                     <th className="py-3 px-3 text-center min-w-[140px]">Models Used</th>
+                    <th className="py-3 px-3 text-right min-w-[170px]">Cached Tokens (50% Off)</th>
                     <th className="py-3 px-3 text-right min-w-[160px]">Tokens (Output / Total)</th>
-                    <th className="py-3 px-3 text-right min-w-[140px]">Total File Cost ($)</th>
+                    <th className="py-3 px-3 text-right min-w-[140px]">Total Run Cost ($)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filteredFileSummaries.flatMap((fileItem) => {
-                    const fileKey = `${fileItem.poc_name}__${fileItem.file_name}`;
+                  {filteredFileSummaries.flatMap((fileItem: any, rowIdx) => {
+                    const fileKey = `${fileItem.id ?? rowIdx}__${fileItem.poc_name}__${fileItem.file_name}__${fileItem.session_id || fileItem.last_updated || ""}`;
                     const isExpanded = !!expandedFiles[fileKey];
-                    const callList = fileItem.calls || [];
+                    const callList: any[] = fileItem.calls || [];
+                    const runDateTime = formatRunDateTime(fileItem);
+                    const totalCached = fileItem.total_cached_tokens ?? callList.reduce((acc, c) => acc + (c.cached_tokens || 0), 0);
+                    const totalPrompt = fileItem.total_prompt_tokens || 0;
+                    const cacheRatioPct = totalPrompt > 0 ? Math.round((totalCached / totalPrompt) * 100) : 0;
+                    const totalSavedUsd = fileItem.total_cache_savings_usd || 0;
 
                     const rows = [
-                      /* Main 1-Row File Summary */
+                      /* Main 1-Row Per File Execution Summary */
                       <tr
                         key={fileKey}
                         onClick={() => toggleExpandFile(fileKey)}
@@ -361,15 +376,23 @@ function TokenUtilizationPage() {
                           )}
                         </td>
                         <td className="py-3 px-3 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-                          {fileItem.last_updated}
+                          <div>{fileItem.last_updated}</div>
+                          {fileItem.first_seen && fileItem.first_seen !== fileItem.last_updated && (
+                            <div className="text-[10px] text-muted-foreground/70">
+                              Started: {fileItem.first_seen}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-3">
                           <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary tracking-wider whitespace-nowrap">
                             {formatPocTag(fileItem.poc_name)}
                           </span>
                         </td>
-                        <td className="py-3 px-3 font-medium text-foreground max-w-[300px] truncate" title={fileItem.file_name}>
-                          {fileItem.file_name || "N/A"}
+                        <td className="py-3 px-3 font-medium text-foreground max-w-[320px]" title={fileItem.file_name}>
+                          <div className="truncate">{fileItem.file_name || "N/A"}</div>
+                          <div className="text-[10px] font-mono text-muted-foreground/80">
+                            Run ID: {runDateTime}
+                          </div>
                         </td>
                         <td className="py-3 px-3 text-center">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 whitespace-nowrap">
@@ -378,12 +401,24 @@ function TokenUtilizationPage() {
                         </td>
                         <td className="py-3 px-3 text-center">
                           <div className="flex items-center justify-center gap-1 flex-wrap">
-                            {(fileItem.models || ["gpt-4o"]).map((m) => (
+                            {(fileItem.models || ["gpt-4o"]).map((m: string) => (
                               <span key={m} className="px-1.5 py-0.5 rounded text-[9.5px] font-mono bg-muted text-muted-foreground border border-border">
                                 {m}
                               </span>
                             ))}
                           </div>
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                          {totalCached > 0 ? (
+                            <div className="inline-flex flex-col items-end">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                <Zap className="w-3 h-3" />
+                                {totalCached.toLocaleString()} ({cacheRatioPct}%)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground/60 text-[11px]">0</span>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
                           <span className="text-muted-foreground">{(fileItem.total_completion_tokens || 0).toLocaleString()}</span>
@@ -392,55 +427,105 @@ function TokenUtilizationPage() {
                             {(fileItem.total_tokens || 0).toLocaleString()}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                          ${(fileItem.total_cost_usd || 0).toFixed(6)}
+                        <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                          <div className="font-bold text-emerald-600 dark:text-emerald-400">
+                            ${(fileItem.total_cost_usd || 0).toFixed(6)}
+                          </div>
+                          {totalSavedUsd > 0 && (
+                            <div className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
+                              Saved ${totalSavedUsd.toFixed(6)}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ];
 
-                    /* Expanded Nested Step Calls Row */
+                    /* Expanded Nested Sub-Process Calls Row */
                     if (isExpanded && callList.length > 0) {
                       rows.push(
                         <tr key={`${fileKey}-expanded`} className="bg-muted/20">
-                          <td colSpan={8} className="p-3 pl-8 border-t border-b border-primary/20">
+                          <td colSpan={9} className="p-3 pl-8 border-t border-b border-primary/20">
                             <div className="bg-background rounded-lg p-3.5 border border-border shadow-sm space-y-2">
-                              <div className="text-[11px] font-semibold text-primary uppercase tracking-wider mb-2">
-                                Step-by-Step Breakdown for "{fileItem.file_name}" ({callList.length} LLM Call{callList.length > 1 ? "s" : ""}):
+                              <div className="flex items-center justify-between text-[11px] font-semibold text-primary uppercase tracking-wider mb-2">
+                                <span>
+                                  Sub-Process Breakdown for "{fileItem.file_name}" ({callList.length} Sub-Process Call{callList.length > 1 ? "s" : ""})
+                                </span>
+                                <span className="font-mono text-[10px] text-muted-foreground normal-case">
+                                  Run Date-Time: {runDateTime}
+                                </span>
                               </div>
                               <table className="w-full text-left text-[11px]">
                                 <thead>
                                   <tr className="text-muted-foreground border-b border-border font-semibold bg-muted/30">
-                                    <th className="py-2 px-3">Step Name / Operation</th>
+                                    <th className="py-2 px-3 w-12">#</th>
+                                    <th className="py-2 px-3">Sub-Process / Operation</th>
+                                    <th className="py-2 px-3">Timestamp (UTC)</th>
                                     <th className="py-2 px-3">AI Model</th>
-                                    <th className="py-2 px-3 text-right">Prompt Tokens</th>
+                                    <th className="py-2 px-3 text-right">Prompt Tokens (Total)</th>
+                                    <th className="py-2 px-3 text-right">Cached Tokens (50% Off)</th>
+                                    <th className="py-2 px-3 text-right">Uncached Input</th>
                                     <th className="py-2 px-3 text-right">Completion Tokens</th>
                                     <th className="py-2 px-3 text-right">Total Tokens</th>
                                     <th className="py-2 px-3 text-right">Step Cost ($)</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border/50">
-                                  {callList.map((call, idx) => (
-                                    <tr key={call.id || idx} className="hover:bg-muted/40">
-                                      <td className="py-2 px-3 font-medium text-foreground">
-                                        {call.step_name || `Step ${idx + 1}`}
-                                      </td>
-                                      <td className="py-2 px-3 font-mono text-muted-foreground">
-                                        {call.model}
-                                      </td>
-                                      <td className="py-2 px-3 text-right font-mono text-muted-foreground">
-                                        {call.prompt_tokens?.toLocaleString()}
-                                      </td>
-                                      <td className="py-2 px-3 text-right font-mono text-muted-foreground">
-                                        {call.completion_tokens?.toLocaleString()}
-                                      </td>
-                                      <td className="py-2 px-3 text-right font-mono font-medium text-foreground">
-                                        {call.total_tokens?.toLocaleString()}
-                                      </td>
-                                      <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                                        ${(call.cost_usd || 0).toFixed(6)}
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {callList.map((call: any, idx: number) => {
+                                    const pTokens = call.prompt_tokens || 0;
+                                    const cTokens = call.cached_tokens || 0;
+                                    const uTokens = call.uncached_prompt_tokens ?? Math.max(0, pTokens - cTokens);
+                                    const cPct = pTokens > 0 ? Math.round((cTokens / pTokens) * 100) : 0;
+                                    const savedUsd = call.cache_savings_usd || 0;
+
+                                    return (
+                                      <tr key={call.id || idx} className="hover:bg-muted/40">
+                                        <td className="py-2 px-3 font-mono text-muted-foreground">
+                                          {idx + 1}
+                                        </td>
+                                        <td className="py-2 px-3 font-medium text-foreground">
+                                          {call.step_name || `Step ${idx + 1}`}
+                                        </td>
+                                        <td className="py-2 px-3 font-mono text-muted-foreground whitespace-nowrap">
+                                          {call.timestamp}
+                                        </td>
+                                        <td className="py-2 px-3 font-mono text-muted-foreground">
+                                          {call.model}
+                                        </td>
+                                        <td className="py-2 px-3 text-right font-mono text-muted-foreground">
+                                          {pTokens.toLocaleString()}
+                                        </td>
+                                        <td className="py-2 px-3 text-right font-mono whitespace-nowrap">
+                                          {cTokens > 0 ? (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                              <Zap className="w-2.5 h-2.5" />
+                                              {cTokens.toLocaleString()} ({cPct}%)
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground/60">0</span>
+                                          )}
+                                        </td>
+                                        <td className="py-2 px-3 text-right font-mono text-muted-foreground">
+                                          {uTokens.toLocaleString()}
+                                        </td>
+                                        <td className="py-2 px-3 text-right font-mono text-muted-foreground">
+                                          {call.completion_tokens?.toLocaleString()}
+                                        </td>
+                                        <td className="py-2 px-3 text-right font-mono font-medium text-foreground">
+                                          {call.total_tokens?.toLocaleString()}
+                                        </td>
+                                        <td className="py-2 px-3 text-right font-mono whitespace-nowrap">
+                                          <div className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                            ${(call.cost_usd || 0).toFixed(6)}
+                                          </div>
+                                          {savedUsd > 0 && (
+                                            <div className="text-[9.5px] text-emerald-600/80 dark:text-emerald-400/80">
+                                              -${savedUsd.toFixed(6)} saved
+                                            </div>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
@@ -478,47 +563,63 @@ function TokenUtilizationPage() {
                     <th className="py-3 px-3">Timestamp (UTC)</th>
                     <th className="py-3 px-3">POC Engine</th>
                     <th className="py-3 px-3">File / Document Name</th>
-                    <th className="py-3 px-3">Step / Operation</th>
+                    <th className="py-3 px-3">Sub-Process / Operation</th>
                     <th className="py-3 px-3 text-center">Model</th>
+                    <th className="py-3 px-3 text-right">Cached Tokens (50% Off)</th>
                     <th className="py-3 px-3 text-right">Tokens (Prompt / Output)</th>
                     <th className="py-3 px-3 text-right">Cost ($)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filteredCalls.map((call) => (
-                    <tr key={call.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="py-3 px-3 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-                        {call.timestamp}
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary tracking-wider whitespace-nowrap">
-                          {formatPocTag(call.poc_name)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 font-medium text-foreground max-w-[220px] truncate" title={call.file_name}>
-                        {call.file_name || "N/A"}
-                      </td>
-                      <td className="py-3 px-3 text-muted-foreground max-w-[180px] truncate" title={call.step_name}>
-                        {call.step_name || "llm_call"}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground border border-border">
-                          {call.model || "gpt-4o"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
-                        <span className="text-muted-foreground">{call.prompt_tokens?.toLocaleString() || 0}</span>
-                        <span className="text-muted-foreground mx-1">/</span>
-                        <span className="text-muted-foreground">{call.completion_tokens?.toLocaleString() || 0}</span>
-                        <span className="font-semibold text-foreground ml-1.5">
-                          ({(call.total_tokens || 0).toLocaleString()})
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                        ${(call.cost_usd || 0).toFixed(6)}
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredCalls.map((call: any) => {
+                    const cTokens = call.cached_tokens || 0;
+                    const pTokens = call.prompt_tokens || 0;
+                    const cPct = pTokens > 0 ? Math.round((cTokens / pTokens) * 100) : 0;
+                    return (
+                      <tr key={call.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="py-3 px-3 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                          {call.timestamp}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary tracking-wider whitespace-nowrap">
+                            {formatPocTag(call.poc_name)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-medium text-foreground max-w-[220px] truncate" title={call.file_name}>
+                          {call.file_name || "N/A"}
+                        </td>
+                        <td className="py-3 px-3 text-muted-foreground max-w-[180px] truncate" title={call.step_name}>
+                          {call.step_name || "llm_call"}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground border border-border">
+                            {call.model || "gpt-4o"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                          {cTokens > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                              <Zap className="w-2.5 h-2.5" />
+                              {cTokens.toLocaleString()} ({cPct}%)
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/60">0</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                          <span className="text-muted-foreground">{pTokens.toLocaleString()}</span>
+                          <span className="text-muted-foreground mx-1">/</span>
+                          <span className="text-muted-foreground">{call.completion_tokens?.toLocaleString() || 0}</span>
+                          <span className="font-semibold text-foreground ml-1.5">
+                            ({(call.total_tokens || 0).toLocaleString()})
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                          ${(call.cost_usd || 0).toFixed(6)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

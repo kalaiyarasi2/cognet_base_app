@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 interface UploadAreaProps {
   onFilesSelected: (files: File[]) => void;
   disabled?: boolean;
+  title?: string;
+  subtitle?: string;
 }
 
-const UploadArea = ({ onFilesSelected, disabled }: UploadAreaProps) => {
+const UploadArea = ({ onFilesSelected, disabled, title, subtitle }: UploadAreaProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -70,10 +72,10 @@ const UploadArea = ({ onFilesSelected, disabled }: UploadAreaProps) => {
         </div>
         <div>
           <p className="text-lg font-bold text-foreground">
-            {isDragOver ? "Drop files here" : "Drag & Drop Files"}
+            {isDragOver ? "Drop files here" : (title || "Drag & Drop Files")}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
-            or click to browse • Supports multiple files • PDF, Excel & CSV (max 50MB each)
+            {subtitle || "or click to browse • Supports multiple files • PDF, Excel & CSV (max 50MB each)"}
           </p>
         </div>
         <Button

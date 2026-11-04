@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef } from "react";
+import { usePersistentState } from "@/lib/persistentState";
 import {
   FileCheck, UploadCloud, FileText, CheckCircle2, Loader2, Download,
   RefreshCw, Check, Clock, ChevronDown, ChevronUp, Code, Table,
@@ -44,10 +45,10 @@ const STEPPER_STAGES = [
 ];
 
 function RpvePage() {
-  const [queue, setQueue] = useState<FlowQueueItem[]>([]);
-  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [queue, setQueue] = usePersistentState<FlowQueueItem[]>("rpve:queue", []);
+  const [activeItemId, setActiveItemId] = usePersistentState<string | null>("rpve:activeItemId", null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [viewMode, setViewMode] = useState<"table" | "json">("table");
+  const [viewMode, setViewMode] = usePersistentState<"table" | "json">("rpve:viewMode", "table");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatFileSize = (bytes: number) => {
