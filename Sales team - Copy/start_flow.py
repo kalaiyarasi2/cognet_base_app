@@ -897,7 +897,7 @@ async def run_local_extraction(category: str, pdf_path: Path, text: str = "", fo
                 print_coordinates=False,
                 lang="en",
                 run_ai=True,
-                ai_model=os.getenv("AI_MODEL", "gpt-4o"),
+                ai_model=os.getenv("AI_MODEL", "gpt-5.6-terra"),
             )
             
             if not ai_result:
@@ -1084,7 +1084,7 @@ def execute_flow(
     output_root: Path,
     pdf_max_pages: int = 3,
     min_score: float = 3.0,
-    llm_model: str = "gpt-4o",
+    llm_model: str = "gpt-5.6-terra",
     mark_read: bool = True,
     run_id: str = None,
     user_email: str = None,
@@ -1437,7 +1437,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--model",
-        default="gpt-4o",
+        default="gpt-5.6-terra",
         help="LLM model override for classification",
     )
     parser.add_argument(

@@ -9,12 +9,12 @@ from core.universal_token_monitor import track_usage
 
 # Your existing OpenAI call — DO NOT change this
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="gpt-5.6-terra",
     messages=[...]
 )
 
 # ADD THESE 2 LINES right after:
-track_usage(response.usage, model="gpt-4o",
+track_usage(response.usage, model="gpt-5.6-terra",
             poc_name="your-poc-name", file_name=filename, step_name="extraction")
 ```
 
@@ -23,7 +23,7 @@ track_usage(response.usage, model="gpt-4o",
 | Parameter | Required | Example | Description |
 |---|---|---|---|
 | `response_usage` | Yes | `response.usage` | The usage object from OpenAI response |
-| `model` | Yes | `"gpt-4o"` | Model name used |
+| `model` | Yes | `"gpt-5.6-terra"` | Model name used |
 | `poc_name` | Yes | `"file-classification"` | Name of your POC |
 | `file_name` | Yes | `"invoice_101.pdf"` | File being processed |
 | `step_name` | No | `"ocr_extraction"` | Name of the processing step |

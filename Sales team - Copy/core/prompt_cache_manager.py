@@ -1,3 +1,37 @@
+def _downscale_messages_images(messages: list, max_dim: int = 2048):
+    """Ensures base64 images do not exceed OpenAI's 30,000 patch limit by capping resolution at 2048px."""
+    if not isinstance(messages, list):
+        return
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "image_url":
+                continue
+            image_url = part.get("image_url")
+            if not isinstance(image_url, dict):
+                continue
+            url = image_url.get("url", "")
+            if isinstance(url, str) and url.startswith("data:image/") and ";base64," in url:
+                try:
+                    import base64, io
+                    from PIL import Image
+                    header, b64_str = url.split(";base64,", 1)
+                    raw = base64.b64decode(b64_str)
+                    img = Image.open(io.BytesIO(raw))
+                    if max(img.size) > max_dim:
+                        resample = getattr(Image, "Resampling", Image).LANCZOS
+                        img.thumbnail((max_dim, max_dim), resample)
+                        buf = io.BytesIO()
+                        img.save(buf, format="PNG")
+                        new_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+                        image_url["url"] = f"data:image/png;base64,{new_b64}"
+                except Exception:
+                    pass
+
 """
 core/prompt_cache_manager.py
 ============================
@@ -68,9 +102,9 @@ STANDARDIZED_CALIBRATION_RULES = """
 """
 
 
-def count_tokens(text: str, model: str = "gpt-4o") -> int:
+def count_tokens(text: str, model: str = "gpt-5.6-terra") -> int:
     """
-    Returns the exact token count for the given text using tiktoken (o200k_base for gpt-4o),
+    Returns the exact token count for the given text using tiktoken (o200k_base for gpt-5.6-terra),
     or falls back to conservative character ratio estimation (~5 chars/token for o200k_base).
     """
     if _TIKTOKEN_AVAILABLE:
@@ -139,7 +173,7 @@ def build_cached_messages(
 
 def optimize_messages_for_caching(
     messages: List[Dict[str, Any]],
-    model: str = "gpt-4o",
+    model: str = "gpt-5.6-terra",
     min_tokens: int = 1200
 ) -> List[Dict[str, Any]]:
     """
@@ -261,7 +295,7 @@ _CACHE_STATS = {
 }
 
 
-def _record_cache_observability(response: Any, model: str = "gpt-4o", poc_name: str = "general_poc") -> None:
+def _record_cache_observability(response: Any, model: str = "gpt-5.6-terra", poc_name: str = "general_poc") -> None:
     """Extracts cached token metrics from an OpenAI response and updates global stats once per response."""
     try:
         if response is None or getattr(response, "_prompt_cache_recorded", False):
@@ -311,7 +345,7 @@ def cached_chat_completion(
     client: Any,
     static_system_prompt: str,
     dynamic_user_content: Union[str, List[Dict[str, Any]]],
-    model: str = "gpt-4o",
+    model: str = "gpt-5.6-terra",
     poc_name: str = "general_poc",
     file_name: str = "document",
     step_name: str = "extraction",
@@ -378,6 +412,32 @@ def cached_chat_completion(
 _GLOBAL_HOOK_INSTALLED = False
 
 
+def _sanitize_model_params(kwargs: dict) -> dict:
+    _downscale_messages_images(kwargs.get('messages', []))
+    """Sanitizes model arguments for newer OpenAI architectures (gpt-5..., o1, o3, etc.).
+    These models reject legacy parameters like `temperature=0.0` or `max_tokens`.
+    """
+    try:
+        model_str = str(kwargs.get("model", "")).lower()
+        if any(m in model_str for m in ["gpt-5", "o1", "o3", "o4"]):
+            if "max_tokens" in kwargs:
+                if "max_completion_tokens" not in kwargs:
+                    kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+                else:
+                    kwargs.pop("max_tokens")
+            if "temperature" in kwargs:
+                temp = kwargs.get("temperature")
+                if temp is not None and (temp == 0 or temp == 0.0 or temp != 1):
+                    kwargs.pop("temperature", None)
+            if "top_p" in kwargs:
+                top_p = kwargs.get("top_p")
+                if top_p is not None and top_p != 1:
+                    kwargs.pop("top_p", None)
+    except Exception:
+        pass
+    return kwargs
+
+
 def enable_global_prompt_caching() -> bool:
     """
     Patches OpenAI's Completions.create and AsyncCompletions.create methods
@@ -395,7 +455,8 @@ def enable_global_prompt_caching() -> bool:
             _orig_sync_create = Completions.create
 
             def _cached_sync_create(self, *args, **kwargs):
-                model = kwargs.get("model", "gpt-4o")
+                _sanitize_model_params(kwargs)
+                model = kwargs.get("model", "gpt-5.6-terra")
                 poc = "general_poc"
                 try:
                     if "messages" in kwargs and isinstance(kwargs["messages"], list):
@@ -418,7 +479,8 @@ def enable_global_prompt_caching() -> bool:
             _orig_async_create = AsyncCompletions.create
 
             async def _cached_async_create(self, *args, **kwargs):
-                model = kwargs.get("model", "gpt-4o")
+                _sanitize_model_params(kwargs)
+                model = kwargs.get("model", "gpt-5.6-terra")
                 poc = "general_poc"
                 try:
                     if "messages" in kwargs and isinstance(kwargs["messages"], list):
@@ -444,7 +506,8 @@ def enable_global_prompt_caching() -> bool:
                 _orig_beta_parse = BetaCompletions.parse
 
                 def _cached_beta_parse(self, *args, **kwargs):
-                    model = kwargs.get("model", "gpt-4o")
+                    _sanitize_model_params(kwargs)
+                    model = kwargs.get("model", "gpt-5.6-terra")
                     poc = "Parity_setup"
                     fname = "document"
                     sname = "structured_parse"

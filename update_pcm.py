@@ -8,7 +8,7 @@ target = '''        # Also patch beta structured outputs: client.beta.chat.compl
                 _orig_beta_parse = BetaCompletions.parse
 
                 def _cached_beta_parse(self, *args, **kwargs):
-                    model = kwargs.get("model", "gpt-4o")
+                    model = kwargs.get("model", "gpt-5.6-terra")
                     poc = "Parity_setup"
                     fname = "document"
                     sname = "structured_parse"
@@ -60,7 +60,7 @@ replacement = '''        # Also patch structured outputs: client.beta.chat.compl
 
                     if is_async:
                         async def _cached_parse_async(self, *args, _orig=_orig_p, **kwargs):
-                            model = kwargs.get("model", "gpt-4o")
+                            model = kwargs.get("model", "gpt-5.6-terra")
                             poc = "Parity_setup"
                             fname = "document"
                             sname = "universal_extraction"
@@ -95,7 +95,7 @@ replacement = '''        # Also patch structured outputs: client.beta.chat.compl
                         cls.parse = _cached_parse_async
                     else:
                         def _cached_parse_sync(self, *args, _orig=_orig_p, **kwargs):
-                            model = kwargs.get("model", "gpt-4o")
+                            model = kwargs.get("model", "gpt-5.6-terra")
                             poc = "Parity_setup"
                             fname = "document"
                             sname = "universal_extraction"

@@ -70,7 +70,8 @@ def check_configuration():
             sender_mail = tenant_env(t_name, "SENDER_EMAIL", "DELEGATED_SENDER_EMAIL")
 
             status_str = f"tenant.json: {'OK' if t_json else 'MISSING'}, submission.json: {'OK' if s_json else 'MISSING'}"
-            mail_str = f"Monitor: {monitor_mail or '\033[93m(Unset - will use fallback)\033[0m'}, Sender: {sender_mail or '(global)'}"
+            fallback_msg = "\033[93m(Unset - will use fallback)\033[0m"
+            mail_str = f"Monitor: {monitor_mail or fallback_msg}, Sender: {sender_mail or '(global)'}"
             print(f"\n* Tenant: [{t_name.upper()}] ({t_dir.name})")
             print(f"  Files: {status_str}")
             print(f"  Email: {mail_str}")

@@ -1,0 +1,155 @@
+[
+  {
+    "poc": "System Health Probe",
+    "endpoint": "/health",
+    "document": "None (Ping)",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 0.02,
+    "details": "resp={'status': 'ok'}"
+  },
+  {
+    "poc": "System Config",
+    "endpoint": "/config",
+    "document": "None (Config)",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 0.0,
+    "details": "env=production"
+  },
+  {
+    "poc": "Universal Logs DB",
+    "endpoint": "/api/universal-logs",
+    "document": "converter.db",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 0.01,
+    "details": "log_count=5"
+  },
+  {
+    "poc": "Universal Token Monitor",
+    "endpoint": "/api/token-usage",
+    "document": "universal_token_usage.db",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 0.08,
+    "details": "data_keys=['status', 'data', 'file_summaries', 'prompt_cache_stats']"
+  },
+  {
+    "poc": "File Classifier (ACORD)",
+    "endpoint": "/classify/pdf",
+    "document": "EKS Ventures, Inc. - Acord.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 5.33,
+    "details": "Category: WORK_COMPENSATION"
+  },
+  {
+    "poc": "File Classifier (Loss Run)",
+    "endpoint": "/classify/pdf",
+    "document": "BerkleyNet 24-25.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 17.58,
+    "details": "Category: INSURANCE_CLAIMS"
+  },
+  {
+    "poc": "Modifier Extractor (X-Mod)",
+    "endpoint": "/api/modifier/extract",
+    "document": "2026 EMR.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 2.98,
+    "details": "X-Mod: 1.72"
+  },
+  {
+    "poc": "Notice Extraction POC",
+    "endpoint": "/api/notice-extraction/api/extract",
+    "document": "Notice of Collections - Tier4 (1).pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 97.74,
+    "details": "keys: ['status', 'document', 'extracted_data']"
+  },
+  {
+    "poc": "Invoice-to-Excel POC",
+    "endpoint": "/api/invoice-excel/upload",
+    "document": "ADP invoice 1.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 12.6,
+    "details": "resp_status: ok"
+  },
+  {
+    "poc": "RPVE Extractor POC",
+    "endpoint": "/api/rpve/api/extract",
+    "document": "eec71dc132ce_UHC- SEFL- Feb 26 1.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 48.73,
+    "details": "sub_type: generic"
+  },
+  {
+    "poc": "Parity / SBC POC",
+    "endpoint": "/api/parity/api/extract",
+    "document": "8652a222-7257-4e81-8f0a-33b4e23c0437_CIRRUS_SBC_1749413_73526230_CA_CNFOCUS E1000I8021B_2025-07-01 1 1 (1).pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 26.13,
+    "details": "task_id: f3c3c72d-f991-4518-92c1-19572080dc7f"
+  },
+  {
+    "poc": "File Identifier POC",
+    "endpoint": "/api/file-identifier/api/v1/classify",
+    "document": "EKS Ventures, Inc. - Acord.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 2.13,
+    "details": "type: ok"
+  },
+  {
+    "poc": "Summary & Chatbot POC",
+    "endpoint": "/api/summary/summarize",
+    "document": "SOP_Prestige PEO_Benefits One Pager_V1.0.docx",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 24.6,
+    "details": "summary_generated: success"
+  },
+  {
+    "poc": "Renewal Process POC",
+    "endpoint": "/api/renewal/api/process",
+    "document": "09e318d8-6915-4084-8bba-a49d5e1418cb_WORKED CENSUS.xlsx + ADP invoice 1.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 199.09,
+    "details": "job_id: 9469e31a-f194-4c16-aea0-44fad90a99a3"
+  },
+  {
+    "poc": "Base Claim Extractor POC",
+    "endpoint": "/claim/api/extract-claim-pdf",
+    "document": "BerkleyNet 24-25.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 14.37,
+    "details": "status: success"
+  },
+  {
+    "poc": "GPU Document Extractor",
+    "endpoint": "/api/gpu/extract",
+    "document": "BerkleyNet 24-25.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 27.14,
+    "details": "type: INSURANCE_CLAIMS, excel: extracted_schema.xlsx"
+  },
+  {
+    "poc": "WCUW Submission Pipeline",
+    "endpoint": "PartnerMailFlow.process_email_package",
+    "document": "EKS Ventures, Inc. - Acord.pdf + BerkleyNet 24-25.pdf",
+    "status_code": 200,
+    "success": true,
+    "duration_sec": 61.89,
+    "details": "Status: SKIPPED"
+  }
+]

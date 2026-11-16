@@ -277,7 +277,7 @@ async def execute_workflow(
                                     params_payload["max_pages"] = int(next_node.data.get("max_pages", 3))
                                     params_payload["force_ocr"] = str(next_node.data.get("force_ocr")).lower() == "true"
                                 elif label == "Classification":
-                                    params_payload["llm_model"] = next_node.data.get("llm_model", "gpt-4o")
+                                    params_payload["llm_model"] = next_node.data.get("llm_model", "gpt-5.6-terra")
                                     params_payload["threshold"] = float(next_node.data.get("threshold", 3.0))
 
                                 resp = None

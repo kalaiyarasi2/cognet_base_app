@@ -162,7 +162,7 @@ function DriveGpuPage() {
   const [input, setInput] = useState(defaultIn || "");
   const [output, setOutput] = useState(defaultOut || "");
   const [maxPages, setMaxPages] = useState(3);
-  const [model, setModel] = useState("gpt-4o");
+  const [model, setModel] = useState("gpt-5.6-terra");
   const [minScore, setMinScore] = useState(3.0);
 
   // Trigger re-render when moduleStateCache updates

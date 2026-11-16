@@ -5,7 +5,7 @@ Universal Token Monitor — One module to track ALL OpenAI API usage across ever
 
 Usage (add 2 lines after every client.chat.completions.create(...) call):
     from core.universal_token_monitor import track_usage
-    track_usage(response.usage, model="gpt-4o", poc_name="my-poc", file_name="doc.pdf", step_name="extraction")
+    track_usage(response.usage, model="gpt-5.6-terra", poc_name="my-poc", file_name="doc.pdf", step_name="extraction")
 
 This module NEVER raises exceptions to the caller — all errors are logged silently.
 """
@@ -44,6 +44,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
     "o1-mini":         {"prompt": 3.00  / 1_000_000, "completion": 12.00 / 1_000_000},
     "o3":              {"prompt": 10.00 / 1_000_000, "completion": 40.00 / 1_000_000},
     "gpt-5.6":         {"prompt": 2.50  / 1_000_000, "completion": 10.00 / 1_000_000},
+    "gpt-5.4-nano":    {"prompt": 0.10  / 1_000_000, "completion": 0.40  / 1_000_000},
 
     # Anthropic Claude Models
     "claude-3-5-sonnet": {"prompt": 3.00  / 1_000_000, "completion": 15.00 / 1_000_000},
@@ -1004,7 +1005,7 @@ def _enrich_call_cache_info(call_dict: Dict[str, Any]) -> Dict[str, Any]:
     completion_tokens = int(call_dict.get("completion_tokens") or 0)
     cached_tokens = int(call_dict.get("cached_tokens") or 0)
     cost_usd = float(call_dict.get("cost_usd") or 0.0)
-    model = str(call_dict.get("model") or "gpt-4o")
+    model = str(call_dict.get("model") or "gpt-5.6-terra")
 
     rates = _get_model_rates(model)
     uncached_full_cost = (prompt_tokens * rates["prompt"]) + (completion_tokens * rates["completion"])
@@ -1061,7 +1062,7 @@ def get_file_summaries(limit: int = 100, poc_name: Optional[str] = None) -> list
     - total_llm_calls count (all sub-processes of that file run)
     - total_prompt_tokens, total_cached_tokens & total_completion_tokens
     - total_tokens & total_cost_usd
-    - distinct models list (e.g. ["gpt-4o-mini", "gpt-5.5"])
+    - distinct models list (e.g. ["gpt-4o-mini", "gpt-5.6-terra"])
     - list of nested sub-process step call records for expanding details
     """
     try:

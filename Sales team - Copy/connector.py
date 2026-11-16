@@ -516,7 +516,7 @@ def process_outlook_emails(
     output_root: Path,
     pdf_max_pages: int = 3,
     min_score: float = 3.0,
-    llm_model: str = "gpt-4o",
+    llm_model: str = "gpt-5.6-terra",
     user_email: str | None = None,
 ) -> int:
     """
@@ -739,7 +739,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--model",
-        default="gpt-4o",
+        default="gpt-5.6-terra",
         help="LLM model override for classification",
     )
     parser.add_argument(

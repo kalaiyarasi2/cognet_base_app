@@ -401,7 +401,7 @@ function TokenUtilizationPage() {
                         </td>
                         <td className="py-3 px-3 text-center">
                           <div className="flex items-center justify-center gap-1 flex-wrap">
-                            {(fileItem.models || ["gpt-4o"]).map((m: string) => (
+                            {(fileItem.models || ["gpt-5.6-terra"]).map((m: string) => (
                               <span key={m} className="px-1.5 py-0.5 rounded text-[9.5px] font-mono bg-muted text-muted-foreground border border-border">
                                 {m}
                               </span>
@@ -593,7 +593,7 @@ function TokenUtilizationPage() {
                         </td>
                         <td className="py-3 px-3 text-center">
                           <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-muted text-muted-foreground border border-border">
-                            {call.model || "gpt-4o"}
+                            {call.model || "gpt-5.6-terra"}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right font-mono whitespace-nowrap">

@@ -88,7 +88,7 @@ const sidebarGroups = [
         data: { 
           label: "Classification",
           options: [
-            { name: "llm_model", label: "LLM Model", type: "select", choices: ["gpt-4o", "gpt-3.5-turbo"], defaultValue: "gpt-4o" },
+            { name: "llm_model", label: "LLM Model", type: "select", choices: ["gpt-5.6-terra", "gpt-3.5-turbo"], defaultValue: "gpt-5.6-terra" },
             { name: "threshold", label: "Score Threshold", type: "number", defaultValue: 3 }
           ]
         } 

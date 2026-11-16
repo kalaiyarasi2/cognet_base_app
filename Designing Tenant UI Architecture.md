@@ -1171,7 +1171,7 @@ Classify PDF attachments directly from your Microsoft Outlook Inbox / AI Agent A
 | C:\Users\Intern\...\AI_Agent_Attachments\sorted  [🔍]|  |                                            |
 |                                                    |  |                                            |
 | Max Pages    LLM Model    Min Score                |  |                                            |
-| [ 3 ]        [ gpt-4o ]   [ 7 ]                    |  |                                            |
+| [ 3 ]        [ gpt-5.6-terra ]   [ 7 ]                    |  |                                            |
 |                                                    |  |                                            |
 | (•) Copy Mode   ( ) Dry Run                        |  |                                            |
 |                                                    |  |                                            |
@@ -1194,7 +1194,7 @@ Classify PDF attachments directly from your Microsoft Outlook Inbox / AI Agent A
 
 3. **Control Panel**:
    * Input & Output folder selectors with directory search modal (`🔍`).
-   * Configuration options: Max Pages, LLM Model (`gpt-4o`), Min Score (`7.0`), Copy Mode toggle, Dry Run toggle.
+   * Configuration options: Max Pages, LLM Model (`gpt-5.6-terra`), Min Score (`7.0`), Copy Mode toggle, Dry Run toggle.
    * Action button: **`Run on Outlook Agent`**.
 
 4. **Right-Hand Attachment File Grid**:
@@ -1239,7 +1239,7 @@ Here is the updated control panel layout showing the new **POC Processing Engine
 |   • Workers' Compensation (ACORD 130)              |
 |                                                    |
 | Max Pages    LLM Model    Min Score                |
-| [ 3 ]        [ gpt-4o ]   [ 7 ]                    |
+| [ 3 ]        [ gpt-5.6-terra ]   [ 7 ]                    |
 |                                                    |
 | (•) Copy Mode   ( ) Dry Run                        |
 |                                                    |

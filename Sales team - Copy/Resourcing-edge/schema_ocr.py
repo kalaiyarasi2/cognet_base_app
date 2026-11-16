@@ -161,7 +161,7 @@ class SchemaOCRExtractor:
         
         try:
             response = client.chat.completions.create(
-                model="gpt-4o-mini",  # Text model, no vision needed
+                model="gpt-5.4-nano",  # Text model, no vision needed
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
                 temperature=0.0
@@ -173,7 +173,7 @@ class SchemaOCRExtractor:
                 _cp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..')
                 if _cp not in _sys.path: _sys.path.insert(0, _cp)
                 from core.universal_token_monitor import track_usage as _tm
-                _tm(response.usage, model="gpt-4o-mini", poc_name="resourcing-edge",
+                _tm(response.usage, model="gpt-5.4-nano", poc_name="resourcing-edge",
                     file_name="schema_ocr", step_name="schema_mapping")
             except Exception: pass
             print("[Rostaing OCR] Schema mapping completed successfully.")

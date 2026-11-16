@@ -35,7 +35,7 @@ for prompt_tokens, cached_tokens, completion_tokens, step in calls_data:
     )
     track_usage(
         response_usage=usage,
-        model="gpt-4o",
+        model="gpt-5.6-terra",
         poc_name="RENEWAL_PROCESS",
         file_name=file_name,
         step_name=step,

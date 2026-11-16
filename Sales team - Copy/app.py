@@ -86,14 +86,20 @@ if tess_path:
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Dynamic sub-app loader (scoped sys.path per sub-app)
 # ─────────────────────────────────────────────────────────────────────────────
-with open(WORKSPACE_DIR / "import_errors.log", "w", encoding="utf-8") as _f:
-    _f.write("=== Import Diagnostics Startup ===\n\n")
+try:
+    with open(WORKSPACE_DIR / "import_errors.log", "w", encoding="utf-8") as _f:
+        _f.write("=== Import Diagnostics Startup ===\n\n")
+except Exception:
+    pass
 
 def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
     log_file = WORKSPACE_DIR / "import_errors.log"
     if not file_path.exists():
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"[WARN] File path does not exist: {file_path}\n")
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[WARN] File path does not exist: {file_path}\n")
+        except Exception:
+            pass
         return FastAPI()
 
     if module_name in sys.modules:
@@ -103,8 +109,11 @@ def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
         del sys.modules[k]
     spec = importlib.util.spec_from_file_location(module_name, str(file_path))
     if spec is None or spec.loader is None:
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"[WARN] Could not create module spec for: {file_path}\n")
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[WARN] Could not create module spec for: {file_path}\n")
+        except Exception:
+            pass
         return FastAPI()
 
     module = importlib.util.module_from_spec(spec)
@@ -120,10 +129,13 @@ def load_sub_app(module_name: str, file_path: Path) -> FastAPI:
     try:
         spec.loader.exec_module(module)
     except Exception:
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"[ERROR] Failed to load module {module_name} from {file_path}:\n")
-            traceback.print_exc(file=f)
-            f.write("\n" + "=" * 80 + "\n\n")
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[ERROR] Failed to load module {module_name} from {file_path}:\n")
+                traceback.print_exc(file=f)
+                f.write("\n" + "=" * 80 + "\n\n")
+        except Exception:
+            pass
         return FastAPI()
     finally:
         try:

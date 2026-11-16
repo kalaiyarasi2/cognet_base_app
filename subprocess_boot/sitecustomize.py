@@ -83,7 +83,7 @@ try:
         _orig_create = Completions.create
 
         def _monitored_create(self, *args, **kwargs):
-            model = kwargs.get("model", "gpt-4o")
+            model = kwargs.get("model", "gpt-5.6-terra")
             try:
                 if "messages" in kwargs and isinstance(kwargs["messages"], list):
                     kwargs["messages"] = optimize_messages_for_caching(kwargs["messages"], model=str(model))
@@ -123,7 +123,7 @@ try:
 
             if not _is_async:
                 def _monitored_parse(self, *args, _orig=_orig_parse, **kwargs):
-                    model = kwargs.get("model", "gpt-4o")
+                    model = kwargs.get("model", "gpt-5.6-terra")
                     try:
                         if "messages" in kwargs and isinstance(kwargs["messages"], list):
                             kwargs["messages"] = optimize_messages_for_caching(kwargs["messages"], model=str(model))

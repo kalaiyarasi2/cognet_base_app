@@ -535,7 +535,7 @@ def _node_categorize_email(state: _EmailAgentState) -> dict:
                     },
                 ],
                 temperature=0.1,
-                max_tokens=10,
+                max_completion_tokens=10,
             )
             # Universal Token Monitor
             try:
@@ -722,7 +722,7 @@ class OutlookAgentModule:
     azure_client_secret : App secret. If None, uses device-code flow.
     azure_tenant_id     : Azure AD tenant ID.
     openai_api_key      : OpenAI API key.
-    openai_model        : Model for classification (default: gpt-4o).
+    openai_model        : Model for classification (default: gpt-5.6-terra).
     onedrive_folder     : Root OneDrive folder (default: AI_Agent_Attachments).
     categories          : List of {"name", "description"} dicts (overrides file).
     categories_file     : Path to categories.json.
@@ -739,7 +739,7 @@ class OutlookAgentModule:
         azure_client_secret: Optional[str]        = None,
         azure_tenant_id:     Optional[str]        = None,
         openai_api_key:      Optional[str]        = None,
-        openai_model:        str                  = "gpt-4o",
+        openai_model:        str                  = "gpt-5.6-terra",
         onedrive_folder:     str                  = "AI_Agent_Attachments",
         categories:          Optional[List[dict]] = None,
         categories_file:     Optional[str]        = None,
@@ -1065,7 +1065,7 @@ class OutlookAgentModule:
                 },
             ],
             temperature=0.1,
-            max_tokens=10,
+            max_completion_tokens=10,
         )
         # Universal Token Monitor
         try:

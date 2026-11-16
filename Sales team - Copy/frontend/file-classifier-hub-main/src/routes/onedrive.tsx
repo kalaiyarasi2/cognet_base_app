@@ -43,7 +43,7 @@ function OneDrivePage() {
   const [output, setOutput] = useState("");
   const [selectedEngine, setSelectedEngine] = useState("AUTO");
   const [maxPages, setMaxPages] = useState(3);
-  const [model, setModel] = useState("gpt-4o");
+  const [model, setModel] = useState("gpt-5.6-terra");
   const [minScore, setMinScore] = useState(7.0);
   const [copyMode, setCopyMode] = useState(true);
   const [dryRun, setDryRun] = useState(false);

@@ -1,0 +1,27 @@
+{
+  "enabled": false,
+  "delivery_method": "sharepoint_direct",
+  "sharepoint_base_folder": "Insurance Form Extractor/Notices",
+  "target_url": "${NOTICE_MANAGER_SHAREPOINT_API_URL}",
+  "default_submitter_email": "${NOTICE_MANAGER_MONITOR_EMAIL}",
+  "override_sender_email": false,
+  "transform_rules": {
+    "strip_summary_level_keys": [],
+    "unified_acord_lossrun": false,
+    "inject_metadata": false,
+    "merge_multiple_documents": true,
+    "payload_mapping": {
+      "NOTICE": "notice_data"
+    },
+    "poc_routing_overrides": {
+      "VENDOR_INVOICE": "NOTICE_EXTRACTION",
+      "BENEFIT_EXCEPTIONS": "SKIP"
+    },
+    "default_poc_engine": "NOTICE_EXTRACTION"
+  },
+  "attachments": {
+    "include_original_pdfs": true,
+    "multipart_file_field": "file",
+    "excel_file_field": "excelFile"
+  }
+}

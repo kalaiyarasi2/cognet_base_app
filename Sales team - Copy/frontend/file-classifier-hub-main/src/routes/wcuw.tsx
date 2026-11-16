@@ -168,12 +168,27 @@ function WcuwPage() {
     let modVal: number | null = extractedModifier;
 
     try {
+      // Smart Auto-Routing: detect if user swapped files or if card state got inverted
+      let effectiveLossRunFile = lossRunFile;
+      let effectiveAcordFile = acordFile;
+
+      const isAcordDoc = (f: File | null) => f ? /accord|acord/i.test(f.name) : false;
+      const isLossRunDoc = (f: File | null) => f ? /loss|claim|fcbi|corvel|omaha|summit|republic/i.test(f.name) : false;
+
+      if (lossRunFile && acordFile) {
+        if (isAcordDoc(lossRunFile) && isLossRunDoc(acordFile)) {
+          console.info("[WCUW] Auto-routing inverted files: swapping slot 1 (ACORD) and slot 2 (Loss Run) for extraction engines");
+          effectiveLossRunFile = acordFile;
+          effectiveAcordFile = lossRunFile;
+        }
+      }
+
       // Stage 1: Loss Run Ingestion (Calls universal tenant endpoint for WCUW)
-      if (lossRunFile) {
+      if (effectiveLossRunFile) {
         setCurrentStageIdx(0);
         try {
           const lrFd = new FormData();
-          lrFd.append("file", lossRunFile);
+          lrFd.append("file", effectiveLossRunFile);
           if (userEmail) lrFd.append("processed_by", userEmail);
           const lrResp = await fetch(
             `${getBackendUrl()}/api/gpu/api/tenant/wcuw/extract-lossrun`,
@@ -191,7 +206,7 @@ function WcuwPage() {
           }
         } catch (lrErr) {
           console.warn("Tenant LossRun endpoint failed, falling back to base INSURANCE:", lrErr);
-          lrRes = await api.gpuExtractDirect(lossRunFile, "INSURANCE", userEmail);
+          lrRes = await api.gpuExtractDirect(effectiveLossRunFile, "INSURANCE", userEmail);
           if (lrRes?.output_json) {
             try {
               const res = await fetch(`${getBackendUrl()}/api/gpu/api/download/${lrRes.output_json}`);
@@ -204,11 +219,11 @@ function WcuwPage() {
       }
 
       // Stage 2: ACORD Ingestion — use universal tenant endpoint
-      if (acordFile) {
+      if (effectiveAcordFile) {
         setCurrentStageIdx(1);
         try {
           const wcuwFd = new FormData();
-          wcuwFd.append("file", acordFile);
+          wcuwFd.append("file", effectiveAcordFile);
           if (userEmail) wcuwFd.append("processed_by", userEmail);
           const wcuwRes = await fetch(
             `${getBackendUrl()}/api/gpu/api/tenant/wcuw/extract-acord`,
@@ -226,7 +241,7 @@ function WcuwPage() {
           }
         } catch (wcuwErr) {
           console.warn("Tenant ACORD endpoint failed, falling back to base WORK_COMP:", wcuwErr);
-          acRes = await api.gpuExtractDirect(acordFile, "WORK_COMP", userEmail);
+          acRes = await api.gpuExtractDirect(effectiveAcordFile, "WORK_COMP", userEmail);
           if (acRes?.output_json) {
             try {
               const res = await fetch(`${getBackendUrl()}/api/gpu/api/download/${acRes.output_json}`);
@@ -305,31 +320,51 @@ function WcuwPage() {
     toast.info("Ready to reprocess documents.");
   };
 
-  // Helper getters for extracted datasets
+  // Helper getters for extracted datasets (resilient & bidirectional across slots)
   const claimsList: any[] = (() => {
-    if (!extractionState?.lossRunSchema) return [];
-    const schema = extractionState.lossRunSchema;
-    if (Array.isArray(schema?.claims)) return schema.claims;
-    if (Array.isArray(schema)) return schema;
-    if (Array.isArray(schema?.data)) return schema.data;
-    return [];
+    const extractClaims = (schema: any) => {
+      if (!schema) return null;
+      const data = schema?.data || schema;
+      if (Array.isArray(data?.claims) && data.claims.length > 0) return data.claims;
+      if (Array.isArray(schema?.claims) && schema.claims.length > 0) return schema.claims;
+      if (Array.isArray(schema) && schema.length > 0) return schema;
+      if (Array.isArray(schema?.data) && schema.data.length > 0) return schema.data;
+      return null;
+    };
+    return extractClaims(extractionState?.lossRunSchema) || extractClaims(extractionState?.acordSchema) || [];
   })();
 
   const acordRatingsList: any[] = (() => {
-    if (!extractionState?.acordSchema) return [];
-    const schema = extractionState.acordSchema;
-    const wcData = schema?.data || schema;
-    if (Array.isArray(wcData?.ratingByState)) return wcData.ratingByState;
-    if (Array.isArray(schema?.ratingByState)) return schema.ratingByState;
-    return [];
+    const extractRatings = (schema: any) => {
+      if (!schema) return null;
+      const wcData = schema?.data || schema;
+      if (Array.isArray(wcData?.ratingByState) && wcData.ratingByState.length > 0) return wcData.ratingByState;
+      if (Array.isArray(schema?.ratingByState) && schema.ratingByState.length > 0) return schema.ratingByState;
+      return null;
+    };
+    return extractRatings(extractionState?.acordSchema) || extractRatings(extractionState?.lossRunSchema) || [];
   })();
 
   const acordDemographics: Record<string, any> = (() => {
-    if (!extractionState?.acordSchema) return {};
-    const schema = extractionState.acordSchema;
-    const wcData = schema?.data || schema;
-    return wcData?.demographics || schema?.demographics || {};
+    const extractDemo = (schema: any) => {
+      if (!schema) return null;
+      const wcData = schema?.data || schema;
+      const demo = wcData?.demographics || schema?.demographics;
+      if (demo && (demo.applicantName || demo.fein || demo.legalEntity || demo.businessDescription)) return demo;
+      return null;
+    };
+    return extractDemo(extractionState?.acordSchema) || extractDemo(extractionState?.lossRunSchema) || {};
   })();
+
+  // Keep opportunity form modifier in sync with extractedModifier
+  useEffect(() => {
+    if (extractedModifier !== null && extractedModifier !== undefined) {
+      setOpportunityForm((prev) => ({
+        ...prev,
+        modifier: String(extractedModifier)
+      }));
+    }
+  }, [extractedModifier]);
 
   // Sync opportunityName with extracted applicant name when available
   useEffect(() => {
@@ -361,60 +396,82 @@ function WcuwPage() {
     );
   });
 
-  // WCUW-specific: extract locations and contact_information from enriched schema
+  // WCUW-specific: extract locations and contact_information from enriched schema (bidirectional)
   const locationsList: any[] = (() => {
-    if (!extractionState?.acordSchema) return [];
-    const schema = extractionState.acordSchema;
-    const wcData = schema?.data || schema;
-    if (Array.isArray(wcData?.locations)) return wcData.locations;
-    if (Array.isArray(schema?.locations)) return schema.locations;
-    return [];
+    const extractLoc = (schema: any) => {
+      if (!schema) return null;
+      const wcData = schema?.data || schema;
+      if (Array.isArray(wcData?.locations) && wcData.locations.length > 0) return wcData.locations;
+      if (Array.isArray(schema?.locations) && schema.locations.length > 0) return schema.locations;
+      return null;
+    };
+    return extractLoc(extractionState?.acordSchema) || extractLoc(extractionState?.lossRunSchema) || [];
   })();
 
   const contactInfo: Record<string, any> = (() => {
-    if (!extractionState?.acordSchema) return {};
-    const schema = extractionState.acordSchema;
-    const wcData = schema?.data || schema;
-    return wcData?.contact_information || schema?.contact_information || {};
+    const extractContact = (schema: any) => {
+      if (!schema) return null;
+      const wcData = schema?.data || schema;
+      const ci = wcData?.contact_information || schema?.contact_information;
+      if (ci && (ci.accounting_records || ci.claims_info || ci.inspection)) return ci;
+      return null;
+    };
+    return extractContact(extractionState?.acordSchema) || extractContact(extractionState?.lossRunSchema) || {};
   })();
 
   const priorCarriersList: any[] = (() => {
-    if (!extractionState?.acordSchema) return [];
-    const schema = extractionState.acordSchema;
-    const wcData = schema?.data || schema;
-    if (Array.isArray(wcData?.priorCarriers)) return wcData.priorCarriers;
-    if (Array.isArray(schema?.priorCarriers)) return schema.priorCarriers;
-    return [];
+    const extractCarriers = (schema: any) => {
+      if (!schema) return null;
+      const wcData = schema?.data || schema;
+      if (Array.isArray(wcData?.priorCarriers) && wcData.priorCarriers.length > 0) return wcData.priorCarriers;
+      if (Array.isArray(schema?.priorCarriers) && schema.priorCarriers.length > 0) return schema.priorCarriers;
+      return null;
+    };
+    return extractCarriers(extractionState?.acordSchema) || extractCarriers(extractionState?.lossRunSchema) || [];
   })();
 
   const individualsList: any[] = (() => {
-    if (!extractionState?.acordSchema) return [];
-    const schema = extractionState.acordSchema;
-    const wcData = schema?.data || schema;
-    if (Array.isArray(wcData?.individuals)) return wcData.individuals;
-    if (Array.isArray(schema?.individuals)) return schema.individuals;
-    return [];
+    const extractInd = (schema: any) => {
+      if (!schema) return null;
+      const wcData = schema?.data || schema;
+      if (Array.isArray(wcData?.individuals) && wcData.individuals.length > 0) return wcData.individuals;
+      if (Array.isArray(schema?.individuals) && schema.individuals.length > 0) return schema.individuals;
+      return null;
+    };
+    return extractInd(extractionState?.acordSchema) || extractInd(extractionState?.lossRunSchema) || [];
   })();
 
   const premiumCalculation: Record<string, any> = (() => {
-    if (!extractionState?.acordSchema) return {};
-    const schema = extractionState.acordSchema;
-    const wcData = schema?.data || schema;
-    return wcData?.premiumCalculation || schema?.premiumCalculation || {};
+    const extractPrem = (schema: any) => {
+      if (!schema) return null;
+      const wcData = schema?.data || schema;
+      const pc = wcData?.premiumCalculation || schema?.premiumCalculation;
+      if (pc && Object.keys(pc).length > 0) return pc;
+      return null;
+    };
+    return extractPrem(extractionState?.acordSchema) || extractPrem(extractionState?.lossRunSchema) || {};
   })();
 
   const generalQuestions: Record<string, any> = (() => {
-    if (!extractionState?.acordSchema) return {};
-    const schema = extractionState.acordSchema;
-    const wcData = schema?.data || schema;
-    return wcData?.generalQuestions || schema?.generalQuestions || {};
+    const extractGen = (schema: any) => {
+      if (!schema) return null;
+      const wcData = schema?.data || schema;
+      const gq = wcData?.generalQuestions || schema?.generalQuestions;
+      if (gq && Object.keys(gq).length > 0) return gq;
+      return null;
+    };
+    return extractGen(extractionState?.acordSchema) || extractGen(extractionState?.lossRunSchema) || {};
   })();
 
   const verificationsData: Record<string, any> = (() => {
-    if (!extractionState?.acordSchema) return {};
-    const schema = extractionState.acordSchema;
-    const wcData = schema?.data || schema;
-    return wcData?.verifications || schema?.verifications || {};
+    const extractVerif = (schema: any) => {
+      if (!schema) return null;
+      const wcData = schema?.data || schema;
+      const v = wcData?.verifications || schema?.verifications;
+      if (v && (v.fein_search?.status === 'Success' || v.secretary_of_state?.status === 'Complete' || v.fein_search?.status === 'SUCCESS')) return v;
+      return null;
+    };
+    return extractVerif(extractionState?.acordSchema) || extractVerif(extractionState?.lossRunSchema) || (extractionState?.acordSchema?.data?.verifications || extractionState?.acordSchema?.verifications || extractionState?.lossRunSchema?.data?.verifications || extractionState?.lossRunSchema?.verifications || {});
   })();
 
   const filteredLocations = locationsList.filter((item) => {
@@ -433,20 +490,18 @@ function WcuwPage() {
     );
   });
 
-  // WCUW-specific: extract Loss Run report metadata (report_created_date, valuation_date, carrier)
+  // WCUW-specific: extract Loss Run report metadata (resilient & bidirectional across slots)
   const reportMetadata: Record<string, any> = (() => {
     const lrSchema = extractionState?.lossRunSchema;
     const lrRes = extractionState?.lossRunResult;
-    if (!lrSchema && !lrRes) return {};
-    const schemaData = lrSchema?.data || lrSchema;
-    const enrichedData = lrRes?.enriched_schema?.data || lrRes?.enriched_schema;
-    return (
-      schemaData?.report_metadata ||
-      lrSchema?.report_metadata ||
-      enrichedData?.report_metadata ||
-      lrRes?.report_metadata ||
-      {}
-    );
+    const acSchema = extractionState?.acordSchema;
+    const acRes = extractionState?.acordResult;
+    const getMeta = (s: any, r: any) => {
+      const sData = s?.data || s;
+      const eData = r?.enriched_schema?.data || r?.enriched_schema;
+      return sData?.report_metadata || s?.report_metadata || eData?.report_metadata || r?.report_metadata || null;
+    };
+    return getMeta(lrSchema, lrRes) || getMeta(acSchema, acRes) || {};
   })();
 
   const reportCreatedDate = reportMetadata.report_created_date || "";
@@ -455,6 +510,23 @@ function WcuwPage() {
   const reportDateLabel = reportMetadata.date_label_found || "Report Date";
 
   const finalModifier = extractedModifier ?? (opportunityForm.modifier ? parseFloat(opportunityForm.modifier) : null) ?? 1.0;
+
+  // Resilient schema mapping so slot inversion never corrupts outgoing payload
+  const normalizedAcord = (() => {
+    const ac = extractionState?.acordSchema;
+    const lr = extractionState?.lossRunSchema;
+    if (ac?.ratingByState || ac?.data?.ratingByState || ac?.demographics || ac?.data?.demographics) return ac;
+    if (lr?.ratingByState || lr?.data?.ratingByState || lr?.demographics || lr?.data?.demographics) return lr;
+    return ac || {};
+  })();
+
+  const normalizedLossRuns = (() => {
+    const lr = extractionState?.lossRunSchema;
+    const ac = extractionState?.acordSchema;
+    if (lr?.claims || lr?.data?.claims || Array.isArray(lr)) return lr;
+    if (ac?.claims || ac?.data?.claims || Array.isArray(ac)) return ac;
+    return lr || {};
+  })();
 
   // Unified submission JSON (WCUW tenant)
   const unifiedJsonPayload = {
@@ -466,8 +538,8 @@ function WcuwPage() {
       ...opportunityForm,
       modifier: String(finalModifier),
     },
-    acord: extractionState?.acordSchema || {},
-    lossRuns: extractionState?.lossRunSchema || {},
+    acord: normalizedAcord,
+    lossRuns: normalizedLossRuns,
     modifierData: extractionState?.modifierResult || (extractedModifier !== null ? { experience_mod: extractedModifier } : null),
     metadata: {
       generatedAt: new Date().toISOString(),
@@ -771,61 +843,9 @@ function WcuwPage() {
 
       {/* Triple Upload Hub (Loss Run + ACORD 130 + Experience Modifier) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Card 1: Loss Run File */}
+        {/* Card 1: ACORD 130 Application */}
         <Panel
-          title="1. Loss Run File"
-          description="Upload the historical insurance loss run / claims document."
-        >
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (e.dataTransfer.files[0]) handleLossRunSelect(e.dataTransfer.files[0]);
-            }}
-            className="border-2 border-dashed border-border/80 rounded-xl p-8 flex flex-col items-center justify-center gap-3 bg-muted/20 hover:bg-muted/30 transition-colors text-center cursor-pointer min-h-[220px]"
-            onClick={() => lossRunInputRef.current?.click()}
-          >
-            <input
-              ref={lossRunInputRef}
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files?.[0]) handleLossRunSelect(e.target.files[0]);
-              }}
-            />
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <FileText className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">Drag & drop your file here</p>
-              <p className="text-xs text-muted-foreground mt-0.5">or click to browse • PDF - max 50MB</p>
-            </div>
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              className="mt-2"
-              onClick={(e) => {
-                e.stopPropagation();
-                lossRunInputRef.current?.click();
-              }}
-            >
-              Select File
-            </Button>
-            {lossRunFile && (
-              <div className="mt-3 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 text-xs font-medium">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                <span className="truncate max-w-[200px]">{lossRunFile.name}</span>
-                <span className="text-[10px] text-muted-foreground">({(lossRunFile.size / 1024 / 1024).toFixed(2)} MB)</span>
-              </div>
-            )}
-          </div>
-        </Panel>
-
-        {/* Card 2: ACORD 130 Application */}
-        <Panel
-          title="2. ACORD 130 Application"
+          title="1. ACORD 130 Application"
           description="Upload the Workers' Compensation ACORD 130 / 133 form."
         >
           <div
@@ -870,6 +890,58 @@ function WcuwPage() {
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                 <span className="truncate max-w-[200px]">{acordFile.name}</span>
                 <span className="text-[10px] text-muted-foreground">({(acordFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+              </div>
+            )}
+          </div>
+        </Panel>
+
+        {/* Card 2: Loss Run File */}
+        <Panel
+          title="2. Loss Run File"
+          description="Upload the historical insurance loss run / claims document."
+        >
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (e.dataTransfer.files[0]) handleLossRunSelect(e.dataTransfer.files[0]);
+            }}
+            className="border-2 border-dashed border-border/80 rounded-xl p-8 flex flex-col items-center justify-center gap-3 bg-muted/20 hover:bg-muted/30 transition-colors text-center cursor-pointer min-h-[220px]"
+            onClick={() => lossRunInputRef.current?.click()}
+          >
+            <input
+              ref={lossRunInputRef}
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handleLossRunSelect(e.target.files[0]);
+              }}
+            />
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <FileText className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Drag & drop your file here</p>
+              <p className="text-xs text-muted-foreground mt-0.5">or click to browse • PDF - max 50MB</p>
+            </div>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="mt-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                lossRunInputRef.current?.click();
+              }}
+            >
+              Select File
+            </Button>
+            {lossRunFile && (
+              <div className="mt-3 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 text-xs font-medium">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <span className="truncate max-w-[200px]">{lossRunFile.name}</span>
+                <span className="text-[10px] text-muted-foreground">({(lossRunFile.size / 1024 / 1024).toFixed(2)} MB)</span>
               </div>
             )}
           </div>
