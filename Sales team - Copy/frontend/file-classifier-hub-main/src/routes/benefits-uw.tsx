@@ -7,6 +7,7 @@ import {
   FileText,
   Loader2,
   Download,
+  Archive,
   Copy,
   Check,
   Play,
@@ -529,22 +530,20 @@ function BenefitsUWPage() {
               <button
                 type="button"
                 onClick={() => setIngestMode("upload")}
-                className={`py-1.5 px-3 rounded-md transition-all text-center ${
-                  ingestMode === "upload"
+                className={`py-1.5 px-3 rounded-md transition-all text-center ${ingestMode === "upload"
                     ? "bg-card text-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
-                }`}
+                  }`}
               >
                 Upload Files
               </button>
               <button
                 type="button"
                 onClick={() => setIngestMode("folder")}
-                className={`py-1.5 px-3 rounded-md transition-all text-center ${
-                  ingestMode === "folder"
+                className={`py-1.5 px-3 rounded-md transition-all text-center ${ingestMode === "folder"
                     ? "bg-card text-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
-                }`}
+                  }`}
               >
                 Test Local Folder
               </button>
@@ -1089,22 +1088,20 @@ function BenefitsUWPage() {
                   return (
                     <div
                       key={step}
-                      className={`flex items-center gap-2.5 text-xs p-1.5 rounded transition-colors ${
-                        isCurrent
+                      className={`flex items-center gap-2.5 text-xs p-1.5 rounded transition-colors ${isCurrent
                           ? "font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
                           : isDone
-                          ? "text-muted-foreground line-through opacity-80"
-                          : "text-muted-foreground/60"
-                      }`}
+                            ? "text-muted-foreground line-through opacity-80"
+                            : "text-muted-foreground/60"
+                        }`}
                     >
                       <span
-                        className={`w-2 h-2 rounded-full ${
-                          isCurrent
+                        className={`w-2 h-2 rounded-full ${isCurrent
                             ? "bg-emerald-500 animate-ping"
                             : isDone
-                            ? "bg-emerald-500"
-                            : "bg-muted-foreground/30"
-                        }`}
+                              ? "bg-emerald-500"
+                              : "bg-muted-foreground/30"
+                          }`}
                       />
                       <span>{step}</span>
                     </div>
@@ -1158,6 +1155,24 @@ function BenefitsUWPage() {
 
                 {/* Dedicated Action Buttons Row - Generous padding and clean layout */}
                 <div className="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center gap-2.5">
+                  {(result.download_all_zip_url || result.all_zip_filename || result.output_filename) && (
+                    <a
+                      href={getDownloadUrl(
+                        result.download_all_zip_url ||
+                        (result.all_zip_filename
+                          ? `/api/download/${result.all_zip_filename}`
+                          : `/api/download/All_Deliverables_${result.output_filename
+                            .replace(/\.[^/.]+$/, "")
+                            .replace(/^(?:Marsh_Census_|RAPT_Census_|Exceptions_Audit_)/, "")}.zip`)
+                      )}
+                      download
+                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors shrink-0"
+                    >
+                      <Archive className="w-3.5 h-3.5" />
+                      Download all
+                    </a>
+                  )}
+
                   <a
                     href={getDownloadUrl(result.download_xlsx_url)}
                     download

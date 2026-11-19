@@ -5,7 +5,7 @@ from typing import Dict, Any, Tuple, Optional
 
 # Default allowed extensions for CogNet document processing
 DEFAULT_ALLOWED_EXTENSIONS = {
-    ".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".xlsx", ".xls", ".csv", ".docx", ".doc", ".txt", ".msg", ".eml", ".json", ".xml"
+    ".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".xlsx", ".xls", ".csv", ".docx", ".doc", ".txt", ".msg", ".eml", ".json", ".xml", ".zip", ".zipx"
 }
 
 # Maximum file size allowed by default (50 MB)
@@ -70,6 +70,13 @@ class FileValidator:
         # 3. Extension check
         if ext not in self.allowed_extensions:
             return False, f"File extension '{ext}' is not permitted for document processing.", metadata
+
+        # 4. ZIP archive structure validation
+        if ext in {".zip", ".zipx"}:
+            import io
+            import zipfile
+            if not zipfile.is_zipfile(io.BytesIO(file_content)):
+                return False, f"File with extension '{ext}' is not a valid ZIP archive or is corrupted.", metadata
 
         # Basic validation succeeded
         return True, "File validation successful.", metadata

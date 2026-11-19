@@ -604,6 +604,8 @@ export interface BenefitsUwPipelineResponse {
   download_sbu_url?: string | null;
   email_filename?: string | null;
   download_email_url?: string | null;
+  all_zip_filename?: string | null;
+  download_all_zip_url?: string | null;
   email_text?: string;
   carrier: string;
   state: string;
